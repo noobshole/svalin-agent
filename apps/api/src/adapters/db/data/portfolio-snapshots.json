@@ -1,0 +1,61 @@
+{
+  "wallets": [
+    {
+      "wallet": "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "totalValueUsd": 29978.92,
+      "dayChangePct": 5.6,
+      "riskScore": 57,
+      "refreshedAt": "2026-05-03T07:30:00.000Z",
+      "assets": [
+        {
+          "chain": "ethereum",
+          "tokenAddress": "0xC02aaA39b223FE8D0A0E5C4F27eAD9083C756Cc2",
+          "symbol": "WETH",
+          "name": "Wrapped Ether",
+          "balance": "3.9501",
+          "priceUsd": 3214.22,
+          "valueUsd": 12696.43,
+          "allocationBps": 4235,
+          "change24hPct": 5.7,
+          "isCoreHolding": true
+        },
+        {
+          "chain": "ethereum",
+          "tokenAddress": "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "balance": "6840.12",
+          "priceUsd": 1,
+          "valueUsd": 6840.12,
+          "allocationBps": 2282,
+          "change24hPct": 0,
+          "isCoreHolding": true
+        },
+        {
+          "chain": "base",
+          "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "balance": "4649.87",
+          "priceUsd": 1,
+          "valueUsd": 4649.87,
+          "allocationBps": 1551,
+          "change24hPct": 0,
+          "isCoreHolding": false
+        },
+        {
+          "chain": "solana",
+          "tokenAddress": "So11111111111111111111111111111111111111112",
+          "symbol": "SOL",
+          "name": "Solana",
+          "balance": "35.0000",
+          "priceUsd": 165.5,
+          "valueUsd": 5792.5,
+          "allocationBps": 1932,
+          "change24hPct": 7.1,
+          "isCoreHolding": true
+        }
+      ]
+    }
+  ]
+}

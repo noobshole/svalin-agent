@@ -1,0 +1,19 @@
+{
+  "name": "@svalin-agent/chain-config",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo \"lint pending\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@svalin-agent/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
