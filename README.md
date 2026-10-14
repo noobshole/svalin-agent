@@ -15,7 +15,7 @@ accounts, and no way to move funds.
 ![x402 v2](https://img.shields.io/badge/payments-x402%20v2-0052FF)
 ![MCP](https://img.shields.io/badge/MCP-server-6E56CF)
 
-[Features](#features) · [How it works](#how-it-works) · [Endpoints](#endpoints) · [Use it from an agent](#use-it-from-an-agent) · [Run locally](#run-locally) · [Trust and safety](#trust-and-safety) · [Docs](#documentation)
+[Features](#features) · [How it works](#how-it-works) · [Use cases](#use-cases) · [Endpoints](#endpoints) · [Use it from an agent](#use-it-from-an-agent) · [Run locally](#run-locally) · [Trust and safety](#trust-and-safety) · [Docs](#documentation)
 
 </div>
 
@@ -71,6 +71,65 @@ A trimmed risk report:
   "methodologyVersion": "2026-10.2"
 }
 ```
+
+## Use cases
+
+Svalin is the read-only risk step in an agent workflow. Agents and people ask it how risky a
+wallet is before they act, and act somewhere else.
+
+```mermaid
+flowchart TB
+    S(("Svalin"))
+    S --> G & W & T & R & C
+
+    subgraph G["Agent guardrails"]
+        direction TB
+        G1["Check risk before<br/>a swap or rebalance"] ~~~ G2["Ask a human<br/>on a poor grade"] ~~~ G3["Spend caps per call<br/>and per session"]
+    end
+    subgraph W["Wallet copilots"]
+        direction TB
+        W1["Explain a wallet<br/>in plain English"] ~~~ W2["Scheduled<br/>risk briefs"] ~~~ W3["Staking and<br/>stablecoin tips"]
+    end
+    subgraph T["Treasuries and DAOs"]
+        direction TB
+        T1["Concentration<br/>limits"] ~~~ T2["Stablecoin<br/>buffer checks"] ~~~ T3["One report per<br/>treasury wallet"]
+    end
+    subgraph R["Research and analytics"]
+        direction TB
+        R1["Score wallets<br/>in a batch"] ~~~ R2["Spot spam and<br/>long-tail tokens"] ~~~ R3["Solana and NEAR<br/>in one format"]
+    end
+    subgraph C["Agent tool catalogs"]
+        direction TB
+        C1["Pay per call<br/>over x402"] ~~~ C2["OpenAPI and<br/>llms.txt"] ~~~ C3["One-line<br/>MCP install"]
+    end
+```
+
+### Orchestration pattern: the risk gate
+
+An orchestrator agent checks the wallet with Svalin before it hands a plan to an executor. Svalin
+only reads. Execution stays with a separate tool that you control, and you choose the grade
+thresholds.
+
+```mermaid
+flowchart LR
+    O["Orchestrator agent<br/>(on a request or a schedule)"] -->|"svalin_risk_report<br/>$0.004"| G{"Grade?"}
+    G -->|"A or B"| X["Executor agent<br/>(your own wallet tools)"]
+    G -->|"C to F"| B["svalin_brief · $0.02<br/>headline and up to 3 actions"]
+    B --> H{"Human<br/>approves?"}
+    H -->|"yes"| X
+    H -->|"no"| S(["Stop and report"])
+    X -.->|"re-check the new grade"| O
+```
+
+| Pattern | Svalin calls | Cost per wallet (default prices) |
+| --- | --- | --- |
+| Risk gate before an action | `risk`, then `brief` when the grade is poor | $0.004 to $0.024 |
+| Scheduled treasury check | `risk` for each wallet on each run | $0.004 per run |
+| Wallet explainer in chat | `brief` | $0.02 |
+| Batch research | `portfolio` or `risk` for each wallet | $0.002 to $0.004 |
+| Trying it out | free scan | Free, 10 per hour |
+
+Any orchestrator that can call MCP tools or make HTTP requests can use these patterns.
 
 ## Endpoints
 
