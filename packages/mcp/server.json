@@ -1,0 +1,78 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.noobshole/svalin-mcp",
+  "title": "Svalin",
+  "description": "Read-only Solana and NEAR wallet risk reports for AI agents, paid per call in USDC over x402.",
+  "version": "1.0.0",
+  "websiteUrl": "https://github.com/noobshole/svalin-agent",
+  "repository": {
+    "url": "https://github.com/noobshole/svalin-agent",
+    "source": "github",
+    "subfolder": "packages/mcp"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "svalin-mcp",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SVALIN_API_URL",
+          "description": "Base URL of the Svalin API to call.",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "SVALIN_SOLANA_PRIVATE_KEY",
+          "description": "Optional. Base58 key of a dedicated hot wallet holding a few USDC on Solana. Enables paid tools.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "SVALIN_NEAR_ACCOUNT_ID",
+          "description": "Optional. NEAR account that pays, e.g. my-agent.near. Set together with SVALIN_NEAR_PRIVATE_KEY.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "SVALIN_NEAR_PRIVATE_KEY",
+          "description": "Optional. ed25519:… key of that account (a dedicated wallet holding a few USDC on NEAR). Enables paid tools.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "SVALIN_NEAR_RPC_URL",
+          "description": "Optional NEAR RPC endpoint used to build payments.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "SVALIN_PREFERRED_NETWORK",
+          "description": "solana or near, when both wallets are set.",
+          "isRequired": false,
+          "format": "string",
+          "default": "solana"
+        },
+        {
+          "name": "SVALIN_MAX_PRICE_USD",
+          "description": "Hard cap per paid call, in USD.",
+          "isRequired": false,
+          "format": "number",
+          "default": "0.05"
+        },
+        {
+          "name": "SVALIN_BUDGET_USD",
+          "description": "Hard spending cap per MCP session, in USD.",
+          "isRequired": false,
+          "format": "number",
+          "default": "1"
+        }
+      ]
+    }
+  ]
+}

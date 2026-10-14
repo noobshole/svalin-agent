@@ -1,0 +1,68 @@
+{
+  "name": "svalin-mcp",
+  "version": "1.0.0",
+  "mcpName": "io.github.noobshole/svalin-mcp",
+  "description": "MCP server for Svalin: read-only Solana and NEAR wallet risk reports for AI agents, paid per call in USDC over x402 with a hard spend cap.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/noobshole/svalin-agent/tree/main/packages/mcp#readme",
+  "bugs": {
+    "url": "https://github.com/noobshole/svalin-agent/issues"
+  },
+  "type": "module",
+  "bin": {
+    "svalin-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "x402",
+    "solana",
+    "near",
+    "portfolio",
+    "risk",
+    "wallet",
+    "ai-agent",
+    "usdc",
+    "read-only"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/noobshole/svalin-agent.git",
+    "directory": "packages/mcp"
+  },
+  "engines": {
+    "node": ">=20.18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "prepublishOnly": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@scure/base": "^2.4.0",
+    "@solana/kit": "^5.5.1",
+    "@x402/core": "^2.28.0",
+    "@x402/fetch": "^2.28.0",
+    "@x402/near": "~2.28.0",
+    "@x402/svm": "^2.28.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@svalin-agent/api": "workspace:*",
+    "@types/node": "^22.15.3",
+    "tsx": "^4.23.15",
+    "typescript": "^5.8.3",
+    "vitest": "^5.0.4"
+  }
+}

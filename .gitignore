@@ -1,0 +1,11 @@
+node_modules
+.pnpm-store
+.next
+dist
+.turbo
+*.log
+*.tsbuildinfo
+.env
+.env.local
+coverage
+supabase/.temp

@@ -1,0 +1,49 @@
+# One-click deploy of the Svalin API on Render: Dashboard → New → Blueprint → pick this repo.
+# Render asks for every value marked "sync: false" when you create it; leave optional ones
+# empty. See docs/DEPLOYMENT.md for what each value is.
+services:
+  - type: web
+    name: svalin-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    # The cache and free-demo limits live in memory: run exactly one instance.
+    numInstances: 1
+    # Deploy a new commit only after GitHub's checks pass.
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Start on testnet; switch to mainnet in docs/DEPLOYMENT.md step 5.
+      - key: X402_ENV
+        value: testnet
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      # Required
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: HELIUS_API_KEY
+        sync: false
+      - key: PAY_TO_SOLANA
+        sync: false
+      - key: PAY_TO_NEAR
+        sync: false
+      # One key per network and payee from the NEAR facilitator access request.
+      - key: NEAR_FACILITATOR_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Random secret; copy the generated value into the website's settings on Vercel.
+      - key: WEB_FORWARDING_SECRET
+        generateValue: true
+      # Optional
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CDP_API_KEY_ID
+        sync: false
+      - key: CDP_API_KEY_SECRET
+        sync: false
