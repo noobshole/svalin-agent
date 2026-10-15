@@ -6,6 +6,7 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./env.js";
 import { createClientIpResolver } from "./lib/client-ip.js";
 import { DurableDemoLimiter, type DemoLimiterNamespace } from "./lib/durable-demo-limiter.js";
+import { startupSummary } from "./startup-log.js";
 
 export { DemoLimiterObject } from "./lib/durable-demo-limiter.js";
 
@@ -40,6 +41,16 @@ export default {
         paymentInitialization: "first-paid-request",
         paymentDiscovery: false,
       });
+      // Logged on the first request each isolate serves (Workers have no startup phase).
+      console.log(
+        JSON.stringify({
+          level: "info",
+          msg: "svalin_api_started",
+          runtime: "cloudflare-workers",
+          demoLimiter: namespace ? "durable-object" : "memory",
+          ...startupSummary(config),
+        }),
+      );
     }
     return app.fetch(request, env, ctx as never);
   },

@@ -68,7 +68,8 @@ How Workers differ from a container host:
   instance shares the same counts. The portfolio cache stays in each instance's memory.
 - Payment facilitators are loaded inside the first paid request, and Bazaar discovery metadata
   is off: its schema check generates code at runtime, which Workers forbid.
-- There is no startup log line. Logs are in the Worker's **Logs** tab.
+- The `"svalin_api_started"` log line appears on the first request after each deploy, in the
+  Worker's **Logs** tab.
 
 **On Render:** Dashboard → **New** → **Blueprint** → choose this repository. `render.yaml` sets up
 the Docker build, the health check, a single instance, testnet payments and a generated
@@ -108,11 +109,10 @@ Settings → Instance Type).
 
 **Then, on any host:**
 
-- [ ] **(test)** On a container host, the first log line is `"svalin_api_started"` with
-      `"webVisitorForwarding":"on"`
-      and `"facilitators"` listing the Solana facilitator (`"x402.org"` on testnet, `"payai"`
-      on mainnet), plus `"near"` once `PAY_TO_NEAR` is set and `"cdp"` first if you set CDP
-      keys. A line saying `Failed to fetch supported kinds from facilitator` means that
+- [ ] **(test)** The first log line (on Workers, after the first request) is
+      `"svalin_api_started"` with `"facilitators"` listing the Solana facilitator (`"x402.org"`
+      on testnet, `"payai"` on mainnet), plus `"near"` once `PAY_TO_NEAR` is set and `"cdp"`
+      first if you set CDP keys, and `"webVisitorForwarding":"on"` once the website is set up. A line saying `Failed to fetch supported kinds from facilitator` means that
       facilitator is unreachable or its keys are wrong; the others keep working.
 - [ ] **(test)** `https://<api>/` shows `"payments": { "enabled": true, ... }` with Solana, and
       NEAR too once `PAY_TO_NEAR` is set.

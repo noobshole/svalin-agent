@@ -7,6 +7,7 @@ import { loadConfig } from "../src/env.js";
 import { createClientIpResolver, visitorKey } from "../src/lib/client-ip.js";
 import { facilitatorClients } from "../src/payments/x402.js";
 import { MockPortfolioSource } from "../src/sources/mock-source.js";
+import { startupSummary } from "../src/startup-log.js";
 import {
   NEAR_WALLET,
   PAY_TO_NEAR,
@@ -169,6 +170,21 @@ describe("startup guards", () => {
   it("needs both CDP keys or neither", () => {
     expect(() => testConfig({ CDP_API_KEY_ID: "key-id" })).toThrow(/CDP_API_KEY/);
     expect(() => testConfig({ CDP_API_KEY_SECRET: "secret" })).toThrow(/CDP_API_KEY/);
+  });
+});
+
+describe("startup log", () => {
+  it("names what is running without ever including a key", () => {
+    const keys = {
+      HELIUS_API_KEY: "helius-secret-value",
+      ANTHROPIC_API_KEY: "anthropic-secret-value",
+      NEAR_FACILITATOR_API_KEY: "near-secret-value",
+      WEB_FORWARDING_SECRET: "forwarding-secret-value-0123456789",
+    };
+    const summary = startupSummary(testConfig({ PAY_TO_SOLANA, PAY_TO_NEAR, X402_ENV: "testnet", ...keys }));
+    expect(summary).toMatchObject({ payments: "x402", facilitators: ["near", "x402.org"], webVisitorForwarding: "on" });
+    const logged = JSON.stringify(summary);
+    for (const value of Object.values(keys)) expect(logged).not.toContain(value);
   });
 });
 
