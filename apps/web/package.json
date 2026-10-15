@@ -14,7 +14,7 @@
     "@svalin-agent/shared": "workspace:*",
     "clsx": "^2.1.1",
     "lucide-react": "^0.511.0",
-    "next": "^15.5.27",
+    "next": "^15.5.28",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "server-only": "^0.0.1",
