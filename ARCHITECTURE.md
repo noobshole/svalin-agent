@@ -65,9 +65,13 @@ first `X-Forwarded-For` entry, because the caller chooses that. It is, in order:
 
 1. The visitor IP passed by the web app in `x-svalin-client-ip`, accepted only with the matching
    `WEB_FORWARDING_SECRET` (compared in constant time).
-2. The `X-Forwarded-For` entry added by our own hosting proxy, counted `TRUSTED_PROXY_HOPS` from
+2. On Cloudflare Workers, `CF-Connecting-IP`.
+3. The `X-Forwarded-For` entry added by our own hosting proxy, counted `TRUSTED_PROXY_HOPS` from
    the right.
-3. The socket's remote address.
+4. The socket's remote address.
+
+IPv6 addresses are grouped by their /64 network (`visitorKey`), the block a single subscriber
+usually holds, so rotating addresses inside it does not reset the limit.
 
 ## Configuration guards (`env.ts`)
 

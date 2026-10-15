@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { MAX_ROUTE_DESCRIPTION_LENGTH, paidRoutes, type PaidRouteKey } from "../src/catalog.js";
 import { loadConfig } from "../src/env.js";
+import { createClientIpResolver, visitorKey } from "../src/lib/client-ip.js";
 import { facilitatorClients } from "../src/payments/x402.js";
 import { MockPortfolioSource } from "../src/sources/mock-source.js";
 import {
@@ -62,6 +63,29 @@ describe("free surface", () => {
       limited.request(`/v1/demo/risk/${SOLANA_WALLET}`, { headers: { "x-forwarded-for": `${spoofed}, 203.0.113.7` } });
     expect((await call("10.0.0.1")).status).toBe(200);
     expect((await call("10.0.0.2")).status).toBe(429);
+  });
+
+  it("groups IPv6 visitors by /64 network for the demo limit", () => {
+    expect(visitorKey("203.0.113.7")).toBe("203.0.113.7");
+    expect(visitorKey("::ffff:203.0.113.7")).toBe("203.0.113.7");
+    expect(visitorKey("2001:db8:aa:bb:1:2:3:4")).toBe("2001:db8:aa:bb::/64");
+    expect(visitorKey("2001:0DB8:00aa:00bb::9")).toBe("2001:db8:aa:bb::/64");
+    expect(visitorKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(visitorKey("2001:db8:aa:cc::1")).not.toBe(visitorKey("2001:db8:aa:bb::1"));
+  });
+
+  it("keys the demo on CF-Connecting-IP on Cloudflare, ignoring X-Forwarded-For", async () => {
+    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_HOUR: "1" }), {
+      clientIp: createClientIpResolver({ trustedProxyHops: 0, cloudflare: true }),
+    });
+    const call = (connecting: string, spoofed: string) =>
+      limited.request(`/v1/demo/risk/${SOLANA_WALLET}`, {
+        headers: { "cf-connecting-ip": connecting, "x-forwarded-for": spoofed },
+      });
+    expect((await call("2001:db8:aa:bb::1", "10.0.0.1")).status).toBe(200);
+    // Another address in the same /64, with a different spoofed header: same visitor.
+    expect((await call("2001:db8:aa:bb::2", "10.0.0.2")).status).toBe(429);
+    expect((await call("2001:db8:aa:cc::1", "10.0.0.3")).status).toBe(200);
   });
 
   it("gives each website visitor their own demo allowance only when the web app proves the shared secret", async () => {
