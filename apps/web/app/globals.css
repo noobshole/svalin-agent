@@ -2,18 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Light ("Instrument") and dark ("Graphite") themes follow the visitor's system setting.
+ * Colours are HSL triplets so Tailwind can apply opacity. One accent family, used only to
+ * mean something: the risk grade and finding severity. Everything else is greyscale.
+ */
 :root {
-  color-scheme: dark;
-  --background: 229 52% 7%;
-  --foreground: 210 40% 96%;
-  --card: 228 36% 11%;
-  --card-foreground: 210 40% 96%;
-  --border: 219 32% 21%;
-  --primary: 171 77% 46%;
-  --primary-foreground: 222 47% 11%;
-  --muted: 223 27% 16%;
-  --muted-foreground: 214 20% 70%;
-  --accent: 196 80% 42%;
+  color-scheme: light;
+  --background: 48 18% 95%;
+  --surface: 0 0% 100%;
+  --surface-2: 48 14% 92%;
+  --foreground: 240 4% 10%;
+  --muted-foreground: 45 2% 41%;
+  --subtle-foreground: 45 3% 53%;
+  --border: 45 11% 85%;
+  --border-strong: 45 7% 75%;
+  --primary: 240 4% 10%;
+  --primary-foreground: 48 18% 95%;
+  --risk-low: 113 24% 38%;
+  --risk-medium: 30 72% 38%;
+  --risk-high: 8 56% 42%;
+  --risk-info: 45 2% 41%;
+  --exposure-1: 240 4% 10%;
+  --exposure-2: 240 3% 32%;
+  --exposure-3: 45 3% 53%;
+  --exposure-4: 45 6% 72%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: 210 7% 6%;
+    --surface: 220 7% 9%;
+    --surface-2: 225 6% 12%;
+    --foreground: 45 9% 92%;
+    --muted-foreground: 48 2% 54%;
+    --subtle-foreground: 48 2% 42%;
+    --border: 225 5% 16%;
+    --border-strong: 225 4% 24%;
+    --primary: 45 9% 92%;
+    --primary-foreground: 210 7% 6%;
+    --risk-low: 112 15% 60%;
+    --risk-medium: 38 50% 57%;
+    --risk-high: 8 46% 56%;
+    --risk-info: 48 2% 54%;
+    --exposure-1: 45 9% 92%;
+    --exposure-2: 45 4% 68%;
+    --exposure-3: 48 2% 46%;
+    --exposure-4: 225 4% 28%;
+  }
 }
 
 * {
@@ -23,12 +60,9 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top, rgba(45, 212, 191, 0.18), transparent 28%),
-    radial-gradient(circle at 80% 20%, rgba(14, 165, 233, 0.12), transparent 24%),
-    linear-gradient(180deg, #060816 0%, #040510 100%);
+  background: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: Arial, sans-serif;
+  font-feature-settings: "ss01", "cv11";
 }
 
 a {
@@ -37,5 +71,10 @@ a {
 }
 
 ::selection {
-  background: rgba(45, 212, 191, 0.24);
+  background: hsl(var(--foreground) / 0.15);
+}
+
+:focus-visible {
+  outline: 2px solid hsl(var(--foreground) / 0.6);
+  outline-offset: 2px;
 }

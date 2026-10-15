@@ -1,35 +1,39 @@
 import type { Config } from "tailwindcss";
 
+const color = (name: string) => `hsl(var(--${name}) / <alpha-value>)`;
+
 const config: Config = {
-  darkMode: ["class"],
-  content: [
-    "./app/**/*.{ts,tsx}",
-    "./components/**/*.{ts,tsx}",
-    
-    "./lib/**/*.{ts,tsx}",
-    
-  ],
+  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        background: "hsl(var(--background) / <alpha-value>)",
-        foreground: "hsl(var(--foreground) / <alpha-value>)",
-        card: "hsl(var(--card) / <alpha-value>)",
-        cardForeground: "hsl(var(--card-foreground) / <alpha-value>)",
-        border: "hsl(var(--border) / <alpha-value>)",
-        primary: "hsl(var(--primary) / <alpha-value>)",
-        primaryForeground: "hsl(var(--primary-foreground) / <alpha-value>)",
-        muted: "hsl(var(--muted) / <alpha-value>)",
-        mutedForeground: "hsl(var(--muted-foreground) / <alpha-value>)",
-        accent: "hsl(var(--accent) / <alpha-value>)",
+        background: color("background"),
+        surface: color("surface"),
+        surface2: color("surface-2"),
+        foreground: color("foreground"),
+        mutedForeground: color("muted-foreground"),
+        subtleForeground: color("subtle-foreground"),
+        border: color("border"),
+        borderStrong: color("border-strong"),
+        primary: color("primary"),
+        primaryForeground: color("primary-foreground"),
+        riskLow: color("risk-low"),
+        riskMedium: color("risk-medium"),
+        riskHigh: color("risk-high"),
+        riskInfo: color("risk-info"),
+        exposure1: color("exposure-1"),
+        exposure2: color("exposure-2"),
+        exposure3: color("exposure-3"),
+        exposure4: color("exposure-4"),
+      },
+      fontFamily: {
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       borderRadius: {
-        lg: "1rem",
-        md: "0.75rem",
-        sm: "0.5rem",
-      },
-      boxShadow: {
-        glow: "0 0 0 1px rgba(45, 212, 191, 0.16), 0 24px 80px rgba(8, 145, 178, 0.18)",
+        lg: "0.75rem",
+        md: "0.5rem",
+        sm: "0.375rem",
       },
     },
   },
