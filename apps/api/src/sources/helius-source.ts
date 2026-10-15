@@ -2,6 +2,7 @@ import { SOL_NATIVE_MINT, categoriseToken, lookupToken } from "@svalin-agent/cha
 import { portfolioOverviewSchema, type ChainFamily, type PortfolioOverview } from "@svalin-agent/shared";
 
 import { ApiError } from "../lib/errors.js";
+import { callFetch } from "../lib/fetch.js";
 import { finaliseAssets, formatUnits, type PortfolioSource } from "./portfolio-source.js";
 
 /** The subset of the Helius DAS `getAssetsByOwner` response Svalin relies on. */
@@ -39,7 +40,7 @@ type FetchLike = typeof fetch;
 export class HeliusPortfolioSource implements PortfolioSource {
   constructor(
     private readonly rpcUrl: string,
-    private readonly fetchImpl: FetchLike = fetch,
+    private readonly fetchImpl: FetchLike = callFetch,
     private readonly timeoutMs = 10_000,
   ) {}
 

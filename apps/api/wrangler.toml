@@ -1,0 +1,26 @@
+# Cloudflare Workers deployment of the Svalin API (entry: src/worker.ts). Steps are in
+# docs/DEPLOYMENT.md. Secrets (HELIUS_API_KEY, ...) and public values (PAY_TO_SOLANA,
+# PUBLIC_BASE_URL, ...) are set in the Cloudflare dashboard, never in this file.
+name = "svalin-api"
+main = "src/worker.ts"
+compatibility_date = "2026-09-15"
+compatibility_flags = ["nodejs_compat"]
+# Keep the variables set in the dashboard when a new version deploys.
+keep_vars = true
+
+[vars]
+NODE_ENV = "production"
+# Switch to "mainnet" (docs/DEPLOYMENT.md step 5) with a reviewed commit.
+X402_ENV = "testnet"
+
+[observability]
+enabled = true
+
+# One Durable Object holds the free demo counts for every isolate (src/lib/durable-demo-limiter.ts).
+[[durable_objects.bindings]]
+name = "DEMO_LIMITER"
+class_name = "DemoLimiterObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DemoLimiterObject"]

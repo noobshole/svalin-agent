@@ -33,15 +33,51 @@ Steps marked **(test)** confirm the previous step worked.
 
 ## 2. Deploy the API
 
+The API runs on Cloudflare Workers or as a Docker container on Render or any other container
+host.
+
+**On Cloudflare Workers:**
+
+- [ ] Cloudflare dashboard → **Workers & Pages** → **Create** → **Import a repository** → choose
+      this repository.
+- [ ] Project name `svalin-api` (it must match `name` in `apps/api/wrangler.toml`), root directory
+      `apps/api`, and:
+
+  ```text
+  Build command:  pnpm install --frozen-lockfile --filter "@svalin-agent/api..." && pnpm --filter "@svalin-agent/api^..." build
+  Deploy command: npx wrangler@4.146.0 deploy
+  ```
+
+  Or deploy from your own computer: `npx wrangler@4.146.0 login`, then
+  `pnpm build && pnpm --filter @svalin-agent/api run deploy:worker`.
+- [ ] After the first deploy, open the Worker's **Settings → Variables and Secrets**. Add
+      `HELIUS_API_KEY` as a **Secret**, and `PAY_TO_SOLANA` and `PUBLIC_BASE_URL` (the Worker's
+      `https://svalin-api.<your-subdomain>.workers.dev` address) as text variables. Later add
+      `PAY_TO_NEAR`, and `NEAR_FACILITATOR_API_KEY` as a Secret. `NODE_ENV` and `X402_ENV` come
+      from `wrangler.toml`.
+
+How Workers differ from a container host:
+
+- Workers Free allows 10 ms of CPU time per request. Most reports use under 2 ms. The first
+  NEAR report each minute parses Ref Finance's price list (about 5–8 ms), and a very large
+  wallet can exceed the limit and fail; a failed request is never charged. Workers Paid raises
+  the limit.
+- The free-scan limit is keyed on `CF-Connecting-IP`, which callers cannot set, so
+  `TRUSTED_PROXY_HOPS` is not used.
+- The free-scan limits are kept in one Durable Object (binding `DEMO_LIMITER`), so every Worker
+  instance shares the same counts. The portfolio cache stays in each instance's memory.
+- Payment facilitators are loaded inside the first paid request, and Bazaar discovery metadata
+  is off: its schema check generates code at runtime, which Workers forbid.
+- There is no startup log line. Logs are in the Worker's **Logs** tab.
+
 **On Render:** Dashboard → **New** → **Blueprint** → choose this repository. `render.yaml` sets up
 the Docker build, the health check, a single instance, testnet payments and a generated
 `WEB_FORWARDING_SECRET`, then asks for the values it cannot know. Leave the optional ones empty,
 and leave `PAY_TO_NEAR` empty until you have a NEAR facilitator key.
 
-The Blueprint uses Render's **free** plan. A free service sleeps after 15 minutes without traffic
-and takes about a minute to wake, so the first call after a quiet spell is slow and an agent may
-time out. That is fine for testnet. Before real payments, switch the service to a paid instance
-type (service → Settings → Instance Type) or move to a host that wakes faster.
+`render.yaml` selects Render's free instance type, which sleeps after 15 minutes without traffic
+and takes about a minute to wake. For production, choose a paid instance type (service →
+Settings → Instance Type).
 
 **On any other container host (Railway, Fly.io, …):**
 
@@ -70,9 +106,10 @@ type (service → Settings → Instance Type) or move to a host that wakes faste
   Prices default to $0.002 (portfolio), $0.004 (risk) and $0.02 (brief). Override them with
   `PRICE_PORTFOLIO_USD`, `PRICE_RISK_USD` and `PRICE_BRIEF_USD`.
 
-**Then, on either host:**
+**Then, on any host:**
 
-- [ ] **(test)** The first log line is `"svalin_api_started"` with `"webVisitorForwarding":"on"`
+- [ ] **(test)** On a container host, the first log line is `"svalin_api_started"` with
+      `"webVisitorForwarding":"on"`
       and `"facilitators"` listing the Solana facilitator (`"x402.org"` on testnet, `"payai"`
       on mainnet), plus `"near"` once `PAY_TO_NEAR` is set and `"cdp"` first if you set CDP
       keys. A line saying `Failed to fetch supported kinds from facilitator` means that
@@ -90,15 +127,13 @@ type (service → Settings → Instance Type) or move to a host that wakes faste
   curl -s -o /dev/null -w "%{http_code}\n" -H "X-Forwarded-For: 10.0.0.1" https://<api>/v1/demo/risk/<address>
   ```
 
-  If every call returns `200`, your host does not add its own proxy entry the usual way: set
-  `TRUSTED_PROXY_HOPS=0` and redeploy.
+  On a container host, if every call returns `200`, your host does not add its own proxy entry
+  the usual way: set `TRUSTED_PROXY_HOPS=0` and redeploy.
 
 ## 3. Deploy the website (optional)
 
-Agents use the API and the MCP server directly, so the website can come later. Vercel's free
-Hobby plan is for non-commercial use only, and a site for a paid service counts as commercial:
-use Vercel Pro, or another host that allows commercial use on its free plan, such as Netlify.
-The steps below are for Vercel.
+Agents use the API and the MCP server directly, so the website is optional. Any Next.js host
+works; the steps below are for Vercel. Vercel's Hobby plan is for non-commercial use only.
 
 - [ ] Import this repository and set **Root Directory** to `apps/web`. Build settings come from
       `apps/web/vercel.json`.

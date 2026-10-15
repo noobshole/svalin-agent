@@ -171,6 +171,48 @@ describe("facilitators", () => {
   });
 });
 
+describe("Cloudflare Workers mode", () => {
+  function countingFacilitator(failFirst = false) {
+    const facilitator = fakeFacilitator();
+    const supported = facilitator.getSupported.bind(facilitator);
+    const calls = { supported: 0 };
+    facilitator.getSupported = async () => {
+      calls.supported += 1;
+      if (failFirst && calls.supported === 1) throw new Error("facilitator down");
+      return supported();
+    };
+    return { facilitator, calls };
+  }
+  const workersDeps = { paymentInitialization: "first-paid-request", paymentDiscovery: false } as const;
+  const config = testConfig({ PAY_TO_SOLANA, X402_ENV: "testnet" });
+
+  it("loads the facilitators inside the first paid request only, without Bazaar metadata", async () => {
+    const { facilitator, calls } = countingFacilitator();
+    const app = createApp(config, { facilitator, ...workersDeps });
+
+    expect((await app.request("/health")).status).toBe(200);
+    expect((await app.request(`/v1/demo/risk/${SOLANA_WALLET}`)).status).toBe(200);
+    expect(calls.supported).toBe(0);
+
+    const first = await app.request(`/v1/risk/${SOLANA_WALLET}`);
+    expect(first.status).toBe(402);
+    expect(decodeHeader(first.headers.get("PAYMENT-REQUIRED")).extensions?.bazaar).toBeUndefined();
+    expect((await app.request(`/v1/brief/${SOLANA_WALLET}`)).status).toBe(402);
+    expect(calls.supported).toBe(1);
+  });
+
+  it("answers 503 when no facilitator responds, and retries on the next paid request", async () => {
+    const { facilitator, calls } = countingFacilitator(true);
+    const app = createApp(config, { facilitator, ...workersDeps });
+
+    const failed = await app.request(`/v1/risk/${SOLANA_WALLET}`);
+    expect(failed.status).toBe(503);
+    expect((await failed.json()).code).toBe("facilitator_unavailable");
+    expect((await app.request(`/v1/risk/${SOLANA_WALLET}`)).status).toBe(402);
+    expect(calls.supported).toBe(2);
+  });
+});
+
 describe("x402 paywall", () => {
   const facilitator = fakeFacilitator();
   const app = createApp(testConfig({ PAY_TO_SOLANA, PAY_TO_NEAR, X402_ENV: "testnet" }), { facilitator });

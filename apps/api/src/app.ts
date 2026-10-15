@@ -8,7 +8,7 @@ import { llmsTxt, openApiDocument, serviceInfo } from "./catalog.js";
 import type { AppConfig } from "./env.js";
 import { createClientIpResolver } from "./lib/client-ip.js";
 import { ApiError } from "./lib/errors.js";
-import { DemoRateLimiter } from "./lib/rate-limit.js";
+import { DemoRateLimiter, type DemoLimiter } from "./lib/rate-limit.js";
 import { TtlCache } from "./lib/ttl-cache.js";
 import { AnthropicNarrator, TemplateNarrator, type Narrator } from "./narrate/narrator.js";
 import { LogLedger, SupabaseLedger, type PaymentLedger } from "./payments/ledger.js";
@@ -25,9 +25,13 @@ export type AppDependencies = {
   narrator?: Narrator;
   ledger?: PaymentLedger;
   facilitator?: FacilitatorClient;
-  syncFacilitatorOnStart?: boolean;
+  /** See PaymentLayerOptions: Cloudflare Workers use "first-paid-request" and no discovery. */
+  paymentInitialization?: "startup" | "first-paid-request";
+  paymentDiscovery?: boolean;
   /** Resolves the client IP for demo rate limiting. */
   clientIp?: (c: Context) => string;
+  /** Shared demo limiter (Cloudflare Workers use a Durable Object); in memory by default. */
+  demoLimiter?: DemoLimiter;
 };
 
 const PAID_PREFIXES = ["/v1/portfolio/", "/v1/risk/", "/v1/brief/"];
@@ -59,7 +63,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
       : new LogLedger());
 
   const cache = new TtlCache<PortfolioOverview>(config.portfolio.cacheSeconds * 1000);
-  const demoLimiter = new DemoRateLimiter(config.demo.perHour, config.demo.perDayGlobal);
+  const demoLimiter = deps.demoLimiter ?? new DemoRateLimiter(config.demo.perHour, config.demo.perDayGlobal);
   const clientIp =
     deps.clientIp ??
     createClientIpResolver({
@@ -123,7 +127,8 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
       createPaymentLayer(config, {
         facilitator: deps.facilitator,
         ledger,
-        syncFacilitatorOnStart: deps.syncFacilitatorOnStart,
+        initialization: deps.paymentInitialization,
+        discovery: deps.paymentDiscovery,
       }),
     );
   }
@@ -136,7 +141,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   app.get("/llms.txt", (c) => c.text(llmsTxt(config)));
 
   app.get("/v1/demo/risk/:address", async (c) => {
-    const retryAfter = demoLimiter.check(clientIp(c));
+    const retryAfter = await demoLimiter.check(clientIp(c));
     if (retryAfter !== null) {
       c.header("Retry-After", String(retryAfter));
       throw new ApiError(

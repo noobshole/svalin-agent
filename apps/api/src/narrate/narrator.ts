@@ -1,6 +1,8 @@
 import { briefSchema, type Brief, type RiskReport } from "@svalin-agent/shared";
 import { z } from "zod";
 
+import { callFetch } from "../lib/fetch.js";
+
 /**
  * Turns a deterministic RiskReport into a short human/agent-readable brief.
  * The LLM only writes prose; it never sees an instruction to compute anything, and
@@ -82,7 +84,7 @@ export class AnthropicNarrator implements Narrator {
   constructor(
     private readonly apiKey: string,
     private readonly model: string,
-    private readonly fetchImpl: FetchLike = fetch,
+    private readonly fetchImpl: FetchLike = callFetch,
     private readonly timeoutMs = 12_000,
   ) {}
 

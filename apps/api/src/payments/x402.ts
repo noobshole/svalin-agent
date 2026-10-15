@@ -9,13 +9,25 @@ import type { MiddlewareHandler } from "hono";
 
 import { ADDRESS_PATTERN, paidRoutes, paymentNetworks, type PaidRouteKey } from "../catalog.js";
 import type { AppConfig } from "../env.js";
+import { ApiError } from "../lib/errors.js";
 import type { PaymentLedger } from "./ledger.js";
 
 export type PaymentLayerOptions = {
   /** Injected in tests so no network call is made to a real facilitator. */
   facilitator?: FacilitatorClient;
   ledger: PaymentLedger;
-  syncFacilitatorOnStart?: boolean;
+  /**
+   * When the facilitators' supported payment kinds are fetched. "startup" (the default) fetches
+   * them when the server starts. "first-paid-request" fetches them inside the first paid
+   * request: Cloudflare Workers needs this, because I/O started in one request cannot be awaited
+   * by another.
+   */
+  initialization?: "startup" | "first-paid-request";
+  /**
+   * Bazaar discovery metadata on paid routes (default true). Its schema validation compiles code
+   * at runtime, which Cloudflare Workers forbid. Bazaar listing only applies with CDP keys.
+   */
+  discovery?: boolean;
 };
 
 const outputExamples: Record<PaidRouteKey, unknown> = {
@@ -81,7 +93,8 @@ export function createPaymentLayer(config: AppConfig, options: PaymentLayerOptio
       network.family === "solana" ? new ExactSvmScheme() : new ExactNearScheme(),
     );
   }
-  server.registerExtension(bazaarResourceServerExtension);
+  const discovery = options.discovery ?? true;
+  if (discovery) server.registerExtension(bazaarResourceServerExtension);
 
   server.onAfterSettle(async (context) => {
     const requirements = context.requirements;
@@ -116,25 +129,47 @@ export function createPaymentLayer(config: AppConfig, options: PaymentLayerOptio
           mimeType: "application/json",
           serviceName: "Svalin",
           tags: route.tags,
-          extensions: declareDiscoveryExtension({
-            pathParams: { address: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" },
-            pathParamsSchema: {
-              type: "object",
-              properties: {
-                address: {
-                  type: "string",
-                  pattern: ADDRESS_PATTERN,
-                  description: "Solana wallet address (base58) or NEAR account ID to analyse",
+          ...(discovery && {
+            extensions: declareDiscoveryExtension({
+              pathParams: { address: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" },
+              pathParamsSchema: {
+                type: "object",
+                properties: {
+                  address: {
+                    type: "string",
+                    pattern: ADDRESS_PATTERN,
+                    description: "Solana wallet address (base58) or NEAR account ID to analyse",
+                  },
                 },
+                required: ["address"],
               },
-              required: ["address"],
-            },
-            output: { example: outputExamples[key] },
+              output: { example: outputExamples[key] },
+            }),
           }),
         },
       ];
     }),
   );
 
-  return paymentMiddleware(routes, server, undefined, undefined, options.syncFacilitatorOnStart ?? true);
+  if (options.initialization !== "first-paid-request") {
+    return paymentMiddleware(routes, server);
+  }
+
+  // Fetch supported kinds inside the paid request that first needs them, so the request that
+  // started the I/O is the one awaiting it. A failure is retried on the next paid request.
+  const middleware = paymentMiddleware(routes, server, undefined, undefined, false);
+  const paidPrefixes = Object.values(paidRoutes).map((route) => route.path.replace("{address}", ""));
+  let ready: Promise<void> | undefined;
+  return async (c, next) => {
+    if (!paidPrefixes.some((prefix) => c.req.path.startsWith(prefix))) return next();
+    try {
+      await (ready ??= server.initialize().catch((error: unknown) => {
+        ready = undefined;
+        throw error;
+      }));
+    } catch {
+      throw new ApiError(503, "facilitator_unavailable", "Payments are temporarily unavailable. Retry shortly.");
+    }
+    return middleware(c, next);
+  };
 }

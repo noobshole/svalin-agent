@@ -2,6 +2,7 @@ import { NEAR_NATIVE_TOKEN, WNEAR_TOKEN, categoriseToken, lookupToken } from "@s
 import { isNearAccountId, portfolioOverviewSchema, type ChainFamily, type PortfolioOverview } from "@svalin-agent/shared";
 
 import { ApiError } from "../lib/errors.js";
+import { callFetch } from "../lib/fetch.js";
 import { finaliseAssets, formatUnits, type PortfolioSource } from "./portfolio-source.js";
 
 /** The subset of FastNEAR's `GET /v1/account/{id}/full` response Svalin relies on. */
@@ -38,7 +39,7 @@ export class NearPortfolioSource implements PortfolioSource {
 
   constructor(
     private readonly options: NearSourceOptions,
-    private readonly fetchImpl: FetchLike = fetch,
+    private readonly fetchImpl: FetchLike = callFetch,
     private readonly timeoutMs = 10_000,
     private readonly priceTtlMs = 60_000,
     private readonly now: () => number = Date.now,

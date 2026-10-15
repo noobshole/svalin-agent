@@ -85,7 +85,26 @@ output. Any non-`end_turn` stop (refusal, truncation), HTTP error or schema mism
 the template narrator, so `/v1/brief` always returns a valid brief and the caller is never charged
 for an error.
 
+## Cloudflare Workers (`src/worker.ts`, `wrangler.toml`)
+
+`index.ts` serves the app with Node; `worker.ts` serves the same `createApp` on Cloudflare
+Workers with `nodejs_compat`. On Workers:
+
+- Settings arrive as bindings and go through the same `loadConfig` guards.
+- The free-demo key is `CF-Connecting-IP`, which Cloudflare sets and callers cannot override.
+- Free-demo counts live in one Durable Object (`lib/durable-demo-limiter.ts`, binding
+  `DEMO_LIMITER`), because Workers run many isolates and in-memory counts are never shared. It
+  applies the same rule as the in-memory limiter (`decideDemoLimit`), persists counts to its
+  storage, and fails closed (the demo pauses) if it cannot be reached.
+- Payment facilitators load inside the first paid request (`initialization: "first-paid-request"`),
+  because I/O started in one request cannot be awaited by another.
+- Bazaar discovery metadata is off: its schema validation generates code at runtime, which
+  Workers forbid.
+- `fetch` is always called as a plain function (`lib/fetch.ts`); stored on an object and called as
+  a method, it throws on Workers.
+
 ## Scaling notes
 
-The cache and demo rate limiter are in-memory. That is fine for a single replica. For more,
-move both to Redis/Upstash; the interfaces are small (`TtlCache`, `DemoRateLimiter`).
+On a container host the cache and demo rate limiter are in-memory. That is fine for a single
+replica. For more, pass a shared `DemoLimiter` (as Workers do) and move the cache to
+Redis/Upstash; the interfaces are small (`TtlCache`, `DemoLimiter`).

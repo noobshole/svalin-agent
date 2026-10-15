@@ -9,3 +9,5 @@ dist
 .env.local
 coverage
 supabase/.temp
+.wrangler
+.dev.vars

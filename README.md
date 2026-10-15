@@ -225,8 +225,9 @@ public issue.
 
 ## Deploy
 
-- **API:** Render (New → Blueprint, using [`render.yaml`](render.yaml), on the free plan, which
-  sleeps when idle) or any container host using the root `Dockerfile`.
+- **API:** Cloudflare Workers (using [`apps/api/wrangler.toml`](apps/api/wrangler.toml)), Render
+  (New → Blueprint, using [`render.yaml`](render.yaml)) or any container host using the root
+  `Dockerfile`.
 - **Website:** any Next.js host with the root directory set to `apps/web`; `apps/web/vercel.json`
   is ready for Vercel.
 - **MCP server:** npm and the official MCP Registry.
@@ -239,7 +240,8 @@ Step-by-step instructions, with a test after each step, are in
 - Wallet analysis covers Solana and NEAR.
 - NEAR token prices come from Ref Finance, which also prices thinly traded tokens; those show up as
   long-tail exposure.
-- The cache and the free-tier limits are held in memory, so the API runs as a single instance.
+- The cache and the free-tier limits are held in memory, so a container deployment runs as a
+  single instance. On Cloudflare Workers the free-tier limits live in a Durable Object instead.
 - Reports describe current holdings only.
 
 ## Documentation

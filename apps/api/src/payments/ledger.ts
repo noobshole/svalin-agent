@@ -1,3 +1,5 @@
+import { callFetch } from "../lib/fetch.js";
+
 /**
  * Payments ledger. Every settled x402 payment is logged as a JSON line (so any log
  * drain can count payments) and, when Supabase is configured, inserted into
@@ -31,7 +33,7 @@ export class SupabaseLedger implements PaymentLedger {
   constructor(
     private readonly url: string,
     private readonly serviceRoleKey: string,
-    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly fetchImpl: typeof fetch = callFetch,
   ) {}
 
   async record(entry: PaymentRecord) {
