@@ -225,9 +225,10 @@ public issue.
 
 ## Deploy
 
-- **API:** Render (New → Blueprint, using [`render.yaml`](render.yaml)) or any container host
-  using the root `Dockerfile`.
-- **Website:** Vercel, with the root directory set to `apps/web`.
+- **API:** Render (New → Blueprint, using [`render.yaml`](render.yaml), on the free plan, which
+  sleeps when idle) or any container host using the root `Dockerfile`.
+- **Website:** any Next.js host with the root directory set to `apps/web`; `apps/web/vercel.json`
+  is ready for Vercel.
 - **MCP server:** npm and the official MCP Registry.
 
 Step-by-step instructions, with a test after each step, are in

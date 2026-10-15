@@ -35,8 +35,13 @@ Steps marked **(test)** confirm the previous step worked.
 
 **On Render:** Dashboard → **New** → **Blueprint** → choose this repository. `render.yaml` sets up
 the Docker build, the health check, a single instance, testnet payments and a generated
-`WEB_FORWARDING_SECRET`, then asks for the values it cannot know. Leave the optional ones empty.
-The Blueprint uses Render's smallest paid instance, because free instances sleep when idle.
+`WEB_FORWARDING_SECRET`, then asks for the values it cannot know. Leave the optional ones empty,
+and leave `PAY_TO_NEAR` empty until you have a NEAR facilitator key.
+
+The Blueprint uses Render's **free** plan. A free service sleeps after 15 minutes without traffic
+and takes about a minute to wake, so the first call after a quiet spell is slow and an agent may
+time out. That is fine for testnet. Before real payments, switch the service to a paid instance
+type (service → Settings → Instance Type) or move to a host that wakes faster.
 
 **On any other container host (Railway, Fly.io, …):**
 
@@ -68,11 +73,12 @@ The Blueprint uses Render's smallest paid instance, because free instances sleep
 **Then, on either host:**
 
 - [ ] **(test)** The first log line is `"svalin_api_started"` with `"webVisitorForwarding":"on"`
-      and `"facilitators"` listing `"near"` (and `"cdp"` first if you set CDP keys). A line
-      saying `Failed to fetch supported kinds from facilitator` means that facilitator is
-      unreachable or its keys are wrong; the others keep working.
-- [ ] **(test)** `https://<api>/` shows `"payments": { "enabled": true, ... }` with two networks,
-      Solana and NEAR.
+      and `"facilitators"` listing the Solana facilitator (`"x402.org"` on testnet, `"payai"`
+      on mainnet), plus `"near"` once `PAY_TO_NEAR` is set and `"cdp"` first if you set CDP
+      keys. A line saying `Failed to fetch supported kinds from facilitator` means that
+      facilitator is unreachable or its keys are wrong; the others keep working.
+- [ ] **(test)** `https://<api>/` shows `"payments": { "enabled": true, ... }` with Solana, and
+      NEAR too once `PAY_TO_NEAR` is set.
 - [ ] **(test)** `https://<api>/v1/demo/risk/<any Solana address>` returns a report with
       `"dataSource": "helius"`, and `https://<api>/v1/demo/risk/<any NEAR account>` one with
       `"dataSource": "fastnear"`.
@@ -87,7 +93,12 @@ The Blueprint uses Render's smallest paid instance, because free instances sleep
   If every call returns `200`, your host does not add its own proxy entry the usual way: set
   `TRUSTED_PROXY_HOPS=0` and redeploy.
 
-## 3. Deploy the website (Vercel)
+## 3. Deploy the website (optional)
+
+Agents use the API and the MCP server directly, so the website can come later. Vercel's free
+Hobby plan is for non-commercial use only, and a site for a paid service counts as commercial:
+use Vercel Pro, or another host that allows commercial use on its free plan, such as Netlify.
+The steps below are for Vercel.
 
 - [ ] Import this repository and set **Root Directory** to `apps/web`. Build settings come from
       `apps/web/vercel.json`.

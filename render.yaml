@@ -7,6 +7,9 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
+    # Free plan: sleeps after 15 minutes without traffic and takes about a minute to wake.
+    # For production, change the instance type to a paid plan in the service's settings.
+    plan: free
     # The cache and free-demo limits live in memory: run exactly one instance.
     numInstances: 1
     # Deploy a new commit only after GitHub's checks pass.
