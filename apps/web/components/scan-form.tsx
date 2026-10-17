@@ -30,7 +30,7 @@ export function ScanForm({ initialValue = "", showExamples = false }: { initialV
   function scan(address: string) {
     setError(null);
     setPending(true);
-    router.push(`/scan/${address}`);
+    router.push(`/scan?address=${encodeURIComponent(address)}`);
   }
 
   function onSubmit(event: FormEvent) {

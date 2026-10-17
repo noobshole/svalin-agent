@@ -3,8 +3,8 @@
 pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared packages.
 
 ```text
-                 ┌──────────────┐  free demo (server-side fetch)
- human ─────────▶│  apps/web    │─────────────────────────────┐
+                 ┌──────────────┐  free demo (from the browser)
+ human ─────────▶│ apps/web     │─────────────────────────────┐
                  └──────────────┘                             ▼
                  ┌──────────────┐  x402-paying fetch   ┌──────────────┐  Solana  ┌──────────────────┐
  Claude/Cursor ─▶│ packages/mcp │─────────────────────▶│   apps/api   │─────────▶│ Helius DAS       │
@@ -63,8 +63,9 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
 The demo is limited per visitor per hour plus a global daily cap. The visitor key is never the
 first `X-Forwarded-For` entry, because the caller chooses that. It is, in order:
 
-1. The visitor IP passed by the web app in `x-svalin-client-ip`, accepted only with the matching
-   `WEB_FORWARDING_SECRET` (compared in constant time).
+1. The visitor IP passed by a server-side frontend in `x-svalin-client-ip`, accepted only with the
+   matching `WEB_FORWARDING_SECRET` (compared in constant time). The bundled website is static
+   and calls the API from the browser, so it needs none of this.
 2. On Cloudflare Workers, `CF-Connecting-IP`.
 3. The `X-Forwarded-For` entry added by our own hosting proxy, counted `TRUSTED_PROXY_HOPS` from
    the right.

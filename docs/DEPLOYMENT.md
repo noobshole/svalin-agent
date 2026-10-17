@@ -25,9 +25,9 @@ Steps marked **(test)** confirm the previous step worked.
 - [ ] Optional: a Coinbase Developer Platform **secret API key** (portal.cdp.coinbase.com). With
       it, Solana payments settle through Coinbase's CDP facilitator, which makes the API
       discoverable in the x402 Bazaar.
-- [ ] A **web forwarding secret**: a random string of at least 24 characters shared by the API
-      and the website, so each website visitor gets their own free-scan allowance. Render's
-      Blueprint (step 2) generates one for you; otherwise use a password manager.
+- [ ] Optional: a **web forwarding secret** (`WEB_FORWARDING_SECRET`, 24+ random characters), only
+      if a server of yours calls the free scan for visitors and must pass on their address. The
+      bundled website calls the API from the browser and does not need it.
 - [ ] Optional: a Supabase project for the payments ledger. In the SQL editor, run every file in
       `supabase/migrations/` in name order, then copy the project URL and service-role key.
 
@@ -95,7 +95,7 @@ Settings → Instance Type).
   NEAR_FACILITATOR_API_KEY=...  # from the access request; one per network and payee
   X402_ENV=testnet              # switch to mainnet in step 5 (needs a mainnet facilitator key)
   ALLOWED_ORIGINS=https://<your-web-domain>
-  WEB_FORWARDING_SECRET=...     # the same value goes on the website
+  WEB_FORWARDING_SECRET=...     # optional: only for a server that proxies the free scan
   TRUSTED_PROXY_HOPS=1          # proxies in front of the API; 1 on most hosts
   ANTHROPIC_API_KEY=...         # optional
   SUPABASE_URL=...              # optional
@@ -112,8 +112,8 @@ Settings → Instance Type).
 - [ ] **(test)** The first log line (on Workers, after the first request) is
       `"svalin_api_started"` with `"facilitators"` listing the Solana facilitator (`"x402.org"`
       on testnet, `"payai"` on mainnet), plus `"near"` once `PAY_TO_NEAR` is set and `"cdp"`
-      first if you set CDP keys, and `"webVisitorForwarding":"on"` once the website is set up. A line saying `Failed to fetch supported kinds from facilitator` means that
-      facilitator is unreachable or its keys are wrong; the others keep working.
+      first if you set CDP keys. A line saying `Failed to fetch supported kinds from facilitator`
+      means that facilitator is unreachable or its keys are wrong; the others keep working.
 - [ ] **(test)** `https://<api>/` shows `"payments": { "enabled": true, ... }` with Solana, and
       NEAR too once `PAY_TO_NEAR` is set.
 - [ ] **(test)** `https://<api>/v1/demo/risk/<any Solana address>` returns a report with
@@ -132,15 +132,28 @@ Settings → Instance Type).
 
 ## 3. Deploy the website (optional)
 
-Agents use the API and the MCP server directly, so the website is optional. Any Next.js host
-works; the steps below are for Vercel. Vercel's Hobby plan is for non-commercial use only.
+Agents use the API and the MCP server directly, so the website is optional. It is a static site
+(`apps/web/out`): the free scan runs in the visitor's browser and calls the API directly, so the
+API applies the free-scan limit to each visitor's own address.
 
-- [ ] Import this repository and set **Root Directory** to `apps/web`. Build settings come from
-      `apps/web/vercel.json`.
-- [ ] Environment: `SVALIN_API_URL=https://<api>`, `NEXT_PUBLIC_API_BASE_URL=https://<api>` and
-      `WEB_FORWARDING_SECRET=<the API's value>`. Set them before the first deploy:
-      `NEXT_PUBLIC_API_BASE_URL` is built into the pages, so redeploy if the API address changes.
+**On Cloudflare Workers (static assets):**
+
+- [ ] **Workers & Pages** → **Create** → **Import a repository** → choose this repository.
+- [ ] Project name `svalin` (it must match `name` in `apps/web/wrangler.toml`), root directory
+      `apps/web`, and:
+
+  ```text
+  Build command:  pnpm install --frozen-lockfile --filter "@svalin-agent/web..." && pnpm --filter "@svalin-agent/web..." build
+  Deploy command: npx wrangler@4.146.0 deploy
+  ```
+
+- [ ] Build variable `NEXT_PUBLIC_API_BASE_URL=https://<api>`. It is built into the pages, so
+      rebuild if the API address changes.
+- [ ] On the API, set `ALLOWED_ORIGINS=https://<your-site>` so browsers may call it.
 - [ ] **(test)** Paste a wallet on the landing page and get a graded report.
+
+Any other static host works too: run the build, then publish `apps/web/out`, and copy the
+security headers from `apps/web/out/_headers` into the host's header settings.
 
 ## 4. Test a payment on testnet
 

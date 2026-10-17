@@ -1,8 +1,8 @@
 import { Logo } from "@/components/logo";
-import { publicApiUrl } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/api";
 
 export function SiteFooter() {
-  const apiUrl = publicApiUrl();
+  const apiUrl = API_BASE_URL;
   const links = [
     { href: "https://github.com/noobshole/svalin-agent", label: "GitHub" },
     { href: "https://github.com/noobshole/svalin-agent/blob/main/docs/RISK_METHODOLOGY.md", label: "Methodology" },

@@ -4,10 +4,11 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/write-headers.mjs",
     "lint": "next typegen && tsc --noEmit",
     "typecheck": "next typegen && tsc --noEmit",
-    "start": "next start"
+    "start": "npx --yes wrangler@4.146.0 dev --port 3000",
+    "deploy": "npx --yes wrangler@4.146.0 deploy"
   },
   "dependencies": {
     "@svalin-agent/chain-config": "workspace:*",
@@ -17,7 +18,6 @@
     "next": "^15.5.28",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "server-only": "^0.0.1",
     "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {

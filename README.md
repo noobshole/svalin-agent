@@ -228,8 +228,8 @@ public issue.
 - **API:** Cloudflare Workers (using [`apps/api/wrangler.toml`](apps/api/wrangler.toml)), Render
   (New → Blueprint, using [`render.yaml`](render.yaml)) or any container host using the root
   `Dockerfile`.
-- **Website:** any Next.js host with the root directory set to `apps/web`; `apps/web/vercel.json`
-  is ready for Vercel.
+- **Website:** a static site (`apps/web`), deployed to Cloudflare with
+  [`apps/web/wrangler.toml`](apps/web/wrangler.toml) or to any static host.
 - **MCP server:** npm and the official MCP Registry.
 
 Step-by-step instructions, with a test after each step, are in

@@ -1,27 +1,14 @@
 import type { NextConfig } from "next";
 
+/**
+ * The website is a static export (out/): every page is plain HTML, and the free scan calls the
+ * API from the browser. Security headers are written to out/_headers by scripts/write-headers.mjs.
+ */
 const nextConfig: NextConfig = {
+  output: "export",
   reactStrictMode: true,
   poweredByHeader: false,
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          {
-            key: "Content-Security-Policy",
-            // The browser only talks to this origin; API calls happen server-side.
-            value:
-              "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self';",
-          },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-        ],
-      },
-    ];
-  },
+  images: { unoptimized: true },
 };
 
 export default nextConfig;

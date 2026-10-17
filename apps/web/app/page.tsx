@@ -2,18 +2,16 @@ import type { ReactNode } from "react";
 
 import { ReportPreview } from "@/components/report-preview";
 import { ScanForm } from "@/components/scan-form";
-import { getServiceInfo, publicApiUrl } from "@/lib/api";
+import { API_BASE_URL, getServiceInfo } from "@/lib/api";
 import { exampleReport } from "@/lib/example-report";
 
 const fallbackPrices = { portfolio: "$0.002", risk: "$0.004", brief: "$0.02" };
-
-export const revalidate = 300;
 
 export default async function HomePage() {
   const info = await getServiceInfo();
   const price = (path: string, fallback: string) =>
     info?.endpoints.find((endpoint) => endpoint.path === path)?.price ?? fallback;
-  const apiUrl = publicApiUrl();
+  const apiUrl = API_BASE_URL;
   const networks = info?.payments.networks.map((network) => network.label) ?? [];
   const riskPrice = price("/v1/risk/{address}", fallbackPrices.risk);
 

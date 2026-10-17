@@ -1,0 +1,9 @@
+# Cloudflare Workers static assets: serves the exported website from out/ (no server code).
+# Build with NEXT_PUBLIC_API_BASE_URL set to the API's address. Steps are in docs/DEPLOYMENT.md.
+name = "svalin"
+compatibility_date = "2026-09-15"
+
+[assets]
+directory = "./out"
+not_found_handling = "404-page"
+html_handling = "auto-trailing-slash"

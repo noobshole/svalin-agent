@@ -36,6 +36,18 @@ describe("free surface", () => {
     expect(llms).toContain("/v1/risk/");
   });
 
+  it("publishes discovery metadata that x402 explorers read", async () => {
+    const spec = await (await app.request("/openapi.json")).json();
+    expect(spec.info["x-guidance"]).toContain("/v1/risk/{address}");
+    const risk = spec.paths["/v1/risk/{address}"].get;
+    expect(risk["x-payment-info"]).toEqual({
+      price: { mode: "fixed", currency: "USD", amount: "0.004000" },
+      protocols: [{ x402: {} }],
+    });
+    expect(risk.responses["402"]).toBeDefined();
+    expect(spec.paths["/v1/demo/risk/{address}"].get["x-payment-info"]).toBeUndefined();
+  });
+
   it("rejects invalid addresses with 400", async () => {
     const response = await app.request("/v1/demo/risk/Not-An-Address");
     expect(response.status).toBe(400);

@@ -11,3 +11,4 @@ coverage
 supabase/.temp
 .wrangler
 .dev.vars
+out

@@ -7,6 +7,21 @@ export const API_VERSION = "1.0.0";
 export const TAGLINE =
   "Read-only portfolio risk intelligence for AI agents. Pay per call in USDC over x402. Svalin can never move funds.";
 
+export const REPOSITORY_URL = "https://github.com/noobshole/svalin-agent";
+
+/** How an agent should use the API, published as info.x-guidance in the OpenAPI document. */
+const X_GUIDANCE =
+  "Svalin returns read-only risk reports for Solana wallets and NEAR accounts. Call GET /v1/risk/{address}, " +
+  "/v1/portfolio/{address} or /v1/brief/{address} with a Solana base58 address or a NEAR account ID such as " +
+  "alice.near. Paid routes answer 402 with x402 v2 USDC payment requirements: pay, then retry with the payment " +
+  "header. Invalid addresses are rejected with 400 before any payment, and failed calls are never charged. " +
+  "GET /v1/demo/risk/{address} is free and rate limited.";
+
+/** "$0.004" → "0.004000": discovery metadata states prices as decimal USD. */
+function usdAmount(price: string) {
+  return Number(price.replace(/^\$/, "")).toFixed(6);
+}
+
 export type PaidRouteKey = "portfolio" | "risk" | "brief";
 
 /** JSON Schema pattern for a Solana base58 address or a NEAR account ID. */
@@ -126,17 +141,15 @@ export function openApiDocument(config: AppConfig) {
     description: "Solana wallet address (base58) or NEAR account ID (e.g. alice.near).",
     schema: { type: "string", pattern: ADDRESS_PATTERN },
   };
-  const networks = paymentNetworks(config);
   const paid = (key: PaidRouteKey) => ({
     get: {
       summary: paidRoutes[key].description,
       tags: ["paid"],
       parameters: [addressParam],
-      "x-payment": {
-        protocol: "x402",
-        price: config.payments.prices[key],
-        asset: "USDC",
-        networks: networks.map((network) => network.caip2),
+      // Discovery metadata (x402scan / IETF payment info): decimal USD here, atomic units at runtime.
+      "x-payment-info": {
+        price: { mode: "fixed", currency: "USD", amount: usdAmount(config.payments.prices[key]) },
+        protocols: [{ x402: {} }],
       },
       responses: {
         "200": { description: paidRoutes[key].returns },
@@ -150,7 +163,13 @@ export function openApiDocument(config: AppConfig) {
 
   return {
     openapi: "3.1.0",
-    info: { title: "Svalin API", version: API_VERSION, description: TAGLINE },
+    info: {
+      title: "Svalin API",
+      version: API_VERSION,
+      description: TAGLINE,
+      "x-guidance": X_GUIDANCE,
+      contact: { name: "Svalin", url: REPOSITORY_URL },
+    },
     servers: [{ url: config.publicBaseUrl }],
     paths: {
       "/v1/demo/risk/{address}": {
