@@ -15,7 +15,7 @@ accounts, and no way to move funds.
 ![x402 v2](https://img.shields.io/badge/payments-x402%20v2-0052FF)
 ![MCP](https://img.shields.io/badge/MCP-server-6E56CF)
 
-[Features](#features) · [How it works](#how-it-works) · [Use cases](#use-cases) · [Endpoints](#endpoints) · [Use it from an agent](#use-it-from-an-agent) · [Run locally](#run-locally) · [Trust and safety](#trust-and-safety) · [Docs](#documentation)
+[Free scan](https://svalin.noobshole.workers.dev) · [Features](#features) · [How it works](#how-it-works) · [Use cases](#use-cases) · [Endpoints](#endpoints) · [Use it from an agent](#use-it-from-an-agent) · [Run locally](#run-locally) · [Trust and safety](#trust-and-safety) · [Docs](#documentation)
 
 </div>
 
