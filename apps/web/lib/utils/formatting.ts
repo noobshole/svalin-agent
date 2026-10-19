@@ -15,8 +15,9 @@ export function formatPrice(value: number) {
   return value >= 1e-6 ? `$${value.toPrecision(3)}` : `$${value.toExponential(2)}`;
 }
 
-/** Dollar amounts in tables: $1.8M, $245.8K, $940. */
+/** Dollar amounts in tables: $1.8M, $245.8K, $940. Junk tokens can claim more than a trillion. */
 export function formatCompactUsd(value: number) {
+  if (value >= 1e15) return `$${(value / 1e15).toLocaleString("en-US", { maximumFractionDigits: 2 })} quadrillion`;
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
 
