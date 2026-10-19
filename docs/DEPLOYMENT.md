@@ -6,7 +6,8 @@ Steps marked **(test)** confirm the previous step worked.
 ## 1. Accounts and wallets
 
 - [ ] A [Helius](https://dashboard.helius.dev) API key for live Solana data (the free plan works).
-      NEAR data (FastNEAR, Ref Finance and NEAR RPC) needs no key.
+      NEAR data (FastNEAR, Ref Finance and NEAR RPC) and the token liquidity check (DexScreener)
+      need no key.
 - [ ] Two **receiving wallets**, used only for Svalin payments:
   - a Solana wallet (Phantom or Solflare). Its public address becomes `PAY_TO_SOLANA`.
   - a NEAR account (for example `svalin-pay.near`, created in Meteor or MyNearWallet). Its

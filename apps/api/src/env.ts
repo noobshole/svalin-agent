@@ -23,6 +23,8 @@ const envSchema = z.object({
   FASTNEAR_API_URL: z.string().url().default("https://api.fastnear.com"),
   NEAR_RPC_URL: z.string().url().default("https://rpc.mainnet.fastnear.com"),
   NEAR_PRICE_API_URL: z.string().url().default("https://indexer.ref.finance/list-token-price"),
+  // Trading-pool liquidity, used to check tokens outside the curated registry before they count.
+  MARKET_DATA_API_URL: z.string().url().default("https://api.dexscreener.com"),
   PORTFOLIO_CACHE_SECONDS: z.coerce.number().int().nonnegative().default(60),
 
   X402_ENV: z.enum(["mainnet", "testnet"]).optional(),
@@ -105,6 +107,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       fastnearApiUrl: env.FASTNEAR_API_URL.replace(/\/+$/, ""),
       nearRpcUrl: env.NEAR_RPC_URL,
       nearPriceApiUrl: env.NEAR_PRICE_API_URL,
+      marketDataApiUrl: env.MARKET_DATA_API_URL.replace(/\/+$/, ""),
       cacheSeconds: env.PORTFOLIO_CACHE_SECONDS,
     },
 
