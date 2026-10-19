@@ -10,12 +10,13 @@ holdings always produce the same report. No number in a report comes from a lang
   counted as `unpricedAssetCount`. Dust below $0.01 is dropped.
 - **Category** from a curated registry (`packages/chain-config`): `native`, `stablecoin`,
   `liquid-staking`, `major`, `meme`. Anything not in the registry is `long-tail`.
-- **Market check for long-tail tokens.** A quoted price alone is not trusted: anyone can send a
-  wallet a token with a fake or stale price. Each long-tail token's trading pools are looked up
-  (DexScreener), and the token is valued at no more than half their liquidity, the side a seller
-  is paid from and so the most a sale could ever take out. A long-tail token with no pool counts
-  as unpriced. Up to 90 long-tail tokens are checked per report, largest first; any beyond that
-  count as unpriced. Registry tokens are not checked.
+- **Pool check for NEAR tokens outside the registry.** A quoted price alone is not trusted:
+  anyone can send an account a token whose Ref Finance price is fake or stale. Such a token is
+  valued at no more than the registry tokens (wNEAR, stablecoins, liquid staking and so on) held
+  in its Ref pools, which is the most a sale of it could take out. Value on the other side of a
+  pool counts only if it is a registry token, so two junk tokens paired with each other add
+  nothing. A token whose pools hold no registry token counts as unpriced. Registry tokens are not
+  checked.
 - **NEAR specifics.** Native NEAR and wNEAR are `native`. NEAR delegated to a validator staking
   pool counts as `liquid-staking`: it is not liquid, but like stNEAR, LiNEAR and rNEAR it earns
   staking rewards, so it is staked rather than idle. Up to 10 staking pools are read per account.
@@ -70,14 +71,14 @@ threshold-width past it scores 100. Unpriced spam tokens can lower confidence by
 
 ## Known limitations
 
-- Prices come from the data provider. The market check bounds what a thinly traded token can
-  add, but a long-tail position is still shown at its quoted price up to that bound, which can
-  be more than a large sale would really fetch.
-- The market check sees the main pools DexScreener lists for each token, so a token traded
-  across many small pools can be valued below its true depth.
+- Prices come from the data provider. On NEAR the pool check bounds what a thinly traded token
+  can add, but a position is still shown at its quoted price up to that bound, which can be more
+  than a large sale would really fetch. A token that trades only outside Ref Finance, or only
+  against unvetted tokens, counts as unpriced.
+- Solana prices are used as Helius quotes them; the pool check covers NEAR only.
 - Positions inside DeFi protocols (LP tokens, lending deposits, perps) are only seen if they are
   held as fungible tokens with a price.
 - The registry is hand-curated. Expanding it improves categorisation.
 - Changes to weights, thresholds or chain coverage bump `methodologyVersion`, which every report
-  carries. 2026-10.2 added NEAR accounts. 2026-10.3 added the market check for long-tail
-  tokens. Weights and thresholds are unchanged since 2026-10.1.
+  carries. 2026-10.2 added NEAR accounts. 2026-10.3 added the pool check for NEAR tokens
+  outside the registry. Weights and thresholds are unchanged since 2026-10.1.

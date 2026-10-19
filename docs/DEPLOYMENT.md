@@ -6,8 +6,7 @@ Steps marked **(test)** confirm the previous step worked.
 ## 1. Accounts and wallets
 
 - [ ] A [Helius](https://dashboard.helius.dev) API key for live Solana data (the free plan works).
-      NEAR data (FastNEAR, Ref Finance and NEAR RPC) and the token liquidity check (DexScreener)
-      need no key.
+      NEAR data (FastNEAR, Ref Finance and NEAR RPC) needs no key.
 - [ ] Two **receiving wallets**, used only for Svalin payments:
   - a Solana wallet (Phantom or Solflare). Its public address becomes `PAY_TO_SOLANA`.
   - a NEAR account (for example `svalin-pay.near`, created in Meteor or MyNearWallet). Its
@@ -59,10 +58,11 @@ host.
 
 How Workers differ from a container host:
 
-- Workers Free allows 10 ms of CPU time per request. Most reports use under 2 ms. The first
-  NEAR report each minute parses Ref Finance's price list (about 5–8 ms), and a very large
-  wallet can exceed the limit and fail; a failed request is never charged. Workers Paid raises
-  the limit.
+- Workers Free allows 10 ms of CPU time per request, with some leeway for occasional overruns.
+  Most reports use under 2 ms. The first NEAR report each minute parses Ref Finance's price list
+  (about 4 ms), and the first one every five minutes that holds tokens outside the registry also
+  reads Ref's pool list (about 3 ms). A very large wallet can exceed the limit and fail; a failed
+  request is never charged. Workers Paid raises the limit.
 - The free-scan limit is keyed on `CF-Connecting-IP`, which callers cannot set, so
   `TRUSTED_PROXY_HOPS` is not used.
 - The free-scan limits are kept in one Durable Object (binding `DEMO_LIMITER`), so every Worker

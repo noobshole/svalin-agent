@@ -8,20 +8,28 @@ import { MockPortfolioSource } from "../src/sources/mock-source.js";
 import {
   NearPortfolioSource,
   mapNearToOverview,
+  parseRefPools,
+  poolDepth,
   type FastNearAccount,
   type NearPriceList,
+  type RefPool,
 } from "../src/sources/near-source.js";
 import { NEAR_WALLET, SOLANA_WALLET } from "./helpers.js";
 
 const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
 const ONE_NEAR = 10n ** 24n;
+const REF = "token.v2.ref-finance.near";
 
 const prices: NearPriceList = {
   "wrap.near": { price: "5", decimal: 24, symbol: "wNEAR" },
   [USDC]: { price: "1", decimal: 6, symbol: "USDC" },
   "meta-pool.near": { price: "7.5", decimal: 24, symbol: "STNEAR" },
-  "token.v2.ref-finance.near": { price: "0.05", decimal: 18, symbol: "REF" },
+  [REF]: { price: "0.05", decimal: 18, symbol: "REF" },
 };
+
+/** REF trades against 20 wNEAR ($100), so a sale of it could take out at most $100. */
+const pools: RefPool[] = [{ token_account_ids: [REF, "wrap.near"], amounts: ["2000000000000000000000", (20n * ONE_NEAR).toString()] }];
+const refDepth = poolDepth(pools, prices);
 
 const account: FastNearAccount = {
   account_id: NEAR_WALLET,
@@ -59,7 +67,7 @@ describe("NEAR address detection", () => {
 describe("NEAR mapping", () => {
   it("maps native NEAR, validator stakes and priced tokens, and counts unpriced tokens", () => {
     const stakes = [{ poolId: "astro-stakers.poolv1.near", yocto: 60n * ONE_NEAR }];
-    const overview = mapNearToOverview(NEAR_WALLET, account, prices, stakes, new Date("2026-10-14T00:00:00Z"));
+    const overview = mapNearToOverview(NEAR_WALLET, account, prices, stakes, refDepth, new Date("2026-10-14T00:00:00Z"));
 
     expect(overview.chain).toBe("near");
     expect(overview.dataSource).toBe("fastnear");
@@ -77,14 +85,67 @@ describe("NEAR mapping", () => {
   });
 
   it("treats NEAR as unpriced when no wNEAR price is available", () => {
-    const overview = mapNearToOverview(NEAR_WALLET, account, { [USDC]: prices[USDC] }, []);
+    const overview = mapNearToOverview(NEAR_WALLET, account, { [USDC]: prices[USDC] }, [], refDepth);
     expect(overview.assets.map((asset) => asset.symbol)).toEqual(["USDC"]);
+  });
+});
+
+describe("NEAR pool check", () => {
+  // The shape that broke root.near: a token quoted at $48,447 each that nobody can sell.
+  const junkPrices: NearPriceList = { ...prices, "junk.near": { price: "48447", decimal: 18, symbol: "" } };
+  const junkAccount: FastNearAccount = {
+    ...account,
+    tokens: [
+      { contract_id: "junk.near", balance: (3900n * 10n ** 18n).toString() },
+      { contract_id: REF, balance: (100_000n * 10n ** 18n).toString() },
+      { contract_id: USDC, balance: "300000000" },
+    ],
+  };
+
+  it("counts a token with no pool as unpriced and caps others at what their pools could pay", () => {
+    const overview = mapNearToOverview(NEAR_WALLET, junkAccount, junkPrices, [], refDepth);
+
+    // REF is quoted at $5,000 for this balance, but its pool holds only $100 of wNEAR.
+    expect(overview.assets.map((asset) => [asset.symbol, asset.valueUsd, asset.category])).toEqual([
+      ["USDC", 300, "stablecoin"],
+      ["NEAR", 200, "native"],
+      ["REF", 100, "long-tail"],
+    ]);
+    expect(overview.totalValueUsd).toBe(600);
+    expect(overview.unpricedAssetCount).toBe(1);
+  });
+
+  it("counts only registry tokens in a pool, so junk paired with junk has no depth", () => {
+    const depth = poolDepth(
+      [
+        { token_account_ids: ["junk.near", "junk-two.near"], amounts: ["1000000000000000000000", "1000000000000000000000"] },
+        { token_account_ids: [REF, USDC], amounts: ["1", "50000000"] },
+        { token_account_ids: [REF, "wrap.near"], amounts: ["1", (2n * ONE_NEAR).toString()] },
+        { token_account_ids: [REF], amounts: ["1", "2"] },
+      ],
+      { ...junkPrices, "junk-two.near": { price: "1000", decimal: 18, symbol: "J2" } },
+    );
+    expect(depth.get("junk.near")).toBeUndefined();
+    expect(depth.get(REF)).toBe(60);
+    expect(depth.has("wrap.near")).toBe(false);
+  });
+
+  it("reads only the pools that hold a registry token, and falls back to a full parse", () => {
+    const text = JSON.stringify([
+      { pool_kind: "SIMPLE_POOL", token_account_ids: [REF, "wrap.near"], amounts: ["1", "2"], total_fee: 30 },
+      { pool_kind: "SIMPLE_POOL", token_account_ids: ["junk.near", "junk-two.near"], amounts: ["3", "4"], total_fee: 30 },
+    ]).replace(/":/g, '": ').replace(/,"/g, ', "');
+    expect(parseRefPools(text)).toEqual([{ token_account_ids: [REF, "wrap.near"], amounts: ["1", "2"] }]);
+
+    const reordered = JSON.stringify([{ amounts: ["1", "2"], token_account_ids: [REF, "wrap.near"] }]);
+    expect(parseRefPools(reordered)).toEqual([{ amounts: ["1", "2"], token_account_ids: [REF, "wrap.near"] }]);
+    expect(() => parseRefPools("not json")).toThrow(ApiError);
   });
 });
 
 describe("NEAR source", () => {
   function fakeUpstream(responses: { account?: FastNearAccount | null; poolYocto?: bigint; status?: number }) {
-    const calls = { account: 0, prices: 0, rpc: 0 };
+    const calls = { account: 0, prices: 0, pools: 0, rpc: 0 };
     const fetchImpl = (async (url: string | URL | Request) => {
       const target = String(url);
       if (responses.status) return new Response("", { status: responses.status });
@@ -96,24 +157,39 @@ describe("NEAR source", () => {
         calls.prices += 1;
         return Response.json(prices);
       }
+      if (target.includes("pools.example")) {
+        calls.pools += 1;
+        return Response.json(pools);
+      }
       calls.rpc += 1;
       const encoded = [...Buffer.from(JSON.stringify((responses.poolYocto ?? 0n).toString()))];
       return Response.json({ jsonrpc: "2.0", id: "svalin", result: { result: encoded, logs: [] } });
     }) as typeof fetch;
     const source = new NearPortfolioSource(
-      { apiUrl: "https://fastnear.example", rpcUrl: "https://rpc.example", priceUrl: "https://prices.example/list" },
+      {
+        apiUrl: "https://fastnear.example",
+        rpcUrl: "https://rpc.example",
+        priceUrl: "https://prices.example/list",
+        poolsUrl: "https://pools.example/list",
+      },
       fetchImpl,
     );
     return { source, calls };
   }
 
-  it("reads staking pools over RPC and caches the price list", async () => {
+  it("reads staking pools over RPC and caches the price and pool lists", async () => {
     const { source, calls } = fakeUpstream({ account, poolYocto: 60n * ONE_NEAR });
     const first = await source.getOverview(NEAR_WALLET);
     await source.getOverview(NEAR_WALLET);
 
     expect(first.totalValueUsd).toBe(1000);
-    expect(calls).toEqual({ account: 2, prices: 1, rpc: 2 });
+    expect(calls).toEqual({ account: 2, prices: 1, pools: 1, rpc: 2 });
+  });
+
+  it("skips the pool list for an account holding only registry tokens", async () => {
+    const { source, calls } = fakeUpstream({ account: { ...account, tokens: [{ contract_id: USDC, balance: "300000000" }] } });
+    await source.getOverview(NEAR_WALLET);
+    expect(calls.pools).toBe(0);
   });
 
   it("returns 404 for an account that does not exist, so a paid call is not charged", async () => {

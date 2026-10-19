@@ -1,4 +1,4 @@
-import { NEAR_NATIVE_TOKEN, WNEAR_TOKEN, categoriseToken, lookupToken } from "@svalin-agent/chain-config";
+import { NEAR_NATIVE_TOKEN, WNEAR_TOKEN, categoriseToken, knownTokens, lookupToken } from "@svalin-agent/chain-config";
 import { isNearAccountId, portfolioOverviewSchema, type ChainFamily, type PortfolioOverview } from "@svalin-agent/shared";
 
 import { ApiError } from "../lib/errors.js";
@@ -17,11 +17,21 @@ export type FastNearAccount = {
 /** Ref Finance `list-token-price`: token contract -> USD price, decimals and symbol. */
 export type NearPriceList = Record<string, { price: string; decimal: number; symbol: string }>;
 
+/** A Ref Finance liquidity pool: the tokens it holds and their raw amounts, in the same order. */
+export type RefPool = { token_account_ids: string[]; amounts: string[] };
+
 /** NEAR delegated to a validator staking pool, in yoctoNEAR. */
 export type NearPoolStake = { poolId: string; yocto: bigint };
 
 const NEAR_DECIMALS = 24;
 const MAX_POOLS = 10;
+
+/** Registry token contracts on NEAR. Only value held in these counts as pool depth. */
+const REGISTRY_CONTRACTS = new Set(
+  knownTokens.filter((token) => token.chain === "near" && token.address !== NEAR_NATIVE_TOKEN).map((token) => token.address),
+);
+const REGISTRY_QUOTED = [...REGISTRY_CONTRACTS].map((contract) => `"${contract}"`);
+const POOL_FIELDS = /"token_account_ids":\s*(\[[^\]]*\]),\s*"amounts":\s*(\[[^\]]*\])/g;
 
 type FetchLike = typeof fetch;
 
@@ -32,10 +42,13 @@ export type NearSourceOptions = {
   rpcUrl: string;
   /** Ref Finance token price list URL. */
   priceUrl: string;
+  /** Ref Finance liquidity pool list URL, used to check what tokens outside the registry could sell for. */
+  poolsUrl: string;
 };
 
 export class NearPortfolioSource implements PortfolioSource {
   private prices: { at: number; data: Promise<NearPriceList> } | undefined;
+  private depth: { at: number; data: Promise<Map<string, number>> } | undefined;
 
   constructor(
     private readonly options: NearSourceOptions,
@@ -43,6 +56,7 @@ export class NearPortfolioSource implements PortfolioSource {
     private readonly timeoutMs = 10_000,
     private readonly priceTtlMs = 60_000,
     private readonly now: () => number = Date.now,
+    private readonly poolsTtlMs = 5 * 60_000,
   ) {}
 
   supports(family: ChainFamily) {
@@ -54,8 +68,11 @@ export class NearPortfolioSource implements PortfolioSource {
     if (!account.state) {
       throw new ApiError(404, "account_not_found", "This NEAR account does not exist.");
     }
-    const stakes = await this.poolStakes(wallet, (account.pools ?? []).slice(0, MAX_POOLS));
-    return mapNearToOverview(wallet, account, prices, stakes);
+    const [stakes, depth] = await Promise.all([
+      this.poolStakes(wallet, (account.pools ?? []).slice(0, MAX_POOLS)),
+      holdsUnvettedTokens(account, prices) ? this.depthMap(prices) : new Map<string, number>(),
+    ]);
+    return mapNearToOverview(wallet, account, prices, stakes, depth);
   }
 
   private async account(wallet: string): Promise<FastNearAccount> {
@@ -70,6 +87,22 @@ export class NearPortfolioSource implements PortfolioSource {
     this.prices = { at: this.now(), data };
     data.catch(() => {
       if (this.prices?.data === data) this.prices = undefined;
+    });
+    return data;
+  }
+
+  /**
+   * Pool depth per token. Ref's pool list is about 900 KB, so it is read only for accounts that
+   * need it, priced once with the current price list, and the result is cached for five minutes.
+   */
+  private depthMap(prices: NearPriceList): Promise<Map<string, number>> {
+    if (this.depth && this.now() - this.depth.at < this.poolsTtlMs) return this.depth.data;
+    const data = this.get(this.options.poolsUrl)
+      .then((response) => response.text())
+      .then((text) => poolDepth(parseRefPools(text), prices));
+    this.depth = { at: this.now(), data };
+    data.catch(() => {
+      if (this.depth?.data === data) this.depth = undefined;
     });
     return data;
   }
@@ -123,12 +156,16 @@ export class NearPortfolioSource implements PortfolioSource {
   }
 }
 
-/** Pure mapping, exported for tests. */
+/**
+ * Pure mapping, exported for tests. `depth` comes from `poolDepth`: a token outside the registry
+ * is valued at no more than its pools could pay out, and counts as unpriced if they hold nothing.
+ */
 export function mapNearToOverview(
   wallet: string,
   account: FastNearAccount,
   prices: NearPriceList,
   stakes: NearPoolStake[],
+  depth: ReadonlyMap<string, number>,
   now: Date = new Date(),
 ): PortfolioOverview {
   const drafts: Parameters<typeof finaliseAssets>[0] = [];
@@ -177,6 +214,18 @@ export function mapNearToOverview(
     }
 
     const known = lookupToken("near", token.contract_id);
+    // Anyone can send an account a token whose quoted price is fake or stale, so a token outside
+    // the registry is worth at most what its pools could pay out, and nothing without a pool.
+    let valueUsd = toAmount(raw, entry.decimal) * price;
+    if (!known) {
+      const sellable = depth.get(token.contract_id) ?? 0;
+      if (sellable <= 0) {
+        unpricedAssetCount += 1;
+        continue;
+      }
+      valueUsd = Math.min(valueUsd, sellable);
+    }
+
     const symbol = known?.symbol ?? clean(entry.symbol) ?? `${token.contract_id.slice(0, 6)}…`;
     drafts.push({
       chain: "near",
@@ -185,7 +234,7 @@ export function mapNearToOverview(
       name: symbol,
       balance: formatUnits(raw, entry.decimal),
       priceUsd: price,
-      valueUsd: toAmount(raw, entry.decimal) * price,
+      valueUsd,
       category: categoriseToken("near", token.contract_id),
     });
   }
@@ -201,6 +250,75 @@ export function mapNearToOverview(
     dataSource: "fastnear",
     refreshedAt: now.toISOString(),
   });
+}
+
+/**
+ * For each token outside the registry, the USD value of registry tokens (wNEAR, stablecoins,
+ * liquid staking and so on) in the pools it trades in: the most a sale of it could take out.
+ * A token paired only with other unvetted tokens gets nothing, so fake liquidity does not count.
+ */
+export function poolDepth(pools: RefPool[], prices: NearPriceList): Map<string, number> {
+  // USD per raw unit of each registry token, worked out once rather than per pool.
+  const unitUsd = new Map<string, number>();
+  for (const contract of REGISTRY_CONTRACTS) {
+    const entry = prices[contract];
+    const price = priceOf(prices, contract);
+    if (entry && price !== null && Number.isInteger(entry.decimal)) unitUsd.set(contract, price / 10 ** entry.decimal);
+  }
+
+  const depth = new Map<string, number>();
+  for (const { token_account_ids: ids, amounts } of pools) {
+    if (!Array.isArray(ids) || !Array.isArray(amounts) || ids.length !== amounts.length) continue;
+
+    let registryUsd = 0;
+    for (let index = 0; index < ids.length; index += 1) {
+      const usd = unitUsd.get(ids[index]);
+      const amount = usd === undefined ? 0 : Number(amounts[index]);
+      if (usd !== undefined && Number.isFinite(amount) && amount > 0) registryUsd += amount * usd;
+    }
+    if (registryUsd <= 0) continue;
+
+    for (const id of ids) {
+      if (!REGISTRY_CONTRACTS.has(id)) depth.set(id, (depth.get(id) ?? 0) + registryUsd);
+    }
+  }
+  return depth;
+}
+
+/**
+ * Reads Ref's pool list, keeping only pools that hold a registry token. It pulls the two needed
+ * fields out of the text instead of parsing the whole document, which roughly halves the CPU time
+ * (Cloudflare Workers allow 10 ms per request on the free plan). If the format ever changes so
+ * that nothing matches, it falls back to a full parse.
+ */
+export function parseRefPools(text: string): RefPool[] {
+  const pools: RefPool[] = [];
+  let matched = false;
+  for (const [, ids, amounts] of text.matchAll(POOL_FIELDS)) {
+    matched = true;
+    if (!REGISTRY_QUOTED.some((contract) => ids.includes(contract))) continue;
+    try {
+      pools.push({ token_account_ids: JSON.parse(ids) as string[], amounts: JSON.parse(amounts) as string[] });
+    } catch {
+      // A malformed pool is skipped; its tokens simply get no depth from it.
+    }
+  }
+  if (matched) return pools;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new ApiError(502, "upstream_error", "NEAR pool data could not be read.");
+  }
+  return Array.isArray(parsed) ? (parsed as RefPool[]) : [];
+}
+
+/** Whether the account holds a priced token outside the registry, which needs the pool check. */
+function holdsUnvettedTokens(account: FastNearAccount, prices: NearPriceList): boolean {
+  return (account.tokens ?? []).some(
+    (token) => !lookupToken("near", token.contract_id) && priceOf(prices, token.contract_id) !== null && toBigInt(token.balance) > 0n,
+  );
 }
 
 function priceOf(prices: NearPriceList, contract: string): number | null {

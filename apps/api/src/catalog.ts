@@ -110,7 +110,7 @@ export function serviceInfo(config: AppConfig): ServiceInfo {
         status: config.portfolio.source === "live" ? "live" : "sample-data",
         note:
           config.portfolio.source === "live"
-            ? "Live balances and prices via Helius DAS. Tokens outside the curated registry count only if they trade (pool liquidity via DexScreener)."
+            ? "Live balances and prices via Helius DAS."
             : "Sample data — this instance has no live data source configured.",
       },
       {
@@ -119,7 +119,7 @@ export function serviceInfo(config: AppConfig): ServiceInfo {
         status: config.portfolio.source === "live" ? "live" : "sample-data",
         note:
           config.portfolio.source === "live"
-            ? "Live balances via FastNEAR, prices via Ref Finance, validator stakes via NEAR RPC. Tokens outside the curated registry count only if they trade (pool liquidity via DexScreener)."
+            ? "Live balances via FastNEAR, prices and pools via Ref Finance, validator stakes via NEAR RPC. Tokens outside the curated registry are valued at no more than their pools could pay out."
             : "Sample data — this instance has no live data source configured.",
       },
     ],

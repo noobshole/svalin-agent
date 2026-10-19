@@ -43,7 +43,7 @@ accounts, and no way to move funds.
 agent ── GET /v1/risk/{wallet} ──────────────▶ Svalin API
 agent ◀── 402 Payment Required: $0.004 USDC on Solana or NEAR
 agent ── retry with PAYMENT-SIGNATURE ───────▶ paywall ── verify / settle ──▶ facilitator
-agent ◀── 200 risk report ───────────────────── engine ◀── Helius (Solana) · FastNEAR + Ref Finance (NEAR) · DexScreener (liquidity)
+agent ◀── 200 risk report ───────────────────── engine ◀── Helius (Solana) · FastNEAR + Ref Finance (NEAR)
 ```
 
 Invalid addresses are rejected *before* the paywall, and failed responses (4xx/5xx), such as a
@@ -238,9 +238,10 @@ Step-by-step instructions, with a test after each step, are in
 ## Limitations
 
 - Wallet analysis covers Solana and NEAR.
-- Tokens outside the curated registry count only if they trade: each is valued at no more than its
-  pools could pay out (liquidity from DexScreener), and one with no pool counts as unpriced. A
-  wallet full of airdropped junk therefore shows low data coverage rather than a fake fortune.
+- On NEAR, a token outside the curated registry is valued at no more than its Ref Finance pools
+  could pay out, and one with no real pool counts as unpriced, so an account full of airdropped
+  junk shows low data coverage rather than a fake fortune. Solana prices come from Helius as
+  quoted.
 - The cache and the free-tier limits are held in memory, so a container deployment runs as a
   single instance. On Cloudflare Workers the free-tier limits live in a Durable Object instead.
 - Reports describe current holdings only.

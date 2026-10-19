@@ -16,7 +16,6 @@ import { createPaymentLayer } from "./payments/x402.js";
 import { buildRiskReport } from "./risk/engine.js";
 import { ChainRouterSource } from "./sources/chain-router-source.js";
 import { HeliusPortfolioSource } from "./sources/helius-source.js";
-import { DexScreenerDepth, MarketCheckedSource } from "./sources/market-depth.js";
 import { MockPortfolioSource } from "./sources/mock-source.js";
 import { NearPortfolioSource } from "./sources/near-source.js";
 import type { PortfolioSource } from "./sources/portfolio-source.js";
@@ -41,17 +40,15 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   const source =
     deps.portfolioSource ??
     (config.portfolio.source === "live" && config.portfolio.heliusRpcUrl
-      ? new MarketCheckedSource(
-          new ChainRouterSource({
-            solana: new HeliusPortfolioSource(config.portfolio.heliusRpcUrl),
-            near: new NearPortfolioSource({
-              apiUrl: config.portfolio.fastnearApiUrl,
-              rpcUrl: config.portfolio.nearRpcUrl,
-              priceUrl: config.portfolio.nearPriceApiUrl,
-            }),
+      ? new ChainRouterSource({
+          solana: new HeliusPortfolioSource(config.portfolio.heliusRpcUrl),
+          near: new NearPortfolioSource({
+            apiUrl: config.portfolio.fastnearApiUrl,
+            rpcUrl: config.portfolio.nearRpcUrl,
+            priceUrl: config.portfolio.nearPriceApiUrl,
+            poolsUrl: config.portfolio.nearPoolsApiUrl,
           }),
-          new DexScreenerDepth(config.portfolio.marketDataApiUrl),
-        )
+        })
       : new MockPortfolioSource());
 
   const narrator =

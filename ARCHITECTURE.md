@@ -11,8 +11,6 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
                  └──────────────┘                      │  (Hono)      │  NEAR    ├──────────────────┤
  any x402 agent ──────────────────────────────────────▶│              │─────────▶│ FastNEAR, Ref,   │
                                                        │              │          │ NEAR RPC         │
-                                                       │              │ markets  ├──────────────────┤
-                                                       │              │─────────▶│ DexScreener      │
                                                        │              │ verify/  ├──────────────────┤
                                                        │              │ settle ─▶│ facilitators     │
                                                        └──────┬───────┘          └──────────────────┘
@@ -51,11 +49,12 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
   NEAR (FastNEAR balances, Ref Finance prices with a 60-second cache, validator stakes read over
   NEAR RPC). Mock serves both for dev/tests. A new data source implements this interface without
   touching routes or the engine.
-- `MarketCheckedSource` (`sources/market-depth.ts`) wraps the live sources. Long-tail tokens (not
-  in the curated registry) are looked up on DexScreener and valued at no more than half their
-  pools' liquidity; one with no pool counts as unpriced. A quoted price alone is never trusted,
-  because anyone can send a wallet a token with a fake one. If the lookup fails the request fails,
-  so the caller is not charged for a report that might be wrong.
+- On NEAR a quoted price alone is not trusted, because anyone can send an account a token whose
+  Ref Finance price is fake or stale. A token outside the curated registry is valued at no more
+  than the registry tokens (wNEAR, stablecoins, liquid staking and so on) in its Ref pools, and
+  counts as unpriced if they hold none (`poolDepth` in `sources/near-source.ts`). The pool list
+  (about 900 KB) is fetched only for accounts that need it and cached for five minutes. If it
+  cannot be read the request fails, so the caller is not charged for a report that might be wrong.
 - Addresses (`packages/shared/src/address.ts`): Solana base58 or a NEAR account ID. Anything
   lowercase can be a NEAR account name, so a mistyped name passes the format gate; the NEAR
   source answers 404 for accounts that do not exist, and the payment is not settled.
