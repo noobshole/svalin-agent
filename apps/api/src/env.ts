@@ -25,6 +25,11 @@ const envSchema = z.object({
   NEAR_PRICE_API_URL: z.string().url().default("https://indexer.ref.finance/list-token-price"),
   // Ref Finance pools, used to check what NEAR tokens outside the curated registry could sell for.
   NEAR_POOLS_API_URL: z.string().url().default("https://indexer.ref.finance/list-top-pools"),
+  // Where the scheduled job publishes the latest Svalin Index edition for NEAR tokens.
+  NEAR_INDEX_URL: z
+    .string()
+    .url()
+    .default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-token-index.json"),
   PORTFOLIO_CACHE_SECONDS: z.coerce.number().int().nonnegative().default(60),
 
   X402_ENV: z.enum(["mainnet", "testnet"]).optional(),
@@ -108,6 +113,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       nearRpcUrl: env.NEAR_RPC_URL,
       nearPriceApiUrl: env.NEAR_PRICE_API_URL,
       nearPoolsApiUrl: env.NEAR_POOLS_API_URL,
+      nearIndexUrl: env.NEAR_INDEX_URL,
       cacheSeconds: env.PORTFOLIO_CACHE_SECONDS,
     },
 

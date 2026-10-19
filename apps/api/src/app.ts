@@ -16,6 +16,7 @@ import { createPaymentLayer } from "./payments/x402.js";
 import { buildRiskReport } from "./risk/engine.js";
 import { ChainRouterSource } from "./sources/chain-router-source.js";
 import { HeliusPortfolioSource } from "./sources/helius-source.js";
+import { RemoteIndexFeed, type IndexFeed } from "./sources/index-feed.js";
 import { MockPortfolioSource } from "./sources/mock-source.js";
 import { NearPortfolioSource } from "./sources/near-source.js";
 import type { PortfolioSource } from "./sources/portfolio-source.js";
@@ -32,6 +33,8 @@ export type AppDependencies = {
   clientIp?: (c: Context) => string;
   /** Shared demo limiter (Cloudflare Workers use a Durable Object); in memory by default. */
   demoLimiter?: DemoLimiter;
+  /** Latest published Svalin Index edition; fetched from NEAR_INDEX_URL by default. */
+  indexFeed?: IndexFeed;
 };
 
 const PAID_PREFIXES = ["/v1/portfolio/", "/v1/risk/", "/v1/brief/"];
@@ -63,6 +66,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
       ? new SupabaseLedger(config.ledger.supabaseUrl, config.ledger.supabaseServiceRoleKey)
       : new LogLedger());
 
+  const indexFeed = deps.indexFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexUrl);
   const cache = new TtlCache<PortfolioOverview>(config.portfolio.cacheSeconds * 1000);
   const demoLimiter = deps.demoLimiter ?? new DemoRateLimiter(config.demo.perHour, config.demo.perDayGlobal);
   const clientIp =
@@ -154,6 +158,13 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     }
     const report = buildRiskReport(await getOverview(c.req.param("address")));
     return c.json(report);
+  });
+
+  // The Svalin Index: every NEAR token Ref Finance prices, graded by the real money behind it.
+  app.get("/v1/index/near-tokens", async (c) => {
+    const body = await indexFeed.latest();
+    c.header("Cache-Control", "public, max-age=300");
+    return c.body(body, 200, { "Content-Type": "application/json; charset=utf-8" });
   });
 
   /* --------------------------------- paid ---------------------------------- */

@@ -69,6 +69,28 @@ confidence     = round(100 × coverageFactor × (0.6 + 0.4 × distance))
 A finding sitting exactly on its threshold with full data coverage scores 60. One a full
 threshold-width past it scores 100. Unpriced spam tokens can lower confidence by at most 30%.
 
+## Svalin Index: NEAR token grades
+
+The [Svalin Index](https://svalin.noobshole.workers.dev/ratings) grades every NEAR token Ref Finance
+prices, except registry tokens, which are the yardstick. A token's **real backing** is the same pool
+check as above: the registry-token value in its Ref pools. The grade answers how much of a $1,000
+sale would be lost to price movement, about `1000 / (backing + 1000)` in a constant-product pool:
+
+| Grade | Real backing | A $1,000 sale loses |
+| --- | --- | --- |
+| A | $1M or more | under 0.1% |
+| B | $100K or more | under 1% |
+| C | $20K or more | under 5% |
+| D | $3K or more | under 25% |
+| F | under $3K | 25% or more |
+
+Each edition also carries, where known, the market cap at the quoted price (price × total supply),
+the share of supply held by the ten largest holders outside exchange pools, bridges and NEAR Intents
+(flagged at 80% or more), and the holder count. They are shown beside the grade and do not change
+it. The index is built hourly by `apps/api/scripts/near-index.ts` (methodology
+`near-token-backing-v0`) and published in the [svalin-index](https://github.com/noobshole/svalin-index)
+repository.
+
 ## Known limitations
 
 - Prices come from the data provider. On NEAR the pool check bounds what a thinly traded token

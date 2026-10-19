@@ -12,3 +12,4 @@ supabase/.temp
 .wrangler
 .dev.vars
 out
+index-out

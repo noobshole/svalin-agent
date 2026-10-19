@@ -66,6 +66,14 @@ export function endpoints(config: AppConfig): Endpoint[] {
       price: null,
       returns: "RiskReport",
     },
+    {
+      method: "GET",
+      path: "/v1/index/near-tokens",
+      description:
+        "Svalin Index: every NEAR token Ref Finance prices, graded A-F by the real money in its pools, with market cap, top-10 holder share and holder count where known. Free, refreshed hourly.",
+      price: null,
+      returns: "NearTokenIndex",
+    },
     ...(Object.keys(paidRoutes) as PaidRouteKey[]).map((key) => ({
       method: "GET" as const,
       path: paidRoutes[key].path,
@@ -180,6 +188,16 @@ export function openApiDocument(config: AppConfig) {
           responses: { "200": { description: "RiskReport" }, "429": { description: "Demo limit reached." } },
         },
       },
+      "/v1/index/near-tokens": {
+        get: {
+          summary: "Svalin Index: NEAR tokens graded by the real money behind their price. Free.",
+          tags: ["free"],
+          responses: {
+            "200": { description: "NearTokenIndex: rows of [contract, symbol, priceUsd, backingUsd, grade, marketCapUsd, top10Pct, holders]." },
+            "503": { description: "Index temporarily unavailable." },
+          },
+        },
+      },
       "/v1/portfolio/{address}": paid("portfolio"),
       "/v1/risk/{address}": paid("risk"),
       "/v1/brief/{address}": paid("brief"),
@@ -203,6 +221,7 @@ findings with actions). It is read-only: it never asks for keys, approvals or si
 {address} is a Solana address (base58) or a NEAR account ID (e.g. alice.near).
 
 - GET ${config.publicBaseUrl}/v1/demo/risk/{address} — free, ${config.demo.perHour}/hour per IP
+- GET ${config.publicBaseUrl}/v1/index/near-tokens — free: every NEAR token graded A-F by the real money behind its price
 - GET ${config.publicBaseUrl}/v1/portfolio/{address} — ${prices.portfolio} USDC
 - GET ${config.publicBaseUrl}/v1/risk/{address} — ${prices.risk} USDC
 - GET ${config.publicBaseUrl}/v1/brief/{address} — ${prices.brief} USDC

@@ -55,6 +55,13 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
   counts as unpriced if they hold none (`poolDepth` in `sources/near-source.ts`). The pool list
   (about 900 KB) is fetched only for accounts that need it and cached for five minutes. If it
   cannot be read the request fails, so the caller is not charged for a report that might be wrong.
+- The Svalin Index is built outside the API: `apps/api/scripts/near-index.ts` runs hourly in the
+  [svalin-index](https://github.com/noobshole/svalin-index) repository's workflow, grades every
+  Ref-priced NEAR token with the same `poolDepth` (`src/ratings/near-tokens.ts`), adds market cap
+  and holder data (cached between runs, since the public NEAR APIs rate limit bursts) and publishes
+  the edition to that repository's `latest` branch. `GET /v1/index/near-tokens` serves the latest
+  edition as published (`sources/index-feed.ts`, cached ten minutes), so the API never rebuilds it
+  inside a request.
 - Addresses (`packages/shared/src/address.ts`): Solana base58 or a NEAR account ID. Anything
   lowercase can be a NEAR account name, so a mistyped name passes the format gate; the NEAR
   source answers 404 for accounts that do not exist, and the payment is not settled.

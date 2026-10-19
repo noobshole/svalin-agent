@@ -4,6 +4,7 @@ import { API_BASE_URL } from "@/lib/api";
 export function SiteFooter() {
   const apiUrl = API_BASE_URL;
   const links = [
+    { href: "/ratings", label: "Ratings" },
     { href: "https://github.com/noobshole/svalin-agent", label: "GitHub" },
     { href: "https://github.com/noobshole/svalin-agent/blob/main/docs/RISK_METHODOLOGY.md", label: "Methodology" },
     { href: `${apiUrl}/openapi.json`, label: "OpenAPI" },
@@ -19,7 +20,12 @@ export function SiteFooter() {
         </div>
         <nav className="flex flex-wrap gap-x-5 gap-y-2">
           {links.map((link) => (
-            <a className="transition-colors hover:text-foreground" href={link.href} key={link.label} rel="noreferrer" target="_blank">
+            <a
+              className="transition-colors hover:text-foreground"
+              href={link.href}
+              key={link.label}
+              {...(link.href.startsWith("http") ? { rel: "noreferrer", target: "_blank" } : {})}
+            >
               {link.label}
             </a>
           ))}

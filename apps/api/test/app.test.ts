@@ -6,6 +6,7 @@ import { MAX_ROUTE_DESCRIPTION_LENGTH, paidRoutes, type PaidRouteKey } from "../
 import { loadConfig } from "../src/env.js";
 import { createClientIpResolver, visitorKey } from "../src/lib/client-ip.js";
 import { facilitatorClients } from "../src/payments/x402.js";
+import { RemoteIndexFeed } from "../src/sources/index-feed.js";
 import { MockPortfolioSource } from "../src/sources/mock-source.js";
 import { startupSummary } from "../src/startup-log.js";
 import {
@@ -324,5 +325,30 @@ describe("x402 paywall", () => {
     const response = await app.request(`/v1/risk/${SOLANA_WALLET}`, { headers: { "PAYMENT-SIGNATURE": forged } });
     expect(response.status).toBe(402);
     expect(facilitator.settleCalls).toBe(0);
+  });
+});
+
+describe("Svalin Index", () => {
+  it("serves the latest published edition as JSON, free and unpaywalled", async () => {
+    const app = createApp(testConfig({ PAY_TO_SOLANA }), {
+      facilitator: fakeFacilitator(),
+      indexFeed: { latest: async () => '{"rows":[]}' },
+    });
+    const response = await app.request("/v1/index/near-tokens");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await response.json()).toEqual({ rows: [] });
+  });
+
+  it("answers 503 when the edition cannot be fetched, and tries again on the next request", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return calls === 1 ? new Response("", { status: 500 }) : Response.json({ rows: [] });
+    }) as typeof fetch;
+    const app = createApp(testConfig(), { indexFeed: new RemoteIndexFeed("https://index.example/latest.json", fetchImpl) });
+
+    expect((await app.request("/v1/index/near-tokens")).status).toBe(503);
+    expect((await app.request("/v1/index/near-tokens")).status).toBe(200);
   });
 });

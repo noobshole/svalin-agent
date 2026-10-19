@@ -29,6 +29,10 @@ accounts, and no way to move funds.
   stablecoin, native, liquid staking, major, meme or long-tail. Staked SOL and NEAR count as staked.
 - **Briefs.** A headline, a short summary and up to three actions for explaining a wallet to a
   person, written by Claude when configured and by a template otherwise.
+- **Svalin Index.** Every NEAR token with a price, graded A-F by the real money in its pools, with
+  market cap, top-10 holder share and holder count. Rebuilt hourly and published in the
+  [svalin-index](https://github.com/noobshole/svalin-index) repository;
+  [see it live](https://svalin.noobshole.workers.dev/ratings).
 - **Pay per call.** USDC over x402 on Solana or NEAR. No keys, no accounts, no subscription.
 - **MCP server.** `svalin-mcp` brings the tools to Claude, Cursor and any MCP client, with a hard
   per-call price cap and a session budget.
@@ -136,6 +140,7 @@ Any orchestrator that can call MCP tools or make HTTP requests can use these pat
 | Endpoint | Price | Returns |
 | --- | --- | --- |
 | `GET /v1/demo/risk/{address}` | Free, 10 per hour per visitor | Risk report |
+| `GET /v1/index/near-tokens` | Free | The Svalin Index: every NEAR token graded A-F by the real money behind its price |
 | `GET /v1/portfolio/{address}` | $0.002 | Priced holdings, allocation and a risk category per token |
 | `GET /v1/risk/{address}` | $0.004 | Score, grade, exposure metrics and findings with actions |
 | `GET /v1/brief/{address}` | $0.02 | Headline, summary and up to 3 actions, plus the full report |

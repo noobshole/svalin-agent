@@ -131,6 +131,23 @@ export const knownTokens: readonly KnownToken[] = [
   { chain: "near", address: "token.0xshitzu.near", symbol: "SHITZU", category: "meme" },
 ];
 
+/**
+ * NEAR accounts that hold tokens on behalf of many users: exchange pools, bridges, NEAR Intents,
+ * lending and launchpads. They are left out when measuring how concentrated a token's holders are.
+ */
+export const NEAR_SHARED_CUSTODY_ACCOUNTS: ReadonlySet<string> = new Set([
+  "v2.ref-finance.near",
+  "dclv2.ref-labs.near",
+  "boostfarm.ref-labs.near",
+  "v2.ref-farming.near",
+  "intents.near",
+  "omni.bridge.near",
+  "factory.bridge.near",
+  "aurora",
+  "contract.main.burrow.near",
+  "meme-cooking.near",
+]);
+
 // Solana base58 and NEAR account IDs are both case-sensitive exact strings.
 const tokenIndex = new Map(knownTokens.map((token) => [`${token.chain}:${token.address}`, token]));
 

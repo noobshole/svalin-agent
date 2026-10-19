@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "dev:worker": "npx --yes wrangler@4.146.0 dev",
+    "index:near": "tsx scripts/near-index.ts",
+    "index:verify": "tsx scripts/verify-index.ts",
     "deploy:worker": "npx --yes wrangler@4.146.0 deploy"
   },
   "dependencies": {
