@@ -1,7 +1,7 @@
 /**
  * Builds the Svalin Index for NEAR tokens: grades from Ref Finance's prices and pools, plus market
- * cap, top-10 holder share and holder count for tokens with real backing. Runs hourly
- * (.github/workflows/near-index.yml) and locally:
+ * cap, top-10 holder share and holder count for tokens with real backing. Runs on a schedule
+ * (.github/workflows/build.yml in the svalin-index repository) and locally:
  *
  *   pnpm --filter @svalin-agent/api run index:near [data-dir]
  *

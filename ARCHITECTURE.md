@@ -55,7 +55,7 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
   counts as unpriced if they hold none (`poolDepth` in `sources/near-source.ts`). The pool list
   (about 900 KB) is fetched only for accounts that need it and cached for five minutes. If it
   cannot be read the request fails, so the caller is not charged for a report that might be wrong.
-- The Svalin Index is built outside the API: `apps/api/scripts/near-index.ts` runs hourly in the
+- The Svalin Index is built outside the API: `apps/api/scripts/near-index.ts` runs on a schedule (every few hours) in the
   [svalin-index](https://github.com/noobshole/svalin-index) repository's workflow, grades every
   Ref-priced NEAR token with the same `poolDepth` (`src/ratings/near-tokens.ts`), adds market cap
   and holder data (cached between runs, since the public NEAR APIs rate limit bursts) and publishes

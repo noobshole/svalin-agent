@@ -9,7 +9,7 @@ import { formatCompactUsd } from "@/lib/utils/formatting";
 export const metadata: Metadata = {
   title: "Svalin Index — is the price real? NEAR tokens, graded",
   description:
-    "Every NEAR token with a Ref Finance price, graded by the real money behind it: how much of a $1,000 sale would be lost to price movement. Rebuilt every hour.",
+    "Every NEAR token with a Ref Finance price, graded by the real money behind it: how much of a $1,000 sale would be lost to price movement. Rebuilt every few hours.",
 };
 
 const GRADES: TokenGrade[] = ["A", "B", "C", "D", "F"];
@@ -63,7 +63,7 @@ export default function RatingsPage() {
           </p>
           <p>
             The trusted tokens are the yardstick and are not graded. Grades describe how sellable a token is, not whether its project is good, and
-            they are not financial advice. Only Ref Finance&apos;s classic pools are counted so far. The index is rebuilt every hour and each edition
+            they are not financial advice. Only Ref Finance&apos;s classic pools are counted so far. The index is rebuilt every few hours and each edition
             is kept in the public{" "}
             <a
               className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"

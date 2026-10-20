@@ -87,7 +87,7 @@ sale would be lost to price movement, about `1000 / (backing + 1000)` in a const
 Each edition also carries, where known, the market cap at the quoted price (price × total supply),
 the share of supply held by the ten largest holders outside exchange pools, bridges and NEAR Intents
 (flagged at 80% or more), and the holder count. They are shown beside the grade and do not change
-it. The index is built hourly by `apps/api/scripts/near-index.ts` (methodology
+it. The index is rebuilt every few hours by `apps/api/scripts/near-index.ts` (methodology
 `near-token-backing-v0`) and published in the [svalin-index](https://github.com/noobshole/svalin-index)
 repository.
 

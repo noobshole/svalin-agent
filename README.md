@@ -30,7 +30,7 @@ accounts, and no way to move funds.
 - **Briefs.** A headline, a short summary and up to three actions for explaining a wallet to a
   person, written by Claude when configured and by a template otherwise.
 - **Svalin Index.** Every NEAR token with a price, graded A-F by the real money in its pools, with
-  market cap, top-10 holder share and holder count. Rebuilt hourly and published in the
+  market cap, top-10 holder share and holder count. Rebuilt every few hours and published in the
   [svalin-index](https://github.com/noobshole/svalin-index) repository;
   [see it live](https://svalin.noobshole.workers.dev/ratings).
 - **Pay per call.** USDC over x402 on Solana or NEAR. No keys, no accounts, no subscription.

@@ -70,7 +70,7 @@ export function endpoints(config: AppConfig): Endpoint[] {
       method: "GET",
       path: "/v1/index/near-tokens",
       description:
-        "Svalin Index: every NEAR token Ref Finance prices, graded A-F by the real money in its pools, with market cap, top-10 holder share and holder count where known. Free, refreshed hourly.",
+        "Svalin Index: every NEAR token Ref Finance prices, graded A-F by the real money in its pools, with market cap, top-10 holder share and holder count where known. Free, refreshed every few hours.",
       price: null,
       returns: "NearTokenIndex",
     },

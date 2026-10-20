@@ -30,7 +30,7 @@ const COLUMNS = "md:grid-cols-[minmax(0,1fr)_3rem_6.5rem_6.5rem_6.5rem_5.5rem_5r
 
 /**
  * The latest Svalin Index edition, loaded from the API: the summary, then `story`, then the table.
- * The edition is rebuilt every hour, so the page is static and the numbers are live.
+ * The edition is rebuilt every few hours, so the page is static and the numbers are current.
  */
 export function TokenIndex({ story }: { story: ReactNode }) {
   const [index, setIndex] = useState<NearTokenIndex | null>(null);
@@ -103,7 +103,9 @@ function Summary({ index }: { index: NearTokenIndex }) {
   return (
     <section className="grid gap-4">
       <div className="flex flex-col gap-1 font-mono text-xs text-mutedForeground sm:flex-row sm:flex-wrap sm:gap-x-4">
-        <span>edition {edition} UTC · rebuilt every hour</span>
+        <span>
+          edition {edition} UTC ({ageLabel(index.generatedAt)}) · rebuilt every few hours
+        </span>
         {provenance ? (
           <span>
             inputs pinned {provenance.inputs.pricesSha256.slice(0, 8)} · {provenance.inputs.poolsSha256.slice(0, 8)} · code{" "}
@@ -295,6 +297,14 @@ function Cell({ label, value, flagged = false }: { label: string; value: string;
       </span>
     </p>
   );
+}
+
+/** "12 minutes ago", "3 hours ago": how old the edition is, so a stale one is obvious. */
+function ageLabel(generatedAt: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - Date.parse(generatedAt)) / 60_000));
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} hour${hours === 1 ? "" : "s"} ago`;
 }
 
 function lossLabel(loss: number) {
