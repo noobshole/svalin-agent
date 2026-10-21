@@ -18,9 +18,11 @@ const chainLabel: Record<RiskReport["chain"], string> = { solana: "Solana", near
 export function templateBrief(report: RiskReport, now: Date = new Date()): Brief {
   const material = report.findings.filter((finding) => finding.severity !== "info");
   const headline =
-    material.length === 0
-      ? `Grade ${report.grade}: no material risks flagged (${report.score}/100)`
-      : `Grade ${report.grade}: ${report.level} risk (${report.score}/100). ${material[0].title}`;
+    report.grade === null
+      ? `Not rated: no priced holdings${material.length > 0 ? `. ${material[0].title}` : ""}`
+      : material.length === 0
+        ? `Grade ${report.grade}: no material risks flagged (${report.score}/100)`
+        : `Grade ${report.grade}: ${report.level} risk (${report.score}/100). ${material[0].title}`;
 
   const value = report.metrics.totalValueUsd.toLocaleString("en-US", { maximumFractionDigits: 0 });
   const parts = [

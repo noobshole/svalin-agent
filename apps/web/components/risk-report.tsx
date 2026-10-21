@@ -1,17 +1,17 @@
-import type { RiskFinding, RiskReport } from "@svalin-agent/shared";
+import type { RiskFinding, RiskGrade, RiskReport } from "@svalin-agent/shared";
 
 import { cn } from "@/lib/utils/cn";
 import { formatPct, formatUsd } from "@/lib/utils/formatting";
 
 /* Colour only carries meaning here: the grade and finding severity. Everything else is grey. */
-const gradeText: Record<RiskReport["grade"], string> = {
+const gradeText: Record<RiskGrade, string> = {
   A: "text-riskLow",
   B: "text-riskLow",
   C: "text-riskMedium",
   D: "text-riskHigh",
   F: "text-riskHigh",
 };
-const gradeFill: Record<RiskReport["grade"], string> = {
+const gradeFill: Record<RiskGrade, string> = {
   A: "bg-riskLow",
   B: "bg-riskLow",
   C: "bg-riskMedium",
@@ -37,27 +37,38 @@ export function exposureSlices(metrics: RiskReport["metrics"]) {
 }
 
 export function GradeMark({ report, size = "lg" }: { report: RiskReport; size?: "lg" | "md" }) {
+  const { grade, level, score } = report;
   return (
     <div className="flex items-end gap-4">
-      <span className={cn("font-medium leading-none tracking-tight", gradeText[report.grade], size === "lg" ? "text-7xl" : "text-5xl")}>
-        {report.grade}
+      <span
+        className={cn(
+          "font-medium leading-none tracking-tight",
+          grade ? gradeText[grade] : "text-subtleForeground",
+          size === "lg" ? "text-7xl" : "text-5xl",
+        )}
+      >
+        {grade ?? "–"}
       </span>
       <div className="pb-1">
-        <p className="text-sm font-medium">
-          {report.level.charAt(0).toUpperCase()}
-          {report.level.slice(1)} risk
-        </p>
-        <p className="font-mono text-xs text-mutedForeground">score {report.score}/100</p>
+        <p className="text-sm font-medium">{level ? `${level.charAt(0).toUpperCase()}${level.slice(1)} risk` : "Not rated"}</p>
+        <p className="font-mono text-xs text-mutedForeground">{score === null ? "nothing priced to score" : `score ${score}/100`}</p>
       </div>
     </div>
   );
 }
 
-/** 0 (safest) to 100 (riskiest), with ticks at the grade boundaries. */
+/** 0 (safest) to 100 (riskiest), with ticks at the grade boundaries. Empty when the wallet is not rated. */
 export function ScoreBar({ report }: { report: RiskReport }) {
+  const { grade, score } = report;
   return (
-    <div aria-label={`Risk score ${report.score} out of 100`} className="relative h-1.5 rounded-full bg-surface2" role="img">
-      <div className={cn("h-full rounded-full", gradeFill[report.grade])} style={{ width: `${Math.max(report.score, 2)}%` }} />
+    <div
+      aria-label={score === null ? "Not rated" : `Risk score ${score} out of 100`}
+      className="relative h-1.5 rounded-full bg-surface2"
+      role="img"
+    >
+      {grade && score !== null ? (
+        <div className={cn("h-full rounded-full", gradeFill[grade])} style={{ width: `${Math.max(score, 2)}%` }} />
+      ) : null}
       {[20, 40, 60, 80].map((tick) => (
         <span className="absolute top-0 h-full w-px bg-background" key={tick} style={{ left: `${tick}%` }} />
       ))}

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { supportedChainKeySchema, walletAddressSchema } from "./address.js";
 import { dataSourceSchema } from "./portfolio.js";
 
-export const RISK_METHODOLOGY_VERSION = "2026-10.3";
+export const RISK_METHODOLOGY_VERSION = "2026-10.4";
 
 export const riskSeveritySchema = z.enum(["info", "low", "medium", "high"]);
 export const riskLevelSchema = z.enum(["low", "moderate", "elevated", "high"]);
@@ -70,10 +70,10 @@ export const riskScoreBreakdownSchema = z.object({
 export const riskReportSchema = z.object({
   wallet: walletAddressSchema,
   chain: supportedChainKeySchema,
-  /** 0 (safest) to 100 (riskiest). */
-  score: z.number().int().min(0).max(100),
-  grade: riskGradeSchema,
-  level: riskLevelSchema,
+  /** 0 (safest) to 100 (riskiest). Null, like grade and level, when nothing in the wallet could be priced. */
+  score: z.number().int().min(0).max(100).nullable(),
+  grade: riskGradeSchema.nullable(),
+  level: riskLevelSchema.nullable(),
   breakdown: riskScoreBreakdownSchema,
   metrics: riskMetricsSchema,
   findings: z.array(riskFindingSchema),

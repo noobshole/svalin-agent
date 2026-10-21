@@ -1,4 +1,4 @@
-# Risk methodology (v2026-10.3)
+# Risk methodology (v2026-10.4)
 
 Svalin's report is computed by `apps/api/src/risk/engine.ts`. It is deterministic: the same
 holdings always produce the same report. No number in a report comes from a language model.
@@ -43,7 +43,11 @@ score = round(concentration + stableBuffer + longTail)
 
 `ramp(x, a → b)` is 0 at or below `a`, 1 at or above `b`, linear in between.
 Grades: A ≤ 20, B ≤ 40, C ≤ 60, D ≤ 80, F above. Levels: low ≤ 25, moderate ≤ 50,
-elevated ≤ 75, high above. An empty wallet scores 0 with a single "no priced holdings" finding.
+elevated ≤ 75, high above.
+
+A wallet with nothing Svalin can price is **not rated**: `score`, `grade` and `level` are `null`,
+with a "no priced holdings" finding, plus the unpriced-holdings finding when it holds 5 or more
+unpriced tokens. Scoring it 0 would grade a fresh or spam-only wallet as an A.
 
 ## Findings
 
@@ -103,4 +107,5 @@ repository.
 - The registry is hand-curated. Expanding it improves categorisation.
 - Changes to weights, thresholds or chain coverage bump `methodologyVersion`, which every report
   carries. 2026-10.2 added NEAR accounts. 2026-10.3 added the pool check for NEAR tokens
-  outside the registry. Weights and thresholds are unchanged since 2026-10.1.
+  outside the registry. 2026-10.4 stopped rating wallets with nothing priced. Weights and
+  thresholds are unchanged since 2026-10.1.

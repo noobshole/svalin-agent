@@ -1,6 +1,7 @@
 import type { PortfolioOverview } from "@svalin-agent/shared";
 import { describe, expect, it } from "vitest";
 
+import { templateBrief } from "../src/narrate/narrator.js";
 import { buildRiskReport, confidence, gradeFor, levelFor } from "../src/risk/engine.js";
 import { MockPortfolioSource } from "../src/sources/mock-source.js";
 import { finaliseAssets } from "../src/sources/portfolio-source.js";
@@ -95,13 +96,21 @@ describe("risk engine", () => {
     expect(report.findings[0].severity).toBe("high");
   });
 
-  it("handles an empty wallet without inventing a score", () => {
+  it("does not rate a wallet with nothing priced, instead of calling it an A", () => {
     const report = buildRiskReport(overview([], 3), NOW);
-    expect(report.score).toBe(0);
+    expect(report).toMatchObject({ score: null, grade: null, level: null });
     expect(report.metrics.totalValueUsd).toBe(0);
     expect(report.findings).toHaveLength(1);
     expect(report.findings[0].kind).toBe("small-portfolio");
     expect(report.dataCoverage).toBe(0);
+    expect(templateBrief(report, NOW).headline).toBe("Not rated: no priced holdings");
+  });
+
+  it("flags a wallet that holds only unpriced tokens", () => {
+    const report = buildRiskReport(overview([], 12), NOW);
+    expect(report.grade).toBeNull();
+    expect(report.findings.map((finding) => finding.kind)).toEqual(["unpriced-holdings", "small-portfolio"]);
+    expect(templateBrief(report, NOW).headline).toBe("Not rated: no priced holdings. 12 tokens have no market price");
   });
 
   it("is deterministic", async () => {

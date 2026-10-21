@@ -42,7 +42,7 @@ export const paidRoutes: Record<PaidRouteKey, { path: string; description: strin
   risk: {
     path: "/v1/risk/{address}",
     description:
-      "Use before acting on, advising about or trusting a Solana wallet or NEAR account: a deterministic 0-100 risk score, A-F grade, exposure metrics (concentration, HHI, stablecoin/meme/long-tail share) and findings with concrete actions. Same input, same output. Read-only.",
+      "Use before acting on, advising about or trusting a Solana wallet or NEAR account: a deterministic 0-100 risk score, A-F grade (none when nothing is priced), exposure metrics (concentration, HHI, stablecoin/meme/long-tail share) and findings with concrete actions. Same input, same output. Read-only.",
     returns: "RiskReport",
     tags: ["solana", "risk", "portfolio", "agent"],
   },

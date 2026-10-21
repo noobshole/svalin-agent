@@ -49,6 +49,6 @@ export const exampleReport: RiskReport = {
   ],
   dataCoverage: 92,
   dataSource: "fastnear",
-  methodologyVersion: "2026-10.3",
+  methodologyVersion: "2026-10.4",
   generatedAt: "2026-10-16T00:00:00.000Z",
 };

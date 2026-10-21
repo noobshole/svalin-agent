@@ -22,7 +22,8 @@ accounts, and no way to move funds.
 ## Features
 
 - **Risk reports.** A 0-100 score and A-F grade from concentration, stablecoin buffer and long-tail
-  exposure, with findings that explain each risk in plain English and suggest a next step.
+  exposure, with findings that explain each risk in plain English and suggest a next step. A
+  wallet with nothing priced is not rated, so a fresh or spam-only wallet never shows as an A.
 - **Solana and NEAR.** Solana wallets (`7xKX…`) and NEAR accounts (`alice.near`) go through the
   same engine and the same endpoints.
 - **Priced portfolios.** Live balances and USD prices, with each token placed in a risk category:
@@ -82,7 +83,7 @@ A trimmed risk report:
       "confidence": 64
     }
   ],
-  "methodologyVersion": "2026-10.3"
+  "methodologyVersion": "2026-10.4"
 }
 ```
 

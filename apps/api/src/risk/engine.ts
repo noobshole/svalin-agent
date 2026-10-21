@@ -92,15 +92,17 @@ export function buildRiskReport(overview: PortfolioOverview, now: Date = new Dat
           longTail: round(WEIGHTS.longTail * ramp(longTailPct + 0.6 * memePct, 0, 50), 1),
         };
 
-  const score = clampInt(breakdown.concentration + breakdown.stableBuffer + breakdown.longTail, 0, 100);
+  // A wallet with nothing priced has nothing to score. It gets no grade rather than an A, which
+  // would read as "safe" for a fresh or spam-only wallet.
+  const score = total === 0 ? null : clampInt(breakdown.concentration + breakdown.stableBuffer + breakdown.longTail, 0, 100);
   const findings = buildFindings({ metrics, total, dataCoverage, chain: overview.chain });
 
   return riskReportSchema.parse({
     wallet: overview.wallet,
     chain: overview.chain,
     score,
-    grade: gradeFor(score),
-    level: levelFor(score),
+    grade: score === null ? null : gradeFor(score),
+    level: score === null ? null : levelFor(score),
     breakdown,
     metrics,
     findings,
@@ -151,13 +153,15 @@ function buildFindings({ metrics, total, dataCoverage, chain }: FindingInput): R
   const pct = (value: number) => `${value.toFixed(1)}%`;
 
   if (total === 0) {
+    // A wallet holding only unpriced tokens is usually a spam target, so say so.
     return [
+      ...(metrics.unpricedAssetCount >= THRESHOLDS.unpricedCount ? [unpricedFinding(metrics, chain)] : []),
       {
         id: "small-portfolio",
         kind: "small-portfolio",
         severity: "info",
         title: "No priced holdings found",
-        summary: "Svalin found no tokens with a reliable price in this wallet, so there is nothing to score.",
+        summary: "Svalin found no tokens with a reliable price in this wallet, so it has no score or grade.",
         action: "Check the address, or fund the wallet before requesting a risk report.",
         value: 0,
         threshold: THRESHOLDS.smallPortfolioUsd,
@@ -254,21 +258,7 @@ function buildFindings({ metrics, total, dataCoverage, chain }: FindingInput): R
   }
 
   if (metrics.unpricedAssetCount >= THRESHOLDS.unpricedCount) {
-    findings.push({
-      id: "unpriced-holdings",
-      kind: "unpriced-holdings",
-      severity: "low",
-      title: `${metrics.unpricedAssetCount} tokens have no market price`,
-      summary:
-        "Unpriced tokens are usually airdropped spam. Interacting with them (swapping, visiting linked sites) is a common wallet-drainer vector.",
-      action:
-        chain === "solana"
-          ? "Do not interact with unknown tokens. Burning them and closing their token accounts reclaims the rent deposit."
-          : "Do not interact with unknown tokens or call the contracts and sites they link to.",
-      value: metrics.unpricedAssetCount,
-      threshold: THRESHOLDS.unpricedCount,
-      confidence: 100,
-    });
+    findings.push(unpricedFinding(metrics, chain));
   }
 
   if (total < THRESHOLDS.smallPortfolioUsd) {
@@ -287,6 +277,24 @@ function buildFindings({ metrics, total, dataCoverage, chain }: FindingInput): R
 
   const order: Record<RiskSeverity, number> = { high: 0, medium: 1, low: 2, info: 3 };
   return findings.sort((left, right) => order[left.severity] - order[right.severity]);
+}
+
+function unpricedFinding(metrics: RiskReport["metrics"], chain: PortfolioOverview["chain"]): RiskFinding {
+  return {
+    id: "unpriced-holdings",
+    kind: "unpriced-holdings",
+    severity: "low",
+    title: `${metrics.unpricedAssetCount} tokens have no market price`,
+    summary:
+      "Unpriced tokens are usually airdropped spam. Interacting with them (swapping, visiting linked sites) is a common wallet-drainer vector.",
+    action:
+      chain === "solana"
+        ? "Do not interact with unknown tokens. Burning them and closing their token accounts reclaims the rent deposit."
+        : "Do not interact with unknown tokens or call the contracts and sites they link to.",
+    value: metrics.unpricedAssetCount,
+    threshold: THRESHOLDS.unpricedCount,
+    confidence: 100,
+  };
 }
 
 /**
