@@ -9,7 +9,7 @@ import {
   type TokenGrade,
 } from "@svalin-agent/shared";
 import { Search } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { API_BASE_URL } from "@/lib/api";
 import { cn } from "@/lib/utils/cn";
@@ -185,9 +185,16 @@ function LoudestClaim({ rows }: { rows: RatedTokenRow[] }) {
 }
 
 function TokenTable({ rows }: { rows: RatedTokenRow[] }) {
-  const [query, setQuery] = useState("");
+  // Rendered only in the browser, once the edition has loaded, so the URL can be read directly.
+  // The scanner links here with ?q=<contract> when someone scans a token instead of a wallet.
+  const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [grade, setGrade] = useState<"All" | TokenGrade>("All");
   const [shown, setShown] = useState(PAGE);
+  const table = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("q")) table.current?.scrollIntoView({ block: "start" });
+  }, []);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -198,7 +205,7 @@ function TokenTable({ rows }: { rows: RatedTokenRow[] }) {
   }, [rows, query, grade]);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid scroll-mt-24 gap-4" ref={table}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <label className="flex h-10 w-full items-center gap-2 rounded-md border border-border bg-surface px-3 focus-within:border-borderStrong sm:max-w-sm">
           <Search aria-hidden="true" className="h-4 w-4 text-subtleForeground" />

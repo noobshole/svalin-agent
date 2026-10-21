@@ -4,6 +4,7 @@ import {
   serviceInfoSchema,
   type RiskReport,
   type ServiceInfo,
+  type TokenNotice,
 } from "@svalin-agent/shared";
 
 /** The Svalin API this site talks to, fixed at build time. The browser calls it directly. */
@@ -22,7 +23,7 @@ export async function getServiceInfo(): Promise<ServiceInfo | null> {
 
 export type DemoResult =
   | { ok: true; report: RiskReport }
-  | { ok: false; status: number; message: string; hint?: string };
+  | { ok: false; status: number; message: string; hint?: string; token?: TokenNotice };
 
 /** Runs in the browser, so the API applies the free-scan limit to the visitor's own address. */
 export async function getDemoRisk(address: string, signal?: AbortSignal): Promise<DemoResult> {
@@ -36,6 +37,7 @@ export async function getDemoRisk(address: string, signal?: AbortSignal): Promis
       status: response.status,
       message: error.success ? error.data.error : `API returned ${response.status}.`,
       hint: error.success ? error.data.hint : undefined,
+      token: error.success ? error.data.token : undefined,
     };
   } catch (error) {
     if (signal?.aborted) throw error;

@@ -1,7 +1,7 @@
 import { NEAR_NATIVE_TOKEN, WNEAR_TOKEN, categoriseToken, knownTokens, lookupToken } from "@svalin-agent/chain-config";
-import { isNearAccountId, portfolioOverviewSchema, type ChainFamily, type PortfolioOverview } from "@svalin-agent/shared";
+import { isNearAccountId, portfolioOverviewSchema, tokenGradeFor, type ChainFamily, type PortfolioOverview } from "@svalin-agent/shared";
 
-import { ApiError } from "../lib/errors.js";
+import { ApiError, tokenAddressError } from "../lib/errors.js";
 import { callFetch } from "../lib/fetch.js";
 import { finaliseAssets, formatUnits, type PortfolioSource } from "./portfolio-source.js";
 
@@ -65,6 +65,7 @@ export class NearPortfolioSource implements PortfolioSource {
 
   async getOverview(wallet: string): Promise<PortfolioOverview> {
     const [account, prices] = await Promise.all([this.account(wallet), this.priceList()]);
+    if (prices[wallet]) throw await this.tokenError(wallet, prices);
     if (!account.state) {
       throw new ApiError(404, "account_not_found", "This NEAR account does not exist.");
     }
@@ -105,6 +106,19 @@ export class NearPortfolioSource implements PortfolioSource {
       if (this.depth?.data === data) this.depth = undefined;
     });
     return data;
+  }
+
+  /** The address is a token contract Ref Finance prices: answer with its grade, as the Svalin Index would. */
+  private async tokenError(contract: string, prices: NearPriceList): Promise<ApiError> {
+    const known = lookupToken("near", contract);
+    const backingUsd = known ? null : Math.round((await this.depthMap(prices)).get(contract) ?? 0);
+    return tokenAddressError({
+      chain: "near",
+      address: contract,
+      symbol: known?.symbol ?? clean(prices[contract]?.symbol) ?? null,
+      grade: backingUsd === null ? null : tokenGradeFor(backingUsd),
+      backingUsd,
+    });
   }
 
   /** Reads each staking pool's balance for the wallet. A pool that fails to answer is skipped. */

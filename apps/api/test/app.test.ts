@@ -5,6 +5,7 @@ import { createApp } from "../src/app.js";
 import { MAX_ROUTE_DESCRIPTION_LENGTH, paidRoutes, type PaidRouteKey } from "../src/catalog.js";
 import { loadConfig } from "../src/env.js";
 import { createClientIpResolver, visitorKey } from "../src/lib/client-ip.js";
+import { tokenAddressError } from "../src/lib/errors.js";
 import { facilitatorClients } from "../src/payments/x402.js";
 import { RemoteIndexFeed } from "../src/sources/index-feed.js";
 import { MockPortfolioSource } from "../src/sources/mock-source.js";
@@ -158,6 +159,21 @@ describe("free surface", () => {
     const report = await response.json();
     expect(report.chain).toBe("near");
     expect(report.metrics.largestVolatilePosition.symbol).toBe("NEAR (incl. staked)");
+  });
+
+  it("answers a token address with 422 and the token's grade instead of a wallet report", async () => {
+    const token = { chain: "near" as const, address: "jambo-1679.meme-cooking.near", symbol: "JAMBO", grade: "C" as const, backingUsd: 44627 };
+    class TokenSource extends MockPortfolioSource {
+      async getOverview(): Promise<never> {
+        throw tokenAddressError(token);
+      }
+    }
+    const live = createApp(testConfig(), { portfolioSource: new TokenSource() });
+    const response = await live.request(`/v1/demo/risk/${token.address}`);
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body).toMatchObject({ code: "token_address", token });
+    expect(body.hint).toContain("grade C: $44,627");
   });
 
   it("rejects EVM addresses, which Svalin no longer serves", async () => {

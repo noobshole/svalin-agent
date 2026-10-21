@@ -2,10 +2,18 @@ import { SOL_NATIVE_MINT } from "@svalin-agent/chain-config";
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../src/lib/errors.js";
-import { HeliusPortfolioSource, mapHeliusToOverview, type HeliusAssetsResponse } from "../src/sources/helius-source.js";
+import {
+  HeliusPortfolioSource,
+  classifySolanaAccount,
+  mapHeliusToOverview,
+  type HeliusAssetsResponse,
+} from "../src/sources/helius-source.js";
 import { formatUnits } from "../src/sources/portfolio-source.js";
 import { SOLANA_WALLET } from "./helpers.js";
 
+const SYSTEM = "11111111111111111111111111111111";
+const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const JITOSOL = "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn";
 const RANDOM = "Fake1111111111111111111111111111111111111111";
@@ -50,8 +58,8 @@ describe("Helius mapping", () => {
 
   it("paginates until a short page and surfaces upstream errors as ApiError", async () => {
     let calls = 0;
-    const source = new HeliusPortfolioSource("https://rpc.example", (async () => {
-      calls += 1;
+    const source = new HeliusPortfolioSource("https://rpc.example", (async (_url, init) => {
+      if (JSON.parse(String(init?.body)).method === "getAssetsByOwner") calls += 1;
       return new Response(JSON.stringify(page), { status: 200 });
     }) as typeof fetch);
     await source.getOverview(SOLANA_WALLET);
@@ -59,6 +67,29 @@ describe("Helius mapping", () => {
 
     const failing = new HeliusPortfolioSource("https://rpc.example", (async () => new Response("", { status: 500 })) as typeof fetch);
     await expect(failing.getOverview(SOLANA_WALLET)).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("tells wallets from token mints, token accounts and programs", () => {
+    expect(classifySolanaAccount(null)).toBe("wallet");
+    expect(classifySolanaAccount({ owner: SYSTEM, executable: false, space: 0 })).toBe("wallet");
+    expect(classifySolanaAccount({ owner: SPL_TOKEN, executable: false, space: 82, data: ["", "base64"] })).toBe("mint");
+    expect(classifySolanaAccount({ owner: SPL_TOKEN, executable: false, space: 165, data: ["", "base64"] })).toBe("token-account");
+    // Token-2022 accounts with extensions: the byte after the 165-byte base says which kind.
+    expect(classifySolanaAccount({ owner: TOKEN_2022, executable: false, space: 866, data: ["AQ==", "base64"] })).toBe("mint");
+    expect(classifySolanaAccount({ owner: TOKEN_2022, executable: false, space: 300, data: ["Ag==", "base64"] })).toBe("token-account");
+    expect(classifySolanaAccount({ owner: "BPFLoaderUpgradeab1e11111111111111111111111", executable: true, space: 36 })).toBe("program");
+  });
+
+  it("answers a token mint with 422 instead of scoring it as an empty wallet", async () => {
+    const source = new HeliusPortfolioSource("https://rpc.example", (async (_url, init) => {
+      const { method } = JSON.parse(String(init?.body));
+      return Response.json(method === "getAccountInfo" ? { result: { value: { owner: SPL_TOKEN, executable: false, space: 82 } } } : page);
+    }) as typeof fetch);
+    await expect(source.getOverview(USDC)).rejects.toMatchObject({
+      status: 422,
+      code: "token_address",
+      token: { chain: "solana", address: USDC, symbol: "USDC", grade: null },
+    });
   });
 
   it("formats raw token units without floating point loss", () => {

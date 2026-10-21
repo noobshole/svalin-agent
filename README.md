@@ -52,6 +52,16 @@ agent ◀── 200 risk report ────────────────
 
 Invalid addresses are rejected *before* the paywall, and failed responses (4xx/5xx), such as a
 NEAR account that does not exist, are never settled, so a caller is never charged for an error.
+A token address is not a wallet, so it gets `422` with code `token_address` instead of a score,
+free of charge. For a NEAR token the answer carries its Svalin Index grade:
+
+```json
+{
+  "error": "This is the JAMBO token, not a wallet. Send the address of a wallet that holds it.",
+  "code": "token_address",
+  "token": { "chain": "near", "address": "jambo-1679.meme-cooking.near", "symbol": "JAMBO", "grade": "C", "backingUsd": 44430 }
+}
+```
 
 A trimmed risk report:
 

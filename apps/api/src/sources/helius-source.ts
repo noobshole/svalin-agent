@@ -1,7 +1,7 @@
 import { SOL_NATIVE_MINT, categoriseToken, lookupToken } from "@svalin-agent/chain-config";
 import { portfolioOverviewSchema, type ChainFamily, type PortfolioOverview } from "@svalin-agent/shared";
 
-import { ApiError } from "../lib/errors.js";
+import { ApiError, tokenAddressError } from "../lib/errors.js";
 import { callFetch } from "../lib/fetch.js";
 import { finaliseAssets, formatUnits, type PortfolioSource } from "./portfolio-source.js";
 
@@ -31,9 +31,19 @@ export type HeliusAsset = {
   };
 };
 
+/** The parts of `getAccountInfo` that tell a wallet from a token or a program. */
+export type SolanaAccountInfo = { owner: string; executable: boolean; space?: number; data?: [string, string] };
+
+export type SolanaAccountKind = "wallet" | "mint" | "token-account" | "program";
+
 const PAGE_LIMIT = 1000;
 const MAX_PAGES = 3;
 const FUNGIBLE = new Set(["FungibleToken", "FungibleAsset"]);
+/** SPL Token and Token-2022. */
+const TOKEN_PROGRAMS = new Set(["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"]);
+const MINT_SIZE = 82;
+/** Token-2022 accounts with extensions store their type after the 165-byte base: 1 is a mint. */
+const ACCOUNT_TYPE_OFFSET = 165;
 
 type FetchLike = typeof fetch;
 
@@ -49,16 +59,49 @@ export class HeliusPortfolioSource implements PortfolioSource {
   }
 
   async getOverview(wallet: string): Promise<PortfolioOverview> {
-    const pages: HeliusAssetsResponse[] = [];
+    // Who owns the address is read alongside the first page: a token mint, a token account or a
+    // program would otherwise get a score as if it were a near-empty wallet.
+    const firstPage = this.request(wallet, 1);
+    firstPage.catch(() => undefined);
+    const kind = await this.accountKind(wallet);
+    if (kind === "mint") {
+      throw tokenAddressError({ chain: "solana", address: wallet, symbol: lookupToken("solana", wallet)?.symbol ?? null, grade: null, backingUsd: null });
+    }
+    if (kind === "token-account") {
+      throw new ApiError(422, "not_a_wallet", "This is a token account, not a wallet.", "A token account holds one token for a wallet. Send the wallet's address instead.");
+    }
+    if (kind === "program") {
+      throw new ApiError(422, "not_a_wallet", "This is a program, not a wallet.", "Svalin scores wallets. Send a wallet address instead.");
+    }
 
-    for (let page = 1; page <= MAX_PAGES; page += 1) {
-      const response = await this.request(wallet, page);
-      pages.push(response);
-      const items = response.result?.items ?? [];
-      if (items.length < PAGE_LIMIT) break;
+    const pages = [await firstPage];
+    for (let page = 2; page <= MAX_PAGES && (pages[pages.length - 1].result?.items?.length ?? 0) >= PAGE_LIMIT; page += 1) {
+      pages.push(await this.request(wallet, page));
     }
 
     return mapHeliusToOverview(wallet, pages);
+  }
+
+  /** Reads the account's owner program. If the lookup fails, the address is treated as a wallet. */
+  private async accountKind(address: string): Promise<SolanaAccountKind> {
+    try {
+      const response = await this.fetchImpl(this.rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "svalin-kind",
+          method: "getAccountInfo",
+          params: [address, { encoding: "base64", dataSlice: { offset: ACCOUNT_TYPE_OFFSET, length: 1 } }],
+        }),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      if (!response.ok) return "wallet";
+      const body = (await response.json()) as { result?: { value?: SolanaAccountInfo | null } };
+      return classifySolanaAccount(body.result?.value);
+    } catch {
+      return "wallet";
+    }
   }
 
   private async request(wallet: string, page: number): Promise<HeliusAssetsResponse> {
@@ -101,6 +144,18 @@ export class HeliusPortfolioSource implements PortfolioSource {
     }
     return body;
   }
+}
+
+/**
+ * Pure, exported for tests. A missing account is an unused wallet, and an account owned by any
+ * program other than the token programs (a vault, a multisig) is scored as a wallet.
+ */
+export function classifySolanaAccount(account: SolanaAccountInfo | null | undefined): SolanaAccountKind {
+  if (!account) return "wallet";
+  if (account.executable) return "program";
+  if (!TOKEN_PROGRAMS.has(account.owner)) return "wallet";
+  const typeByte = account.data?.[0] ? atob(account.data[0]).charCodeAt(0) : undefined;
+  return account.space === MINT_SIZE || typeByte === 1 ? "mint" : "token-account";
 }
 
 /** Pure mapping, exported for tests. */

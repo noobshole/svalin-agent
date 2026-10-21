@@ -15,7 +15,11 @@ const X_GUIDANCE =
   "/v1/portfolio/{address} or /v1/brief/{address} with a Solana base58 address or a NEAR account ID such as " +
   "alice.near. Paid routes answer 402 with x402 v2 USDC payment requirements: pay, then retry with the payment " +
   "header. Invalid addresses are rejected with 400 before any payment, and failed calls are never charged. " +
+  "A token or program address gets 422 instead of a report; for a token the body carries its Svalin Index grade. " +
   "GET /v1/demo/risk/{address} is free and rate limited.";
+
+const TOKEN_ADDRESS_RESPONSE =
+  'Not a wallet (not charged). Code "token_address" for a token, with a `token` object holding its Svalin Index grade; "not_a_wallet" for a Solana token account or program.';
 
 /** "$0.004" → "0.004000": discovery metadata states prices as decimal USD. */
 function usdAmount(price: string) {
@@ -163,6 +167,7 @@ export function openApiDocument(config: AppConfig) {
         "200": { description: paidRoutes[key].returns },
         "400": { description: "Invalid or unsupported address (not charged)." },
         "404": { description: "NEAR account does not exist (not charged)." },
+        "422": { description: TOKEN_ADDRESS_RESPONSE },
         "402": { description: "Payment required. See the PAYMENT-REQUIRED header (x402 v2)." },
         "502": { description: "Upstream data provider failure (not charged)." },
       },
@@ -185,7 +190,11 @@ export function openApiDocument(config: AppConfig) {
           summary: "Free, rate-limited risk report.",
           tags: ["free"],
           parameters: [addressParam],
-          responses: { "200": { description: "RiskReport" }, "429": { description: "Demo limit reached." } },
+          responses: {
+            "200": { description: "RiskReport" },
+            "422": { description: TOKEN_ADDRESS_RESPONSE },
+            "429": { description: "Demo limit reached." },
+          },
         },
       },
       "/v1/index/near-tokens": {
@@ -218,7 +227,8 @@ findings with actions). It is read-only: it never asks for keys, approvals or si
 
 ## Endpoints
 
-{address} is a Solana address (base58) or a NEAR account ID (e.g. alice.near).
+{address} is a Solana address (base58) or a NEAR account ID (e.g. alice.near). A token address
+gets HTTP 422 with code "token_address" and, for NEAR tokens, the token's Svalin Index grade.
 
 - GET ${config.publicBaseUrl}/v1/demo/risk/{address} — free, ${config.demo.perHour}/hour per IP
 - GET ${config.publicBaseUrl}/v1/index/near-tokens — free: every NEAR token graded A-F by the real money behind its price

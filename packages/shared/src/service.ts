@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { chainFamilySchema, supportedChainKeySchema } from "./address.js";
+import { tokenGradeSchema } from "./token-index.js";
 
 export const endpointSchema = z.object({
   method: z.literal("GET"),
@@ -48,14 +49,28 @@ export const serviceInfoSchema = z.object({
   }),
 });
 
+/** The token a scanned address turned out to be, returned instead of a wallet report. */
+export const tokenNoticeSchema = z.object({
+  chain: chainFamilySchema,
+  address: z.string(),
+  symbol: z.string().nullable(),
+  /** Svalin Index grade. Null for the trusted tokens others are valued against, and on Solana. */
+  grade: tokenGradeSchema.nullable(),
+  /** Trusted money in the token's pools, in USD. Null when it has no grade. */
+  backingUsd: z.number().nullable(),
+});
+
 export const apiErrorSchema = z.object({
   error: z.string(),
   code: z.string(),
   hint: z.string().optional(),
+  /** Set with code "token_address": the address is a token, not a wallet. */
+  token: tokenNoticeSchema.optional(),
 });
 
 export type Endpoint = z.infer<typeof endpointSchema>;
 export type PaymentNetwork = z.infer<typeof paymentNetworkSchema>;
 export type ChainSupport = z.infer<typeof chainSupportSchema>;
 export type ServiceInfo = z.infer<typeof serviceInfoSchema>;
+export type TokenNotice = z.infer<typeof tokenNoticeSchema>;
 export type ApiError = z.infer<typeof apiErrorSchema>;

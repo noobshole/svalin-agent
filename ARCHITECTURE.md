@@ -64,7 +64,11 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
   inside a request.
 - Addresses (`packages/shared/src/address.ts`): Solana base58 or a NEAR account ID. Anything
   lowercase can be a NEAR account name, so a mistyped name passes the format gate; the NEAR
-  source answers 404 for accounts that do not exist, and the payment is not settled.
+  source answers 404 for accounts that do not exist, and the payment is not settled. A token is
+  not a wallet either: the NEAR source answers 422 `token_address` for a contract in Ref Finance's
+  price list, with its Svalin Index grade worked out from the same pools, and the Helius source
+  reads the account's owner alongside the first balance page and answers 422 for a token mint,
+  token account or program. None of these is settled.
 - `risk/engine.ts` is pure and deterministic: same holdings, same report. No I/O, no LLM.
 - `narrate/narrator.ts` turns a finished report into prose. The LLM never sees an instruction to
   compute anything, its output is schema-checked, and any failure falls back to the template.

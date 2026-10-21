@@ -1,12 +1,16 @@
 "use client";
 
+import type { TokenNotice } from "@svalin-agent/shared";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { RiskReportView } from "@/components/risk-report";
 import { ScanForm } from "@/components/scan-form";
+import { gradeTone } from "@/components/token-index";
 import { getDemoRisk, type DemoResult } from "@/lib/api";
+import { cn } from "@/lib/utils/cn";
+import { formatUsd } from "@/lib/utils/formatting";
 
 export function ScanResult() {
   const address = useSearchParams().get("address")?.trim() ?? "";
@@ -40,6 +44,8 @@ export function ScanResult() {
         <ReportSkeleton />
       ) : result.ok ? (
         <RiskReportView report={result.report} />
+      ) : result.token ? (
+        <TokenNoticeView hint={result.hint} message={result.message} token={result.token} />
       ) : (
         <div className="rounded-lg border border-riskHigh/40 bg-surface p-6">
           <p className="font-medium text-riskHigh">{result.message}</p>
@@ -54,6 +60,31 @@ export function ScanResult() {
         </Link>
       </p>
     </main>
+  );
+}
+
+/** The scanned address is a token: say so, and for a graded NEAR token show its Svalin Index grade. */
+function TokenNoticeView({ token, message, hint }: { token: TokenNotice; message: string; hint?: string }) {
+  return (
+    <div className="grid gap-2 rounded-lg border border-border bg-surface p-6">
+      <p className="font-medium">{message}</p>
+      {token.grade !== null && token.backingUsd !== null ? (
+        <>
+          <p className="text-sm text-mutedForeground">
+            Svalin Index grade <span className={cn("font-mono font-medium", gradeTone[token.grade])}>{token.grade}</span>, with{" "}
+            {formatUsd(token.backingUsd)} of real backing in its pools.
+          </p>
+          <Link
+            className="w-fit text-sm text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
+            href={`/ratings?q=${encodeURIComponent(token.address)}`}
+          >
+            See it in the Svalin Index
+          </Link>
+        </>
+      ) : hint ? (
+        <p className="text-sm text-mutedForeground">{hint}</p>
+      ) : null}
+    </div>
   );
 }
 

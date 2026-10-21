@@ -197,6 +197,24 @@ describe("NEAR source", () => {
     await expect(source.getOverview("nobody-here.near")).rejects.toMatchObject({ status: 404, code: "account_not_found" });
   });
 
+  it("answers a token contract with its grade instead of a score, so a paid call is not charged", async () => {
+    const { source } = fakeUpstream({ account });
+    await expect(source.getOverview(REF)).rejects.toMatchObject({
+      status: 422,
+      code: "token_address",
+      token: { chain: "near", address: REF, symbol: "REF", grade: "F", backingUsd: 100 },
+    });
+  });
+
+  it("gives no grade to the trusted tokens, and skips the pool list for them", async () => {
+    const { source, calls } = fakeUpstream({ account });
+    await expect(source.getOverview(USDC)).rejects.toMatchObject({
+      status: 422,
+      token: { symbol: "USDC", grade: null, backingUsd: null },
+    });
+    expect(calls.pools).toBe(0);
+  });
+
   it("surfaces upstream failures as ApiError", async () => {
     const { source } = fakeUpstream({ status: 500 });
     await expect(source.getOverview(NEAR_WALLET)).rejects.toBeInstanceOf(ApiError);
