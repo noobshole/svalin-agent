@@ -1,7 +1,7 @@
 # svalin-mcp
 
-MCP server for [Svalin](https://github.com/noobshole/svalin-agent): read-only risk reports for
-Solana wallets and NEAR accounts, for AI agents. Works in Claude Desktop, Claude Code, Cursor, and
+MCP server for [Svalin](https://github.com/noobshole/svalin-agent): read-only portfolio risk
+reports for Solana wallets and NEAR accounts, for AI agents. Works in Claude Desktop, Claude Code, Cursor, and
 any MCP client.
 
 The free scan works with no setup. Paid tools are billed per call in USDC over

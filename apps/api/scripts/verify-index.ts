@@ -25,6 +25,8 @@ const result = checkEdition(edition, {
   prices: read(edition.files.prices.path, true),
   pools: read(edition.files.pools.path, true),
   index: read(edition.files.index.path, false),
+  dclPools: edition.files.dclPools ? read(edition.files.dclPools.path, true) : undefined,
+  history: edition.files.history ? read(edition.files.history.path, true) : undefined,
 });
 
 console.log(`Edition ${edition.generatedAt}`);

@@ -55,9 +55,12 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
   counts as unpriced if they hold none (`poolDepth` in `sources/near-source.ts`). The pool list
   (about 900 KB) is fetched only for accounts that need it and cached for five minutes. If it
   cannot be read the request fails, so the caller is not charged for a report that might be wrong.
+  Depth from Ref's concentrated-liquidity (DCL) pools is added from `near-dcl-depth.json`, which
+  the Index build publishes, because paging the DCL contract does not fit in a request.
 - The Svalin Index is built outside the API: `apps/api/scripts/near-index.ts` runs on a schedule (every few hours) in the
   [svalin-index](https://github.com/noobshole/svalin-index) repository's workflow, grades every
-  Ref-priced NEAR token with the same `poolDepth` (`src/ratings/near-tokens.ts`), adds market cap
+  Ref-priced NEAR token with the same `poolDepth` over classic and DCL pools, grades only backing
+  that has held for 24 hours (`recordBacking` and `heldDepth` in `src/ratings/near-tokens.ts`), adds market cap
   and holder data (cached between runs, since the public NEAR APIs rate limit bursts) and publishes
   the edition to that repository's `latest` branch. `GET /v1/index/near-tokens` serves the latest
   edition as published (`sources/index-feed.ts`, cached ten minutes), so the API never rebuilds it
@@ -66,7 +69,8 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
   lowercase can be a NEAR account name, so a mistyped name passes the format gate; the NEAR
   source answers 404 for accounts that do not exist, and the payment is not settled. A token is
   not a wallet either: the NEAR source answers 422 `token_address` for a contract in Ref Finance's
-  price list, with its Svalin Index grade worked out from the same pools, and the Helius source
+  price list, with its grade from the latest Index edition (graded F if it is too new for the
+  Index, and from live pool depth if the Index cannot be read), and the Helius source
   reads the account's owner alongside the first balance page and answers 422 for a token mint,
   token account or program. None of these is settled.
 - `risk/engine.ts` is pure and deterministic: same holdings, same report. No I/O, no LLM.

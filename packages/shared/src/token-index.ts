@@ -21,10 +21,16 @@ export function tokenGradeFor(backingUsd: number): TokenGrade {
   return TOKEN_GRADE_FLOORS.find((floor) => backingUsd >= floor.backingUsd)?.grade ?? "F";
 }
 
-/** Share of a $1,000 sale lost to price movement, from 0 to 1. */
-export function saleLoss(backingUsd: number): number {
-  return backingUsd > 0 ? TOKEN_SALE_USD / (backingUsd + TOKEN_SALE_USD) : 1;
+/**
+ * Share of a sale lost to price movement, from 0 to 1: about sale / (backing + sale) in a
+ * constant-product pool. Grades use a $1,000 sale; a guard checking a real trade passes its size.
+ */
+export function saleLoss(backingUsd: number, saleUsd: number = TOKEN_SALE_USD): number {
+  return backingUsd > 0 ? saleUsd / (backingUsd + saleUsd) : 1;
 }
+
+/** Backing must hold this long before it can raise a grade, so a fresh pool cannot buy one. */
+export const BACKING_HOLD_MS = 24 * 60 * 60 * 1000;
 
 /** Top-10 holder share at or above which a token is flagged as concentrated. */
 export const CONCENTRATION_FLAG_PCT = 80;
@@ -70,14 +76,20 @@ export const nearTokenIndexSchema = z.object({
  * The record that seals an edition: hashes of its archived inputs and of the index file. Its
  * `fingerprint` (SHA-256 of the other fields, in this order) is what gets written on chain.
  */
+const editionFileSchema = z.object({ path: z.string(), sha256: sha256Schema });
+
 export const indexEditionSchema = z.object({
   generatedAt: z.string().datetime(),
   methodology: z.string(),
   code: indexProvenanceSchema.shape.code,
   files: z.object({
-    prices: z.object({ path: z.string(), sha256: sha256Schema }),
-    pools: z.object({ path: z.string(), sha256: sha256Schema }),
-    index: z.object({ path: z.string(), sha256: sha256Schema }),
+    prices: editionFileSchema,
+    pools: editionFileSchema,
+    index: editionFileSchema,
+    /** Ref's concentrated-liquidity (DCL) pools, from near-token-backing-v1. */
+    dclPools: editionFileSchema.optional(),
+    /** The backing history the 24-hour hold was applied from, from near-token-backing-v1. */
+    history: editionFileSchema.optional(),
   }),
   fingerprint: sha256Schema,
 });

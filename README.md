@@ -5,7 +5,7 @@
 **Read-only portfolio risk intelligence for AI agents.**
 
 Give Svalin a Solana wallet or a NEAR account. Get back a priced portfolio and a deterministic
-risk report: a 0-100 score, an A-F grade, exposure metrics, and findings with concrete next
+portfolio risk report: a 0-100 score, an A-F grade, exposure metrics, and findings with concrete next
 steps. Agents pay per call in USDC over [x402](https://x402.org) on Solana or NEAR. No API keys, no
 accounts, and no way to move funds.
 
@@ -21,7 +21,7 @@ accounts, and no way to move funds.
 
 ## Features
 
-- **Risk reports.** A 0-100 score and A-F grade from concentration, stablecoin buffer and long-tail
+- **Portfolio risk reports.** A 0-100 score and A-F grade from concentration, stablecoin buffer and long-tail
   exposure, with findings that explain each risk in plain English and suggest a next step. A
   wallet with nothing priced is not rated, so a fresh or spam-only wallet never shows as an A.
 - **Solana and NEAR.** Solana wallets (`7xKX…`) and NEAR accounts (`alice.near`) go through the
@@ -30,8 +30,9 @@ accounts, and no way to move funds.
   stablecoin, native, liquid staking, major, meme or long-tail. Staked SOL and NEAR count as staked.
 - **Briefs.** A headline, a short summary and up to three actions for explaining a wallet to a
   person, written by Claude when configured and by a template otherwise.
-- **Svalin Index.** Every NEAR token with a price, graded A-F by the real money in its pools, with
-  market cap, top-10 holder share and holder count. Rebuilt every few hours and published in the
+- **Svalin Index.** Every NEAR token with a price, graded A-F by the real money in its Ref Finance
+  pools (classic and concentrated liquidity), counting only backing that has held for 24 hours,
+  with market cap, top-10 holder share and holder count. Rebuilt every few hours and published in the
   [svalin-index](https://github.com/noobshole/svalin-index) repository;
   [see it live](https://svalin.noobshole.workers.dev/ratings).
 - **Pay per call.** USDC over x402 on Solana or NEAR. No keys, no accounts, no subscription.
@@ -83,7 +84,7 @@ A trimmed risk report:
       "confidence": 64
     }
   ],
-  "methodologyVersion": "2026-10.4"
+  "methodologyVersion": "2026-10.5"
 }
 ```
 
@@ -255,7 +256,8 @@ Step-by-step instructions, with a test after each step, are in
 
 - Wallet analysis covers Solana and NEAR.
 - On NEAR, a token outside the curated registry is valued at no more than its Ref Finance pools
-  could pay out, and one with no real pool counts as unpriced, so an account full of airdropped
+  could pay out (concentrated-liquidity depth comes from the latest Index edition, so it can lag by
+  a few hours), and one with no real pool counts as unpriced, so an account full of airdropped
   junk shows low data coverage rather than a fake fortune. Solana prices come from Helius as
   quoted.
 - The cache and the free-tier limits are held in memory, so a container deployment runs as a

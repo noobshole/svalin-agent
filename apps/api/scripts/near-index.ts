@@ -1,30 +1,42 @@
 /**
- * Builds the Svalin Index for NEAR tokens: grades from Ref Finance's prices and pools, plus market
- * cap, top-10 holder share and holder count for tokens with real backing. Runs on a schedule
- * (.github/workflows/build.yml in the svalin-index repository) and locally:
+ * Builds the Svalin Index for NEAR tokens: grades from Ref Finance's prices, classic pools and
+ * concentrated-liquidity (DCL) pools, plus market cap, top-10 holder share and holder count for
+ * tokens with real backing. Runs on a schedule (.github/workflows/build.yml in the svalin-index
+ * repository) and locally:
  *
  *   pnpm --filter @svalin-agent/api run index:near [data-dir]
  *
  * Supply and holder data barely move, and the public NEAR APIs rate limit bursts, so they are kept
  * in data-dir/near-token-stats.json and each token is refreshed about once a day, a few per run.
+ * The backing history behind the 24-hour hold is read back from the previous edition's archive.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { gzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 
-import { nearTokenIndexSchema, tokenGradeFor } from "@svalin-agent/shared";
+import { nearTokenIndexSchema, tokenGradeFor, type RatedTokenRow } from "@svalin-agent/shared";
 
 import { sealEdition, sha256Hex } from "../src/ratings/edition.js";
-import { marketCapUsd, rateNearTokens, top10Share, type TokenStats } from "../src/ratings/near-tokens.js";
-import { parseRefPools, poolDepth, type NearPriceList } from "../src/sources/near-source.js";
+import {
+  heldDepth,
+  marketCapUsd,
+  rateNearTokens,
+  recordBacking,
+  top10Share,
+  type BackingHistory,
+  type TokenStats,
+} from "../src/ratings/near-tokens.js";
+import { parseRefPools, poolDepth, type NearPriceList, type RefDclPool } from "../src/sources/near-source.js";
 
 const PRICES_URL = process.env.NEAR_PRICE_API_URL ?? "https://indexer.ref.finance/list-token-price";
 const POOLS_URL = process.env.NEAR_POOLS_API_URL ?? "https://indexer.ref.finance/list-top-pools";
 const RPC_URL = process.env.NEAR_RPC_URL ?? "https://rpc.mainnet.fastnear.com";
 const FASTNEAR_URL = process.env.FASTNEAR_API_URL ?? "https://api.fastnear.com";
 const NEARBLOCKS_URL = process.env.NEARBLOCKS_API_URL ?? "https://api.nearblocks.io";
+const DCL_CONTRACT = process.env.NEAR_DCL_CONTRACT ?? "dclv2.ref-labs.near";
 const DATA_DIR = resolve(process.argv[2] ?? "index-out");
 const STATS_FILE = resolve(DATA_DIR, "near-token-stats.json");
+const HISTORY_FILE = resolve(DATA_DIR, "inputs/history.json.gz");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Zero-backing tokens with the highest quoted prices also get a market cap: the loudest claims. */
@@ -60,7 +72,7 @@ function sleep(ms: number) {
   return new Promise((done) => setTimeout(done, ms));
 }
 
-async function totalSupply(contract: string): Promise<string> {
+async function viewCall<T>(contract: string, method: string, args: unknown): Promise<T> {
   const response = await get(RPC_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -68,12 +80,32 @@ async function totalSupply(contract: string): Promise<string> {
       jsonrpc: "2.0",
       id: "svalin-index",
       method: "query",
-      params: { request_type: "call_function", finality: "final", account_id: contract, method_name: "ft_total_supply", args_base64: "e30=" },
+      params: {
+        request_type: "call_function",
+        finality: "final",
+        account_id: contract,
+        method_name: method,
+        args_base64: Buffer.from(JSON.stringify(args)).toString("base64"),
+      },
     }),
   });
   const body = (await response.json()) as { result?: { result?: number[] } };
-  if (!body.result?.result) throw new Error("no ft_total_supply");
-  return JSON.parse(Buffer.from(body.result.result).toString("utf8")) as string;
+  if (!body.result?.result) throw new Error(`no result from ${contract}.${method}`);
+  return JSON.parse(Buffer.from(body.result.result).toString("utf8")) as T;
+}
+
+async function totalSupply(contract: string): Promise<string> {
+  return viewCall<string>(contract, "ft_total_supply", {});
+}
+
+/** Every DCL pool, paged from the contract, keeping only the fields the grades use. */
+async function dclPools(): Promise<RefDclPool[]> {
+  const pools: RefDclPool[] = [];
+  for (let from = 0; ; from += 100) {
+    const page = await viewCall<RefDclPool[]>(DCL_CONTRACT, "list_pools", { from_index: from, limit: 100 });
+    for (const { token_x, token_y, total_x, total_y, state } of page) pools.push({ token_x, token_y, total_x, total_y, state });
+    if (page.length < 100) return pools;
+  }
 }
 
 async function topHolders(contract: string) {
@@ -105,9 +137,27 @@ function noteFailure(stage: string, error: unknown) {
 
 const now = Date.now();
 const [pricesText, poolsText] = await Promise.all([get(PRICES_URL).then((r) => r.text()), get(POOLS_URL).then((r) => r.text())]);
+const dcl = await dclPools();
+const dclText = JSON.stringify(dcl);
 const prices = JSON.parse(pricesText) as NearPriceList;
-const depth = poolDepth(parseRefPools(poolsText), prices);
-const graded = rateNearTokens(prices, depth);
+const current = poolDepth(parseRefPools(poolsText), prices, dcl);
+
+// Grade only backing that has held for 24 hours (see heldDepth). The first v1 edition has no
+// history yet: tokens that had backing in the previous edition count as established, and backing
+// that is new in this one (for example from DCL pools only) waits its 24 hours like any other.
+function seedHistory(): BackingHistory | null {
+  const previousIndex = resolve(DATA_DIR, "near-token-index.json");
+  if (!existsSync(previousIndex)) return null;
+  const rows = (JSON.parse(readFileSync(previousIndex, "utf8")) as { rows?: RatedTokenRow[] }).rows ?? [];
+  return Object.fromEntries(rows.filter((row) => row[3] > 0).map((row) => [row[0], { since: 0, points: [] }]));
+}
+const previousHistory = existsSync(HISTORY_FILE)
+  ? (JSON.parse(gunzipSync(readFileSync(HISTORY_FILE)).toString("utf8")) as BackingHistory)
+  : seedHistory();
+const history = recordBacking(previousHistory, current, now);
+const historyText = JSON.stringify(history);
+const depth = heldDepth(history, now);
+const graded = rateNearTokens(prices, depth, new Map(), new Date(now));
 
 const backed = graded.rows.filter((row) => row[3] > 0).map((row) => row[0]);
 const loudest = graded.rows
@@ -161,14 +211,24 @@ for (const [contract, cached] of cache) {
 // commit, so anyone can recompute every grade (scripts/verify-index.ts).
 const code = { repository: "https://github.com/noobshole/svalin-agent", commit: process.env.SVALIN_COMMIT ?? "local" };
 const index = nearTokenIndexSchema.parse({
-  ...rateNearTokens(prices, depth, stats),
+  ...rateNearTokens(prices, depth, stats, new Date(now)),
   provenance: { code, inputs: { pricesSha256: sha256Hex(pricesText), poolsSha256: sha256Hex(poolsText) } },
 });
 const indexText = JSON.stringify(index);
 mkdirSync(resolve(DATA_DIR, "inputs"), { recursive: true });
 writeFileSync(resolve(DATA_DIR, "inputs/prices.json.gz"), gzipSync(pricesText));
 writeFileSync(resolve(DATA_DIR, "inputs/pools.json.gz"), gzipSync(poolsText));
+writeFileSync(resolve(DATA_DIR, "inputs/dcl-pools.json.gz"), gzipSync(dclText));
+writeFileSync(HISTORY_FILE, gzipSync(historyText));
 writeFileSync(resolve(DATA_DIR, "near-token-index.json"), indexText);
+
+// What the live API adds to the classic pools when valuing tokens: it cannot page the DCL contract
+// inside a request, so it reads each token's DCL depth from here.
+const dclDepth = Object.fromEntries(
+  [...poolDepth([], prices, dcl)].map(([contract, usd]) => [contract, Math.round(usd)] as const).filter(([, usd]) => usd > 0),
+);
+writeFileSync(resolve(DATA_DIR, "near-dcl-depth.json"), JSON.stringify({ generatedAt: index.generatedAt, depth: dclDepth }));
+
 const edition = sealEdition({
   generatedAt: index.generatedAt,
   methodology: index.methodology,
@@ -177,6 +237,8 @@ const edition = sealEdition({
     prices: { path: "inputs/prices.json.gz", sha256: sha256Hex(pricesText) },
     pools: { path: "inputs/pools.json.gz", sha256: sha256Hex(poolsText) },
     index: { path: "near-token-index.json", sha256: sha256Hex(indexText) },
+    dclPools: { path: "inputs/dcl-pools.json.gz", sha256: sha256Hex(dclText) },
+    history: { path: "inputs/history.json.gz", sha256: sha256Hex(historyText) },
   },
 });
 writeFileSync(resolve(DATA_DIR, "edition.json"), `${JSON.stringify(edition, null, 2)}\n`);
@@ -186,6 +248,8 @@ console.log(
     msg: "near_index_built",
     tokens: index.rows.length,
     counts: index.counts,
+    dclPools: dcl.length,
+    holding: Object.values(history).filter(({ since }) => now - since < 24 * 60 * 60 * 1000).length,
     withMarketCap: index.rows.filter((row) => row[5] !== null).length,
     withTop10: index.rows.filter((row) => row[6] !== null).length,
     withHolders: index.rows.filter((row) => row[7] !== null).length,

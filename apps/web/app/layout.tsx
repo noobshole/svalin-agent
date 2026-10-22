@@ -13,7 +13,7 @@ const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 export const metadata: Metadata = {
   title: "Svalin — portfolio risk intelligence for AI agents",
   description:
-    "Read-only Solana and NEAR wallet risk reports for AI agents and humans. Free scan, or pay per call in USDC over x402 on Solana or NEAR. Svalin can never move funds.",
+    "Read-only Solana and NEAR portfolio risk reports for AI agents and humans. Free scan, or pay per call in USDC over x402 on Solana or NEAR. Svalin can never move funds.",
   openGraph: {
     title: "Svalin — the agent that can't drain your wallet",
     description: "Read-only portfolio risk reports for AI agents. Pay per call in USDC over x402.",

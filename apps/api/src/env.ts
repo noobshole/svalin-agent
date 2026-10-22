@@ -30,6 +30,11 @@ const envSchema = z.object({
     .string()
     .url()
     .default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-token-index.json"),
+  // Depth from Ref's concentrated-liquidity pools, published with each edition.
+  NEAR_DCL_DEPTH_URL: z
+    .string()
+    .url()
+    .default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-dcl-depth.json"),
   PORTFOLIO_CACHE_SECONDS: z.coerce.number().int().nonnegative().default(60),
 
   X402_ENV: z.enum(["mainnet", "testnet"]).optional(),
@@ -114,6 +119,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       nearPriceApiUrl: env.NEAR_PRICE_API_URL,
       nearPoolsApiUrl: env.NEAR_POOLS_API_URL,
       nearIndexUrl: env.NEAR_INDEX_URL,
+      nearDclDepthUrl: env.NEAR_DCL_DEPTH_URL,
       cacheSeconds: env.PORTFOLIO_CACHE_SECONDS,
     },
 

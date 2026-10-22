@@ -52,18 +52,22 @@ export default function RatingsPage() {
         <div className="grid content-start gap-3 text-sm leading-6 text-mutedForeground">
           <h2 className="text-2xl font-medium tracking-tight text-foreground">How grades work</h2>
           <p>
-            <span className="text-foreground">Real backing</span> is the money in a token&apos;s Ref Finance pools held in tokens Svalin trusts:
-            NEAR, USDC, USDT and liquid-staked NEAR. Selling a token can never take out more than that. Two unvetted tokens paired with each other
-            add nothing, so the backing cannot be faked without real money.
+            <span className="text-foreground">Real backing</span> is the money in a token&apos;s Ref Finance pools, classic and concentrated
+            liquidity, held in tokens Svalin trusts: NEAR, USDC, USDT and liquid-staked NEAR. Selling a token can never take out more than that.
+            Two unvetted tokens paired with each other add nothing, so the backing cannot be faked without real money.
+          </p>
+          <p>
+            Backing has to hold for 24 hours before it counts, and a token is graded on its lowest backing in that time. A pool added this
+            morning cannot lift a grade today, and a pool pulled for an hour still lowers it.
           </p>
           <p>
             <span className="text-foreground">Market cap</span> is the quoted price times total supply, so a token with no backing can claim any
             number. <span className="text-foreground">Top 10 own</span> leaves out exchange pools, bridges and NEAR Intents, which hold tokens for
-            many people. Holder counts come from NearBlocks.
+            many people, and burned tokens. Project treasuries and vesting contracts still count. Holder counts come from NearBlocks.
           </p>
           <p>
             The trusted tokens are the yardstick and are not graded. Grades describe how sellable a token is, not whether its project is good, and
-            they are not financial advice. Only Ref Finance&apos;s classic pools are counted so far. The index is rebuilt every few hours and each edition
+            they are not financial advice. Only Ref Finance pools are counted so far. The index is rebuilt every few hours and each edition
             is kept in the public{" "}
             <a
               className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"

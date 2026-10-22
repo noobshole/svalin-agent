@@ -31,7 +31,7 @@ export default async function HomePage() {
             Know the risk before your agent acts.
           </h1>
           <p className="max-w-lg text-base leading-7 text-mutedForeground">
-            Svalin turns a Solana wallet or a NEAR account into a priced portfolio and a deterministic risk report. Agents pay per call in USDC.
+            Svalin turns a Solana wallet or a NEAR account into a priced portfolio and a deterministic portfolio risk report. Agents pay per call in USDC.
             No keys, no accounts, and no way to move funds.
           </p>
           <div className="max-w-lg">

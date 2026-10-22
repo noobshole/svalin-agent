@@ -11,7 +11,8 @@ export const REPOSITORY_URL = "https://github.com/noobshole/svalin-agent";
 
 /** How an agent should use the API, published as info.x-guidance in the OpenAPI document. */
 const X_GUIDANCE =
-  "Svalin returns read-only risk reports for Solana wallets and NEAR accounts. Call GET /v1/risk/{address}, " +
+  "Svalin returns read-only portfolio risk reports for Solana wallets and NEAR accounts: how a wallet's holdings " +
+  "are spread, not whether its owner can be trusted. Call GET /v1/risk/{address}, " +
   "/v1/portfolio/{address} or /v1/brief/{address} with a Solana base58 address or a NEAR account ID such as " +
   "alice.near. Paid routes answer 402 with x402 v2 USDC payment requirements: pay, then retry with the payment " +
   "header. Invalid addresses are rejected with 400 before any payment, and failed calls are never charged. " +
@@ -42,7 +43,7 @@ export const paidRoutes: Record<PaidRouteKey, { path: string; description: strin
   risk: {
     path: "/v1/risk/{address}",
     description:
-      "Use before acting on, advising about or trusting a Solana wallet or NEAR account: a deterministic 0-100 risk score, A-F grade (none when nothing is priced), exposure metrics (concentration, HHI, stablecoin/meme/long-tail share) and findings with concrete actions. Same input, same output. Read-only.",
+      "Use before acting on or advising about a Solana wallet's or NEAR account's holdings: a deterministic 0-100 portfolio risk score, A-F grade (none when nothing is priced), exposure metrics (concentration, HHI, stablecoin/meme/long-tail share) and findings with concrete actions. Measures how holdings are spread, not whether the owner is trustworthy. Read-only.",
     returns: "RiskReport",
     tags: ["solana", "risk", "portfolio", "agent"],
   },
@@ -221,9 +222,10 @@ export function llmsTxt(config: AppConfig) {
 
 > ${TAGLINE}
 
-Svalin turns a Solana wallet or NEAR account into a priced portfolio and a deterministic risk report
+Svalin turns a Solana wallet or NEAR account into a priced portfolio and a deterministic portfolio risk report
 (score 0-100, grade A-F, concentration / stablecoin / meme / long-tail exposure, and
-findings with actions). It is read-only: it never asks for keys, approvals or signatures.
+findings with actions). It measures how holdings are spread, not whether the owner can be
+trusted. It is read-only: it never asks for keys, approvals or signatures.
 
 ## Endpoints
 

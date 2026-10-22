@@ -1,9 +1,9 @@
-import { saleLoss, tokenGradeFor } from "@svalin-agent/shared";
+import { BACKING_HOLD_MS, saleLoss, tokenGradeFor } from "@svalin-agent/shared";
 import { describe, expect, it } from "vitest";
 
 import { checkEdition, sealEdition, sha256Hex } from "../src/ratings/edition.js";
-import { marketCapUsd, rateNearTokens, top10Share } from "../src/ratings/near-tokens.js";
-import { poolDepth, type NearPriceList, type RefPool } from "../src/sources/near-source.js";
+import { heldDepth, marketCapUsd, rateNearTokens, recordBacking, top10Share, type BackingHistory } from "../src/ratings/near-tokens.js";
+import { poolDepth, type NearPriceList, type RefDclPool, type RefPool } from "../src/sources/near-source.js";
 
 const ONE_NEAR = 10n ** 24n;
 const near = (amount: bigint) => (amount * ONE_NEAR).toString();
@@ -32,6 +32,43 @@ describe("NEAR token index", () => {
     expect(tokenGradeFor(2_999)).toBe("F");
     expect(saleLoss(0)).toBe(1);
     expect(saleLoss(99_000)).toBeCloseTo(0.01);
+    // A guard checks the real trade: $50,000 into $100,000 of backing loses about a third.
+    expect(saleLoss(100_000, 50_000)).toBeCloseTo(1 / 3);
+  });
+
+  it("counts the trusted side of Ref's concentrated-liquidity pools as backing", () => {
+    const dcl: RefDclPool[] = [
+      // $20,000 of wNEAR behind THIN on top of its $2,000 classic pool; a stopped pool is ignored.
+      { token_x: "thin.near", token_y: "wrap.near", total_x: "1", total_y: near(4_000n), state: "Running" },
+      { token_x: "wrap.near", token_y: "thin.near", total_x: near(10_000n), total_y: "1", state: "Paused" },
+      // Two unvetted tokens paired with each other add nothing.
+      { token_x: "junk.near", token_y: "thin.near", total_x: "5", total_y: "5" },
+    ];
+    const depth = poolDepth(pools, prices, dcl);
+    expect(depth.get("thin.near")).toBe(22_000);
+    expect(depth.has("junk.near")).toBe(false);
+    expect(tokenGradeFor(depth.get("thin.near") ?? 0)).toBe("C");
+  });
+
+  it("grades backing only once it has held for 24 hours, at its lowest in that time", () => {
+    const day = BACKING_HOLD_MS;
+    const t0 = Date.parse("2026-10-20T00:00:00Z");
+    const depthAt = (deep: number, fresh = 0) => new Map([["deep.near", deep], ["fresh.near", fresh]]);
+
+    // First v1 edition: no history, so existing backing counts straight away.
+    let history = recordBacking(null, depthAt(250_000), t0);
+    expect(heldDepth(history, t0).get("deep.near")).toBe(250_000);
+
+    // A token whose pool appears later waits a full day; DEEP is graded at its low point.
+    history = recordBacking(history, depthAt(40_000, 500_000), t0 + day / 2);
+    expect(heldDepth(history, t0 + day / 2)).toEqual(new Map([["deep.near", 40_000]]));
+    history = recordBacking(history, depthAt(260_000, 500_000), t0 + day + day / 2);
+    expect(heldDepth(history, t0 + day + day / 2)).toEqual(new Map([["deep.near", 40_000], ["fresh.near", 500_000]]));
+
+    // Backing that disappears starts the clock again when it comes back.
+    history = recordBacking(history, depthAt(260_000, 0), t0 + 2 * day);
+    history = recordBacking(history, depthAt(260_000, 500_000), t0 + 2 * day + 1);
+    expect(heldDepth(history, t0 + 2 * day + 1).has("fresh.near")).toBe(false);
   });
 
   it("rates every priced token except registry tokens, sorted by backing, with market data where known", () => {
@@ -63,6 +100,8 @@ describe("NEAR token index", () => {
     // whale + nine holders of 1 = 159 of 1,000.
     expect(top10Share("token.near", holders, "1000")).toBe(15.9);
     expect(top10Share("token.near", holders, "0")).toBeNull();
+    // Burned tokens are nobody's: the all-zero account does not count as a holder.
+    expect(top10Share("token.near", [{ account_id: "0".repeat(64), balance: "900" }, ...holders], "1000")).toBe(15.9);
   });
 });
 
@@ -100,5 +139,63 @@ describe("sealed editions", () => {
     expect(checkEdition(backdated, { prices: pricesText, pools: poolsText, index: indexText }).problems).toEqual([
       "fingerprint does not match the edition's fields",
     ]);
+  });
+});
+
+describe("sealed editions with DCL pools and the 24-hour hold", () => {
+  const generatedAt = "2026-10-22T12:00:00.000Z";
+  const now = Date.parse(generatedAt);
+  const dcl: RefDclPool[] = [{ token_x: "thin.near", token_y: "wrap.near", total_x: "1", total_y: near(4_000n), state: "Running" }];
+  const current = poolDepth(pools, prices, dcl);
+  // DEEP has had backing for days; THIN's DCL pool is a few hours old, so it is still graded on 0.
+  const previous: BackingHistory = {
+    "deep.near": { since: now - 5 * BACKING_HOLD_MS, points: [[now - 3_600_000, 260_000]] },
+    "thin.near": { since: now - 3_600_000, points: [[now - 3_600_000, 2_000]] },
+  };
+  const history = recordBacking(previous, current, now);
+  const files = {
+    prices: JSON.stringify(prices),
+    pools: JSON.stringify(pools),
+    dclPools: JSON.stringify(dcl),
+    history: JSON.stringify(history),
+    index: JSON.stringify(rateNearTokens(prices, heldDepth(history, now), new Map(), new Date(now))),
+  };
+  const fields = {
+    generatedAt,
+    methodology: "near-token-backing-v1",
+    code: { repository: "https://github.com/noobshole/svalin-agent", commit: "abc123" },
+    files: {
+      prices: { path: "inputs/prices.json.gz", sha256: sha256Hex(files.prices) },
+      pools: { path: "inputs/pools.json.gz", sha256: sha256Hex(files.pools) },
+      index: { path: "near-token-index.json", sha256: sha256Hex(files.index) },
+      dclPools: { path: "inputs/dcl-pools.json.gz", sha256: sha256Hex(files.dclPools) },
+      history: { path: "inputs/history.json.gz", sha256: sha256Hex(files.history) },
+    },
+  };
+  const edition = sealEdition(fields);
+
+  it("reproduces every grade, including the hold, and keeps older fingerprints unchanged", () => {
+    expect(checkEdition(edition, files)).toEqual({ ok: true, problems: [], checked: 3 });
+    const published = JSON.parse(files.index) as { rows: [string, string, number, number, string][] };
+    expect(published.rows.find((row) => row[0] === "deep.near")?.slice(3, 5)).toEqual([250_000, "B"]);
+    expect(published.rows.find((row) => row[0] === "thin.near")?.slice(3, 5)).toEqual([0, "F"]);
+
+    // Editions without the new files are fingerprinted exactly as before, so sealed v0 editions still verify.
+    const { dclPools: _dcl, history: _history, ...v0Files } = fields.files;
+    const v0 = { generatedAt, methodology: "near-token-backing-v0", code: fields.code, files: v0Files };
+    expect(sealEdition(v0).fingerprint).toBe(sha256Hex(JSON.stringify(v0)));
+  });
+
+  it("catches a history that skips the hold or does not match the inputs", () => {
+    // Backdating THIN's start and dropping its earlier low reading would lift it to C.
+    const skipped = JSON.stringify({ ...history, "thin.near": { since: now - 2 * BACKING_HOLD_MS, points: [[now, 22_000]] } });
+    const forged = { ...files, history: skipped };
+    const result = checkEdition(sealEdition({ ...fields, files: { ...fields.files, history: { ...fields.files.history, sha256: sha256Hex(skipped) } } }), forged);
+    expect(result.problems).toEqual(["thin.near: published F ($0), recomputed C ($22000)"]);
+
+    const inflated = JSON.stringify({ ...history, "deep.near": { since: 0, points: [[now, 900_000]] } });
+    const lying = checkEdition(edition, { ...files, history: inflated });
+    expect(lying.problems).toContain("history file does not match its SHA-256");
+    expect(lying.problems).toContain("deep.near: history does not end with this edition's backing ($250000)");
   });
 });

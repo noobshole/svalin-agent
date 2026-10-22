@@ -1,4 +1,4 @@
-# Risk methodology (v2026-10.4)
+# Risk methodology (v2026-10.5)
 
 Svalin's report is computed by `apps/api/src/risk/engine.ts`. It is deterministic: the same
 holdings always produce the same report. No number in a report comes from a language model.
@@ -16,7 +16,10 @@ holdings always produce the same report. No number in a report comes from a lang
   in its Ref pools, which is the most a sale of it could take out. Value on the other side of a
   pool counts only if it is a registry token, so two junk tokens paired with each other add
   nothing. A token whose pools hold no registry token counts as unpriced. Registry tokens are not
-  checked.
+  checked. Both Ref pool types count: classic pools are read live, and the depth from
+  concentrated-liquidity (DCL) pools comes from the latest Svalin Index edition, because the DCL
+  contract cannot be paged inside a request. If that edition cannot be read, classic pools alone
+  set the bound, which can only lower a value.
 - **NEAR specifics.** Native NEAR and wNEAR are `native`. NEAR delegated to a validator staking
   pool counts as `liquid-staking`: it is not liquid, but like stNEAR, LiNEAR and rNEAR it earns
   staking rewards, so it is staked rather than idle. Up to 10 staking pools are read per account.
@@ -77,8 +80,10 @@ threshold-width past it scores 100. Unpriced spam tokens can lower confidence by
 
 The [Svalin Index](https://svalin.noobshole.workers.dev/ratings) grades every NEAR token Ref Finance
 prices, except registry tokens, which are the yardstick. A token's **real backing** is the same pool
-check as above: the registry-token value in its Ref pools. The grade answers how much of a $1,000
-sale would be lost to price movement, about `1000 / (backing + 1000)` in a constant-product pool:
+check as above: the registry-token value in its Ref pools, classic and DCL. The grade answers how
+much of a $1,000 sale would be lost to price movement, about `1000 / (backing + 1000)` in a
+constant-product pool. A check of a real trade uses its size instead (`saleLoss(backing, size)`):
+a $50,000 sale into $100,000 of backing loses about a third.
 
 | Grade | Real backing | A $1,000 sale loses |
 | --- | --- | --- |
@@ -88,12 +93,21 @@ sale would be lost to price movement, about `1000 / (backing + 1000)` in a const
 | D | $3K or more | under 25% |
 | F | under $3K | 25% or more |
 
+**Backing has to hold for 24 hours.** A token is graded on the lowest backing it had in the last
+24 hours, and backing that appeared less than 24 hours ago (a new pool, or a pool that was emptied
+and refilled) counts as zero until then. A pool added to prop up a price cannot lift a grade the
+same day, and a pool pulled for an hour still lowers it. The history this rule reads is archived
+with each edition, so the rule is verified along with the grades.
+
 Each edition also carries, where known, the market cap at the quoted price (price × total supply),
-the share of supply held by the ten largest holders outside exchange pools, bridges and NEAR Intents
-(flagged at 80% or more), and the holder count. They are shown beside the grade and do not change
-it. The index is rebuilt every few hours by `apps/api/scripts/near-index.ts` (methodology
-`near-token-backing-v0`) and published in the [svalin-index](https://github.com/noobshole/svalin-index)
-repository.
+the share of supply held by the ten largest holders outside exchange pools, bridges, NEAR Intents
+and burn addresses (flagged at 80% or more), and the holder count. They are shown beside the grade
+and do not change it: on NEAR the largest holders of established tokens are often project
+treasuries, vesting and staking contracts, so a cap on concentration would mostly punish them. The
+index is rebuilt every few hours by `apps/api/scripts/near-index.ts` and published in the
+[svalin-index](https://github.com/noobshole/svalin-index) repository. Methodology
+`near-token-backing-v1` (from 22 October 2026) added DCL pools, the 24-hour hold and the burn
+exclusion; earlier editions are `near-token-backing-v0` and still verify with the current code.
 
 ## Known limitations
 
@@ -107,5 +121,6 @@ repository.
 - The registry is hand-curated. Expanding it improves categorisation.
 - Changes to weights, thresholds or chain coverage bump `methodologyVersion`, which every report
   carries. 2026-10.2 added NEAR accounts. 2026-10.3 added the pool check for NEAR tokens
-  outside the registry. 2026-10.4 stopped rating wallets with nothing priced. Weights and
-  thresholds are unchanged since 2026-10.1.
+  outside the registry. 2026-10.4 stopped rating wallets with nothing priced. 2026-10.5 added
+  Ref's concentrated-liquidity pools to the pool check. Weights and thresholds are unchanged since
+  2026-10.1.

@@ -1,3 +1,5 @@
+import type { RatedTokenRow } from "@svalin-agent/shared";
+
 import { ApiError } from "../lib/errors.js";
 import { callFetch } from "../lib/fetch.js";
 
@@ -6,6 +8,8 @@ type FetchLike = typeof fetch;
 /** Something that returns the latest published index edition as JSON text. */
 export interface IndexFeed {
   latest(): Promise<string>;
+  /** One token's row in the latest edition, or undefined if it is not graded there. */
+  row?(contract: string): Promise<RatedTokenRow | undefined>;
 }
 
 /**
@@ -15,6 +19,7 @@ export interface IndexFeed {
  */
 export class RemoteIndexFeed implements IndexFeed {
   private cached: { at: number; body: Promise<string> } | undefined;
+  private rows: { body: Promise<string>; byContract: Promise<Map<string, RatedTokenRow>> } | undefined;
 
   constructor(
     private readonly url: string,
@@ -38,5 +43,26 @@ export class RemoteIndexFeed implements IndexFeed {
     return body.catch(() => {
       throw new ApiError(503, "index_unavailable", "The token index is not available right now.", "Retry in a few minutes.");
     });
+  }
+
+  /**
+   * One token's row, parsed once per fetched edition so lookups do not re-read the whole file.
+   * Rejects when the edition cannot be fetched, so callers can tell "not graded" from "unavailable".
+   */
+  async row(contract: string): Promise<RatedTokenRow | undefined> {
+    const body = this.latest();
+    const source = this.cached?.body ?? body;
+    let rows = this.rows;
+    if (!rows || rows.body !== source) {
+      rows = {
+        body: source,
+        byContract: body.then((text) => {
+          const parsed = (JSON.parse(text) as { rows?: RatedTokenRow[] }).rows ?? [];
+          return new Map(parsed.map((row) => [row[0], row]));
+        }),
+      };
+      this.rows = rows;
+    }
+    return (await rows.byContract).get(contract);
   }
 }

@@ -48,7 +48,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
     {
       title: "Free wallet risk scan",
       description:
-        "FREE, rate-limited. Risk report for a Solana wallet or NEAR account: 0-100 score, grade A-F (none for a wallet with nothing priced), concentration/stablecoin/meme/long-tail exposure and findings with suggested actions. Read-only.",
+        "FREE, rate-limited. Portfolio risk report for a Solana wallet or NEAR account (how its holdings are spread, not whether its owner is trustworthy): 0-100 score, grade A-F (none for a wallet with nothing priced), concentration/stablecoin/meme/long-tail exposure and findings with suggested actions. Read-only.",
       inputSchema: addressInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },

@@ -7,6 +7,7 @@ import { ChainRouterSource } from "../src/sources/chain-router-source.js";
 import { MockPortfolioSource } from "../src/sources/mock-source.js";
 import {
   NearPortfolioSource,
+  type NearSourceOptions,
   mapNearToOverview,
   parseRefPools,
   poolDepth,
@@ -144,11 +145,15 @@ describe("NEAR pool check", () => {
 });
 
 describe("NEAR source", () => {
-  function fakeUpstream(responses: { account?: FastNearAccount | null; poolYocto?: bigint; status?: number }) {
+  function fakeUpstream(
+    responses: { account?: FastNearAccount | null; poolYocto?: bigint; status?: number; dclDepth?: Record<string, number> },
+    extra: Partial<NearSourceOptions> = {},
+  ) {
     const calls = { account: 0, prices: 0, pools: 0, rpc: 0 };
     const fetchImpl = (async (url: string | URL | Request) => {
       const target = String(url);
       if (responses.status) return new Response("", { status: responses.status });
+      if (target.includes("dcl.example")) return Response.json({ depth: responses.dclDepth ?? {} });
       if (target.includes("/v1/account/")) {
         calls.account += 1;
         return Response.json(responses.account ?? { account_id: NEAR_WALLET, state: null, pools: [], tokens: [] });
@@ -171,6 +176,7 @@ describe("NEAR source", () => {
         rpcUrl: "https://rpc.example",
         priceUrl: "https://prices.example/list",
         poolsUrl: "https://pools.example/list",
+        ...extra,
       },
       fetchImpl,
     );
@@ -204,6 +210,33 @@ describe("NEAR source", () => {
       code: "token_address",
       token: { chain: "near", address: REF, symbol: "REF", grade: "F", backingUsd: 100 },
     });
+  });
+
+  it("takes a token's grade from the published Index, where backing must have held for 24 hours", async () => {
+    const indexed = fakeUpstream({ account }, { indexRow: async () => [REF, "REF", 0.05, 154_000, "B", null, 92.8, 4000] });
+    await expect(indexed.source.getOverview(REF)).rejects.toMatchObject({ status: 422, token: { grade: "B", backingUsd: 154_000 } });
+
+    const fresh = fakeUpstream({ account }, { indexRow: async () => undefined });
+    await expect(fresh.source.getOverview(REF)).rejects.toMatchObject({
+      status: 422,
+      token: { grade: "F", backingUsd: 0 },
+      hint: expect.stringContaining("hold for 24 hours"),
+    });
+
+    // If the Index cannot be read, live pool depth stands in rather than calling every token new.
+    const offline = fakeUpstream({ account }, { indexRow: async () => Promise.reject(new Error("down")) });
+    await expect(offline.source.getOverview(REF)).rejects.toMatchObject({ token: { grade: "F", backingUsd: 100 } });
+  });
+
+  it("adds concentrated-liquidity depth from the published edition when valuing tokens", async () => {
+    // 10,000 REF quoted at $500: classic pools alone cap it at $100, with $900 of DCL depth at $1,000.
+    const holder: FastNearAccount = { ...account, tokens: [{ contract_id: REF, balance: (10_000n * 10n ** 18n).toString() }] };
+    const valueOf = async (extra: Partial<NearSourceOptions>) => {
+      const { source } = fakeUpstream({ account: holder, dclDepth: { [REF]: 900 } }, extra);
+      return (await source.getOverview(NEAR_WALLET)).assets.find((asset) => asset.tokenAddress === REF)?.valueUsd;
+    };
+    expect(await valueOf({})).toBe(100);
+    expect(await valueOf({ dclDepthUrl: "https://dcl.example/depth.json" })).toBe(500);
   });
 
   it("gives no grade to the trusted tokens, and skips the pool list for them", async () => {

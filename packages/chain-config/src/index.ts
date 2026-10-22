@@ -132,6 +132,12 @@ export const knownTokens: readonly KnownToken[] = [
 ];
 
 /**
+ * NEAR addresses nobody controls: tokens sent there are burned. Left out of holder concentration.
+ * The all-zero implicit account has no key, so nothing can ever move out of it.
+ */
+export const NEAR_BURN_ACCOUNTS: ReadonlySet<string> = new Set(["0".repeat(64)]);
+
+/**
  * NEAR accounts that hold tokens on behalf of many users: exchange pools, bridges, NEAR Intents,
  * lending and launchpads. They are left out when measuring how concentrated a token's holders are.
  */

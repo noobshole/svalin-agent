@@ -40,6 +40,7 @@ export type AppDependencies = {
 const PAID_PREFIXES = ["/v1/portfolio/", "/v1/risk/", "/v1/brief/"];
 
 export function createApp(config: AppConfig, deps: AppDependencies = {}) {
+  const indexFeed = deps.indexFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexUrl);
   const source =
     deps.portfolioSource ??
     (config.portfolio.source === "live" && config.portfolio.heliusRpcUrl
@@ -50,6 +51,8 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
             rpcUrl: config.portfolio.nearRpcUrl,
             priceUrl: config.portfolio.nearPriceApiUrl,
             poolsUrl: config.portfolio.nearPoolsApiUrl,
+            dclDepthUrl: config.portfolio.nearDclDepthUrl,
+            indexRow: async (contract) => indexFeed.row?.(contract),
           }),
         })
       : new MockPortfolioSource());
@@ -66,7 +69,6 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
       ? new SupabaseLedger(config.ledger.supabaseUrl, config.ledger.supabaseServiceRoleKey)
       : new LogLedger());
 
-  const indexFeed = deps.indexFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexUrl);
   const cache = new TtlCache<PortfolioOverview>(config.portfolio.cacheSeconds * 1000);
   const demoLimiter = deps.demoLimiter ?? new DemoRateLimiter(config.demo.perHour, config.demo.perDayGlobal);
   const clientIp =

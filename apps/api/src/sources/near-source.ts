@@ -1,5 +1,12 @@
 import { NEAR_NATIVE_TOKEN, WNEAR_TOKEN, categoriseToken, knownTokens, lookupToken } from "@svalin-agent/chain-config";
-import { isNearAccountId, portfolioOverviewSchema, tokenGradeFor, type ChainFamily, type PortfolioOverview } from "@svalin-agent/shared";
+import {
+  isNearAccountId,
+  portfolioOverviewSchema,
+  tokenGradeFor,
+  type ChainFamily,
+  type PortfolioOverview,
+  type RatedTokenRow,
+} from "@svalin-agent/shared";
 
 import { ApiError, tokenAddressError } from "../lib/errors.js";
 import { callFetch } from "../lib/fetch.js";
@@ -19,6 +26,12 @@ export type NearPriceList = Record<string, { price: string; decimal: number; sym
 
 /** A Ref Finance liquidity pool: the tokens it holds and their raw amounts, in the same order. */
 export type RefPool = { token_account_ids: string[]; amounts: string[] };
+
+/**
+ * A Ref Finance concentrated-liquidity (DCL) pool: the fields Svalin reads from `list_pools` on
+ * dclv2.ref-labs.near. `total_x` and `total_y` are the raw amounts it holds of each token.
+ */
+export type RefDclPool = { token_x: string; token_y: string; total_x: string; total_y: string; state?: string };
 
 /** NEAR delegated to a validator staking pool, in yoctoNEAR. */
 export type NearPoolStake = { poolId: string; yocto: bigint };
@@ -44,6 +57,13 @@ export type NearSourceOptions = {
   priceUrl: string;
   /** Ref Finance liquidity pool list URL, used to check what tokens outside the registry could sell for. */
   poolsUrl: string;
+  /**
+   * Depth each token gets from Ref's concentrated-liquidity pools, published with every Svalin
+   * Index edition (`near-dcl-depth.json`). Paging the DCL contract does not fit in a request.
+   */
+  dclDepthUrl?: string;
+  /** The token's row in the latest published Svalin Index, which carries its authoritative grade. */
+  indexRow?: (contract: string) => Promise<RatedTokenRow | undefined>;
 };
 
 export class NearPortfolioSource implements PortfolioSource {
@@ -95,12 +115,19 @@ export class NearPortfolioSource implements PortfolioSource {
   /**
    * Pool depth per token. Ref's pool list is about 900 KB, so it is read only for accounts that
    * need it, priced once with the current price list, and the result is cached for five minutes.
+   * Depth from concentrated-liquidity pools comes from the latest Index edition and is added on top;
+   * if it cannot be read, tokens are valued on the classic pools alone, which can only lower them.
    */
   private depthMap(prices: NearPriceList): Promise<Map<string, number>> {
     if (this.depth && this.now() - this.depth.at < this.poolsTtlMs) return this.depth.data;
-    const data = this.get(this.options.poolsUrl)
-      .then((response) => response.text())
-      .then((text) => poolDepth(parseRefPools(text), prices));
+    const data = Promise.all([
+      this.get(this.options.poolsUrl).then((response) => response.text()),
+      this.dclDepth(),
+    ]).then(([text, dcl]) => {
+      const depth = poolDepth(parseRefPools(text), prices);
+      for (const [contract, usd] of dcl) depth.set(contract, (depth.get(contract) ?? 0) + usd);
+      return depth;
+    });
     this.depth = { at: this.now(), data };
     data.catch(() => {
       if (this.depth?.data === data) this.depth = undefined;
@@ -108,17 +135,46 @@ export class NearPortfolioSource implements PortfolioSource {
     return data;
   }
 
-  /** The address is a token contract Ref Finance prices: answer with its grade, as the Svalin Index would. */
+  private async dclDepth(): Promise<Map<string, number>> {
+    if (!this.options.dclDepthUrl) return new Map();
+    try {
+      const response = await this.fetchImpl(this.options.dclDepthUrl, { signal: AbortSignal.timeout(this.timeoutMs) });
+      if (!response.ok) return new Map();
+      const body = (await response.json()) as { depth?: Record<string, number> };
+      return new Map(Object.entries(body.depth ?? {}).filter(([, usd]) => Number.isFinite(usd) && usd > 0));
+    } catch {
+      return new Map();
+    }
+  }
+
+  /**
+   * The address is a token contract Ref Finance prices: answer with its grade from the published
+   * Svalin Index, where backing has to hold for 24 hours before it counts. A token too new for the
+   * Index is graded F until it has.
+   */
   private async tokenError(contract: string, prices: NearPriceList): Promise<ApiError> {
     const known = lookupToken("near", contract);
-    const backingUsd = known ? null : Math.round((await this.depthMap(prices)).get(contract) ?? 0);
-    return tokenAddressError({
-      chain: "near",
-      address: contract,
-      symbol: known?.symbol ?? clean(prices[contract]?.symbol) ?? null,
-      grade: backingUsd === null ? null : tokenGradeFor(backingUsd),
-      backingUsd,
-    });
+    const symbol = known?.symbol ?? clean(prices[contract]?.symbol) ?? null;
+    if (known) return tokenAddressError({ chain: "near", address: contract, symbol, grade: null, backingUsd: null });
+
+    if (this.options.indexRow) {
+      let row: RatedTokenRow | undefined;
+      let indexed = true;
+      try {
+        row = await this.options.indexRow(contract);
+      } catch {
+        indexed = false; // The Index is unreachable: fall back to live pool depth below.
+      }
+      if (row) return tokenAddressError({ chain: "near", address: contract, symbol, grade: row[4], backingUsd: row[3] });
+      if (indexed) {
+        return tokenAddressError(
+          { chain: "near", address: contract, symbol, grade: "F", backingUsd: 0 },
+          "It is not in the Svalin Index yet: a token's pool backing has to hold for 24 hours before it is graded.",
+        );
+      }
+    }
+    const backingUsd = Math.round((await this.depthMap(prices)).get(contract) ?? 0);
+    return tokenAddressError({ chain: "near", address: contract, symbol, grade: tokenGradeFor(backingUsd), backingUsd });
   }
 
   /** Reads each staking pool's balance for the wallet. A pool that fails to answer is skipped. */
@@ -271,7 +327,7 @@ export function mapNearToOverview(
  * liquid staking and so on) in the pools it trades in: the most a sale of it could take out.
  * A token paired only with other unvetted tokens gets nothing, so fake liquidity does not count.
  */
-export function poolDepth(pools: RefPool[], prices: NearPriceList): Map<string, number> {
+export function poolDepth(pools: RefPool[], prices: NearPriceList, dclPools: readonly RefDclPool[] = []): Map<string, number> {
   // USD per raw unit of each registry token, worked out once rather than per pool.
   const unitUsd = new Map<string, number>();
   for (const contract of REGISTRY_CONTRACTS) {
@@ -295,6 +351,21 @@ export function poolDepth(pools: RefPool[], prices: NearPriceList): Map<string, 
     for (const id of ids) {
       if (!REGISTRY_CONTRACTS.has(id)) depth.set(id, (depth.get(id) ?? 0) + registryUsd);
     }
+  }
+
+  // A concentrated-liquidity pool holds its two tokens across price ranges. The registry token it
+  // holds is still the most a sale of the other token could take out.
+  const reserveUsd = (contract: string, raw: string) => {
+    const usd = unitUsd.get(contract);
+    const amount = Number(raw);
+    return usd !== undefined && Number.isFinite(amount) && amount > 0 ? amount * usd : 0;
+  };
+  for (const { token_x: x, token_y: y, total_x: totalX, total_y: totalY, state } of dclPools) {
+    if (state !== undefined && state !== "Running") continue;
+    const xUsd = reserveUsd(x, totalX);
+    const yUsd = reserveUsd(y, totalY);
+    if (!REGISTRY_CONTRACTS.has(x) && yUsd > 0) depth.set(x, (depth.get(x) ?? 0) + yUsd);
+    if (!REGISTRY_CONTRACTS.has(y) && xUsd > 0) depth.set(y, (depth.get(y) ?? 0) + xUsd);
   }
   return depth;
 }
