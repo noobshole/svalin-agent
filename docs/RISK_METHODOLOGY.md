@@ -1,4 +1,4 @@
-# Risk methodology (v2026-10.5)
+# Risk methodology (v2026-10.6)
 
 Svalin's report is computed by `apps/api/src/risk/engine.ts`. It is deterministic: the same
 holdings always produce the same report. No number in a report comes from a language model.
@@ -18,8 +18,11 @@ holdings always produce the same report. No number in a report comes from a lang
   nothing. A token whose pools hold no registry token counts as unpriced. Registry tokens are not
   checked. Both Ref pool types count: classic pools are read live, and the depth from
   concentrated-liquidity (DCL) pools comes from the latest Svalin Index edition, because the DCL
-  contract cannot be paged inside a request. If that edition cannot be read, classic pools alone
-  set the bound, which can only lower a value.
+  contract cannot be paged inside a request. The bound is also capped at the backing the token has
+  held for 24 hours in that edition (see the Svalin Index below), so a pool added this morning
+  cannot make a wallet look richer, while one pulled since the edition lowers the value at once. A
+  token too new for the Index counts as unpriced. If the edition cannot be read, live pools alone
+  set the bound.
 - **NEAR specifics.** Native NEAR and wNEAR are `native`. NEAR delegated to a validator staking
   pool counts as `liquid-staking`: it is not liquid, but like stNEAR, LiNEAR and rNEAR it earns
   staking rewards, so it is staked rather than idle. Up to 10 staking pools are read per account.
@@ -122,5 +125,6 @@ exclusion; earlier editions are `near-token-backing-v0` and still verify with th
 - Changes to weights, thresholds or chain coverage bump `methodologyVersion`, which every report
   carries. 2026-10.2 added NEAR accounts. 2026-10.3 added the pool check for NEAR tokens
   outside the registry. 2026-10.4 stopped rating wallets with nothing priced. 2026-10.5 added
-  Ref's concentrated-liquidity pools to the pool check. Weights and thresholds are unchanged since
+  Ref's concentrated-liquidity pools to the pool check, and 2026-10.6 capped it at backing that
+  has held for 24 hours. Weights and thresholds are unchanged since
   2026-10.1.

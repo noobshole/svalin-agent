@@ -91,9 +91,31 @@ export class NearPortfolioSource implements PortfolioSource {
     }
     const [stakes, depth] = await Promise.all([
       this.poolStakes(wallet, (account.pools ?? []).slice(0, MAX_POOLS)),
-      holdsUnvettedTokens(account, prices) ? this.depthMap(prices) : new Map<string, number>(),
+      holdsUnvettedTokens(account, prices) ? this.heldDepthMap(account, prices) : new Map<string, number>(),
     ]);
     return mapNearToOverview(wallet, account, prices, stakes, depth);
+  }
+
+  /**
+   * Live pool depth for the account's tokens, capped at the backing each has held for 24 hours in
+   * the latest Index edition: a pool added this morning cannot make a wallet look richer, and one
+   * pulled since the edition still lowers the value at once. A token too new for the Index counts
+   * as unpriced. If the Index cannot be read, live depth alone sets the bound.
+   */
+  private async heldDepthMap(account: FastNearAccount, prices: NearPriceList): Promise<Map<string, number>> {
+    const live = await this.depthMap(prices);
+    if (!this.options.indexRow) return live;
+    const capped = new Map(live);
+    try {
+      for (const { contract_id: contract } of account.tokens ?? []) {
+        if (lookupToken("near", contract) || !live.has(contract)) continue;
+        const held = (await this.options.indexRow(contract))?.[3] ?? 0;
+        capped.set(contract, Math.min(live.get(contract) ?? 0, held));
+      }
+    } catch {
+      return live;
+    }
+    return capped;
   }
 
   private async account(wallet: string): Promise<FastNearAccount> {
@@ -165,7 +187,18 @@ export class NearPortfolioSource implements PortfolioSource {
       } catch {
         indexed = false; // The Index is unreachable: fall back to live pool depth below.
       }
-      if (row) return tokenAddressError({ chain: "near", address: contract, symbol, grade: row[4], backingUsd: row[3] });
+      if (row) {
+        const notice = { chain: "near" as const, address: contract, symbol, grade: row[4], backingUsd: row[3] };
+        // Backing that is newer than 24 hours is on hold: say so, rather than calling it $0.
+        const live = Math.round((await this.depthMap(prices).catch(() => new Map<string, number>())).get(contract) ?? 0);
+        if (live > row[3] && tokenGradeFor(live) !== row[4]) {
+          return tokenAddressError(
+            notice,
+            `Svalin Index grade ${row[4]}: $${row[3].toLocaleString("en-US")} of backing has held for 24 hours. Its pools hold $${live.toLocaleString("en-US")} now; the rest counts once it has held for 24 hours.`,
+          );
+        }
+        return tokenAddressError(notice);
+      }
       if (indexed) {
         return tokenAddressError(
           { chain: "near", address: contract, symbol, grade: "F", backingUsd: 0 },

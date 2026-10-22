@@ -216,6 +216,16 @@ describe("NEAR source", () => {
     const indexed = fakeUpstream({ account }, { indexRow: async () => [REF, "REF", 0.05, 154_000, "B", null, 92.8, 4000] });
     await expect(indexed.source.getOverview(REF)).rejects.toMatchObject({ status: 422, token: { grade: "B", backingUsd: 154_000 } });
 
+    // Backing still on hold is reported as such, not as $0.
+    const holding = fakeUpstream(
+      { account, dclDepth: { [REF]: 185_000 } },
+      { dclDepthUrl: "https://dcl.example/depth.json", indexRow: async () => [REF, "REF", 0.05, 0, "F", null, null, null] },
+    );
+    await expect(holding.source.getOverview(REF)).rejects.toMatchObject({
+      token: { grade: "F", backingUsd: 0 },
+      hint: expect.stringContaining("Its pools hold $185,100 now"),
+    });
+
     const fresh = fakeUpstream({ account }, { indexRow: async () => undefined });
     await expect(fresh.source.getOverview(REF)).rejects.toMatchObject({
       status: 422,
@@ -237,6 +247,21 @@ describe("NEAR source", () => {
     };
     expect(await valueOf({})).toBe(100);
     expect(await valueOf({ dclDepthUrl: "https://dcl.example/depth.json" })).toBe(500);
+  });
+
+  it("never values a token above the backing it has held for 24 hours in the Index", async () => {
+    const holder: FastNearAccount = { ...account, tokens: [{ contract_id: REF, balance: (10_000n * 10n ** 18n).toString() }] };
+    const valueOf = async (indexRow: NearSourceOptions["indexRow"]) => {
+      const { source } = fakeUpstream({ account: holder, dclDepth: { [REF]: 900 } }, { dclDepthUrl: "https://dcl.example/depth.json", indexRow });
+      const overview = await source.getOverview(NEAR_WALLET);
+      return { value: overview.assets.find((asset) => asset.tokenAddress === REF)?.valueUsd, unpriced: overview.unpricedAssetCount };
+    };
+    // $1,000 of live depth, but only $250 has held: valued at $250.
+    expect(await valueOf(async () => [REF, "REF", 0.05, 250, "F", null, null, null])).toEqual({ value: 250, unpriced: 0 });
+    // Too new for the Index: unpriced, however deep its fresh pool.
+    expect(await valueOf(async () => undefined)).toEqual({ value: undefined, unpriced: 1 });
+    // Index unreachable: live depth alone.
+    expect(await valueOf(async () => Promise.reject(new Error("down")))).toEqual({ value: 500, unpriced: 0 });
   });
 
   it("gives no grade to the trusted tokens, and skips the pool list for them", async () => {

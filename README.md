@@ -84,7 +84,7 @@ A trimmed risk report:
       "confidence": 64
     }
   ],
-  "methodologyVersion": "2026-10.5"
+  "methodologyVersion": "2026-10.6"
 }
 ```
 
@@ -256,8 +256,8 @@ Step-by-step instructions, with a test after each step, are in
 
 - Wallet analysis covers Solana and NEAR.
 - On NEAR, a token outside the curated registry is valued at no more than its Ref Finance pools
-  could pay out (concentrated-liquidity depth comes from the latest Index edition, so it can lag by
-  a few hours), and one with no real pool counts as unpriced, so an account full of airdropped
+  could pay out, and never above the backing it has held for 24 hours in the latest Index edition.
+  One with no real pool, or too new for the Index, counts as unpriced, so an account full of airdropped
   junk shows low data coverage rather than a fake fortune. Solana prices come from Helius as
   quoted.
 - The cache and the free-tier limits are held in memory, so a container deployment runs as a
