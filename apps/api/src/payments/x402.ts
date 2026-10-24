@@ -34,6 +34,11 @@ const outputExamples: Record<PaidRouteKey, unknown> = {
   portfolio: { wallet: "<address>", chain: "solana", totalValueUsd: 12873.4, assets: [{ symbol: "SOL", valueUsd: 8310.7, allocationBps: 6456, category: "native" }] },
   risk: { score: 58, grade: "C", level: "elevated", findings: [{ kind: "concentration", severity: "medium", title: "SOL (incl. staked) is 79.3% of the portfolio" }] },
   brief: { headline: "Grade C: elevated risk (58/100). SOL (incl. staked) is 79.3% of the portfolio", actions: ["Consider capping SOL near 40%…"] },
+  check: {
+    verdict: "block",
+    kind: "wallet",
+    reasons: [{ code: "lookalike", severity: "block", message: "This address imitates 7xKX…AsU, which this wallet paid recently…" }],
+  },
 };
 
 /**

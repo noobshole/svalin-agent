@@ -1,4 +1,5 @@
 export * from "./address.js";
+export * from "./check.js";
 export * from "./portfolio.js";
 export * from "./risk.js";
 export * from "./service.js";

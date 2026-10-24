@@ -27,6 +27,10 @@ describe("spend budget", () => {
     expect(() =>
       loadMcpConfig({ SVALIN_API_URL: "http://x.test", SVALIN_NEAR_ACCOUNT_ID: "a.near", SVALIN_NEAR_PRIVATE_KEY: "nope" }),
     ).toThrow(/SVALIN_NEAR_PRIVATE_KEY/);
+    // secp256k1 keys would sign through `elliptic`, whose ECDSA has an unfixed key-leak flaw.
+    expect(() =>
+      loadMcpConfig({ SVALIN_API_URL: "http://x.test", SVALIN_NEAR_ACCOUNT_ID: "a.near", SVALIN_NEAR_PRIVATE_KEY: "secp256k1:abc" }),
+    ).toThrow(/ed25519/);
     expect(() => loadMcpConfig({ SVALIN_API_URL: "http://x.test", SVALIN_NEAR_ACCOUNT_ID: "a.near" })).toThrow(/both/);
     expect(() =>
       loadMcpConfig({ SVALIN_API_URL: "http://x.test", SVALIN_NEAR_ACCOUNT_ID: "Not A Near Account", SVALIN_NEAR_PRIVATE_KEY: "ed25519:abc" }),

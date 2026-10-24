@@ -35,6 +35,8 @@ const envSchema = z.object({
     .string()
     .url()
     .default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-dcl-depth.json"),
+  // Account age, activity and recent transfers on NEAR, for the recipient check.
+  FASTNEAR_TX_API_URL: z.string().url().default("https://tx.main.fastnear.com"),
   PORTFOLIO_CACHE_SECONDS: z.coerce.number().int().nonnegative().default(60),
 
   X402_ENV: z.enum(["mainnet", "testnet"]).optional(),
@@ -52,6 +54,7 @@ const envSchema = z.object({
   PRICE_PORTFOLIO_USD: usdPrice.default("$0.002"),
   PRICE_RISK_USD: usdPrice.default("$0.004"),
   PRICE_BRIEF_USD: usdPrice.default("$0.02"),
+  PRICE_CHECK_USD: usdPrice.default("$0.002"),
 
   DEMO_REQUESTS_PER_HOUR: z.coerce.number().int().nonnegative().default(10),
   DEMO_REQUESTS_PER_DAY_GLOBAL: z.coerce.number().int().nonnegative().default(2000),
@@ -120,6 +123,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       nearPoolsApiUrl: env.NEAR_POOLS_API_URL,
       nearIndexUrl: env.NEAR_INDEX_URL,
       nearDclDepthUrl: env.NEAR_DCL_DEPTH_URL,
+      fastnearTxApiUrl: env.FASTNEAR_TX_API_URL.replace(/\/+$/, ""),
       cacheSeconds: env.PORTFOLIO_CACHE_SECONDS,
     },
 
@@ -145,6 +149,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
         portfolio: env.PRICE_PORTFOLIO_USD,
         risk: env.PRICE_RISK_USD,
         brief: env.PRICE_BRIEF_USD,
+        check: env.PRICE_CHECK_USD,
       },
     },
 

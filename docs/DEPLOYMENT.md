@@ -106,7 +106,7 @@ Settings → Instance Type).
   ```
 
   Prices default to $0.002 (portfolio), $0.004 (risk) and $0.02 (brief). Override them with
-  `PRICE_PORTFOLIO_USD`, `PRICE_RISK_USD` and `PRICE_BRIEF_USD`.
+  `PRICE_PORTFOLIO_USD`, `PRICE_RISK_USD`, `PRICE_BRIEF_USD` and `PRICE_CHECK_USD`.
 
 **Then, on any host:**
 

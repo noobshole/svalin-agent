@@ -6,10 +6,13 @@ import {
   type ChainFamily,
   type PortfolioOverview,
   type RatedTokenRow,
+  type RecipientKind,
 } from "@svalin-agent/shared";
 
 import { ApiError, tokenAddressError } from "../lib/errors.js";
+import type { RecipientSignals } from "../risk/check.js";
 import { callFetch } from "../lib/fetch.js";
+import { onChainLabel } from "../lib/text.js";
 import { finaliseAssets, formatUnits, type PortfolioSource } from "./portfolio-source.js";
 
 /** The subset of FastNEAR's `GET /v1/account/{id}/full` response Svalin relies on. */
@@ -64,7 +67,38 @@ export type NearSourceOptions = {
   dclDepthUrl?: string;
   /** The token's row in the latest published Svalin Index, which carries its authoritative grade. */
   indexRow?: (contract: string) => Promise<RatedTokenRow | undefined>;
+  /**
+   * FastNEAR transactions API base URL, e.g. https://tx.main.fastnear.com: account age, activity
+   * and recent transfers for the recipient check.
+   */
+  txApiUrl?: string;
 };
+
+/** The parts of FastNEAR transactions API responses the recipient check reads. */
+type TxAccountPage = { account_txs?: { transaction_hash?: string; tx_block_timestamp?: string }[]; txs_count?: number };
+export type TxAction = {
+  Transfer?: { deposit?: string };
+  FunctionCall?: { method_name?: string; args?: string };
+  /** A relayed (NEP-366) transaction, as x402 payments on NEAR are: the real sender is inside. */
+  Delegate?: { delegate_action?: { sender_id?: string; receiver_id?: string; actions?: TxAction[] } };
+};
+export type TxRecord = {
+  transaction?: { signer_id?: string; receiver_id?: string; actions?: TxAction[] };
+  /** Every step the transaction set off, including transfers made by contracts it called. */
+  receipts?: {
+    receipt?: { predecessor_id?: string; receiver_id?: string; receipt?: { Action?: { actions?: TxAction[] } } };
+    execution_outcome?: { outcome?: { status?: Record<string, unknown> } };
+  }[];
+};
+
+/** A NEAR account with no contract deployed has this code hash. */
+const EMPTY_CODE_HASH = "11111111111111111111111111111111";
+/** Recent transactions of the payer read for the look-alike and first-payment checks: its own, and any. */
+const PAYER_HISTORY = 20;
+/** The most transaction hashes FastNEAR returns per request. */
+const TX_BATCH = 20;
+const IMPLICIT_ACCOUNT = /^([0-9a-f]{64}|0x[0-9a-f]{40})$/;
+const FT_TRANSFERS = new Set(["ft_transfer", "ft_transfer_call"]);
 
 export class NearPortfolioSource implements PortfolioSource {
   private prices: { at: number; data: Promise<NearPriceList> } | undefined;
@@ -116,6 +150,102 @@ export class NearPortfolioSource implements PortfolioSource {
       return live;
     }
     return capped;
+  }
+
+  async inspectRecipient(recipient: string, payer: string | null): Promise<RecipientSignals> {
+    const [prices, view, latest, first, history] = await Promise.all([
+      this.priceList(),
+      this.viewAccount(recipient),
+      this.txApi<TxAccountPage>("/v0/account", { account_id: recipient, limit: 1 }),
+      // Its first successful receipt: the transaction that created the account.
+      this.txApi<TxAccountPage>("/v0/account", { account_id: recipient, is_real_receiver: true, is_success: true, desc: false, limit: 1 }),
+      payer ? this.payerHistory(payer) : Promise.resolve(null),
+    ]);
+
+    let kind: RecipientKind = "wallet";
+    if (prices[recipient]) kind = "token";
+    else if (!view) kind = IMPLICIT_ACCOUNT.test(recipient) ? "unused" : "missing";
+    else if (view.code_hash && view.code_hash !== EMPTY_CODE_HASH) kind = "contract";
+
+    const createdNs = Number(first?.account_txs?.[0]?.tx_block_timestamp);
+    const transactions = latest?.txs_count;
+    return {
+      chain: "near",
+      recipient,
+      payer,
+      kind,
+      createdAt: Number.isFinite(createdNs) && createdNs > 0 ? Math.floor(createdNs / 1e6) : null,
+      transactions: typeof transactions === "number" && Number.isInteger(transactions) ? transactions : null,
+      transactionsAtLeast: false,
+      payerSentTo: history?.sentTo ?? null,
+      payerReceivedFrom: history?.receivedFrom ?? null,
+      dataSource: "fastnear",
+    };
+  }
+
+  /** `view_account` over RPC: null when the account does not exist. */
+  private async viewAccount(accountId: string): Promise<{ code_hash?: string } | null> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(this.options.rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "svalin",
+          method: "query",
+          params: { request_type: "view_account", finality: "final", account_id: accountId },
+        }),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch {
+      throw new ApiError(502, "upstream_unavailable", "NEAR data provider did not respond.");
+    }
+    const body = (await response.json().catch(() => ({}))) as {
+      result?: { code_hash?: string };
+      error?: { cause?: { name?: string } };
+    };
+    if (body.result) return body.result;
+    if (body.error?.cause?.name === "UNKNOWN_ACCOUNT") return null;
+    throw new ApiError(502, "upstream_error", "NEAR data provider could not read the account.");
+  }
+
+  /** A FastNEAR transactions API read, or null if it is not configured or does not answer. */
+  private async txApi<T>(path: string, body: object): Promise<T | null> {
+    if (!this.options.txApiUrl) return null;
+    try {
+      const response = await this.fetchImpl(`${this.options.txApiUrl}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      return response.ok ? ((await response.json()) as T) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Whom the payer recently sent NEAR or tokens to, and received them from. Its own transactions
+   * are read apart from everything else, so a stream of incoming payouts or spam cannot push the
+   * payments a look-alike would imitate out of view.
+   */
+  private async payerHistory(payer: string): Promise<{ sentTo: string[]; receivedFrom: string[] } | null> {
+    const [own, recent] = await Promise.all([
+      this.txApi<TxAccountPage>("/v0/account", { account_id: payer, is_any_signer: true, is_success: true, limit: PAYER_HISTORY }),
+      this.txApi<TxAccountPage>("/v0/account", { account_id: payer, is_success: true, limit: PAYER_HISTORY }),
+    ]);
+    // Every read is needed: a gap could hide the very payment a look-alike imitates.
+    if (!own || !recent) return null;
+    const hashes = [...new Set([...(own.account_txs ?? []), ...(recent.account_txs ?? [])].flatMap((tx) => tx.transaction_hash ?? []))];
+    const batches: string[][] = [];
+    for (let start = 0; start < hashes.length; start += TX_BATCH) batches.push(hashes.slice(start, start + TX_BATCH));
+    const records = await Promise.all(
+      batches.map((batch) => this.txApi<{ transactions?: TxRecord[] }>("/v0/transactions", { tx_hashes: batch })),
+    );
+    if (records.some((record) => !record)) return null;
+    return transferCounterpartiesNear(payer, records.flatMap((record) => record?.transactions ?? []));
   }
 
   private async account(wallet: string): Promise<FastNearAccount> {
@@ -176,7 +306,7 @@ export class NearPortfolioSource implements PortfolioSource {
    */
   private async tokenError(contract: string, prices: NearPriceList): Promise<ApiError> {
     const known = lookupToken("near", contract);
-    const symbol = known?.symbol ?? clean(prices[contract]?.symbol) ?? null;
+    const symbol = known?.symbol ?? onChainLabel(prices[contract]?.symbol) ?? null;
     if (known) return tokenAddressError({ chain: "near", address: contract, symbol, grade: null, backingUsd: null });
 
     if (this.options.indexRow) {
@@ -329,7 +459,7 @@ export function mapNearToOverview(
       valueUsd = Math.min(valueUsd, sellable);
     }
 
-    const symbol = known?.symbol ?? clean(entry.symbol) ?? `${token.contract_id.slice(0, 6)}…`;
+    const symbol = known?.symbol ?? onChainLabel(entry.symbol) ?? `${token.contract_id.slice(0, 6)}…`;
     drafts.push({
       chain: "near",
       tokenAddress: token.contract_id,
@@ -444,6 +574,55 @@ function priceOf(prices: NearPriceList, contract: string): number | null {
   return Number.isFinite(price) && price > 0 ? price : null;
 }
 
+/**
+ * Whom the payer sent NEAR or tokens to, and who sent them to the payer, in a batch of the
+ * payer's transactions. Each transaction's receipts are read, so transfers made by a contract it
+ * called count too; network refunds and failed steps do not. Relayed transactions count for their
+ * real sender.
+ */
+export function transferCounterpartiesNear(payer: string, records: readonly TxRecord[]): { sentTo: string[]; receivedFrom: string[] } {
+  const sentTo = new Set<string>();
+  const receivedFrom = new Set<string>();
+  const note = (from: string | undefined, to: string | undefined) => {
+    if (!from || !to || from === to) return;
+    if (from === payer) sentTo.add(to);
+    else if (to === payer) receivedFrom.add(from);
+  };
+  const visit = (from: string | undefined, to: string | undefined, actions: readonly TxAction[] | undefined) => {
+    for (const action of actions ?? []) {
+      if (action.Transfer) note(from, to);
+      else if (action.FunctionCall && FT_TRANSFERS.has(action.FunctionCall.method_name ?? "")) {
+        note(from, ftReceiver(action.FunctionCall.args));
+      } else if (action.Delegate?.delegate_action) {
+        const inner = action.Delegate.delegate_action;
+        visit(inner.sender_id, inner.receiver_id, inner.actions);
+      }
+    }
+  };
+  for (const { transaction, receipts } of records) {
+    if (!receipts?.length) {
+      if (transaction) visit(transaction.signer_id, transaction.receiver_id, transaction.actions);
+      continue;
+    }
+    for (const { receipt, execution_outcome: outcome } of receipts) {
+      if (!receipt || receipt.predecessor_id === "system") continue;
+      if (outcome?.outcome?.status && "Failure" in outcome.outcome.status) continue;
+      visit(receipt.predecessor_id, receipt.receiver_id, receipt.receipt?.Action?.actions);
+    }
+  }
+  return { sentTo: [...sentTo], receivedFrom: [...receivedFrom] };
+}
+
+/** The `receiver_id` of an `ft_transfer` call's base64 JSON arguments. */
+function ftReceiver(args: string | undefined): string | undefined {
+  try {
+    const parsed = JSON.parse(atob(args ?? "")) as { receiver_id?: unknown };
+    return typeof parsed.receiver_id === "string" ? parsed.receiver_id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function toBigInt(value: string | undefined): bigint {
   try {
     return value ? BigInt(value) : 0n;
@@ -454,9 +633,4 @@ function toBigInt(value: string | undefined): bigint {
 
 function toAmount(raw: bigint, decimals: number): number {
   return Number(formatUnits(raw, decimals));
-}
-
-function clean(value: string | undefined) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed.slice(0, 32) : undefined;
 }

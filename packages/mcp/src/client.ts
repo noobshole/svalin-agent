@@ -37,7 +37,7 @@ export async function createSvalinClient(config: McpConfig, baseFetch: typeof fe
     const rpcUrl = config.SVALIN_NEAR_RPC_URL;
     const signer = createClientNearSigner({
       accountId: config.SVALIN_NEAR_ACCOUNT_ID,
-      secretKey: config.SVALIN_NEAR_PRIVATE_KEY as `ed25519:${string}` | `secp256k1:${string}`,
+      secretKey: config.SVALIN_NEAR_PRIVATE_KEY as `ed25519:${string}`,
       rpcUrls: rpcUrl ? { "near:mainnet": rpcUrl, "near:testnet": rpcUrl } : undefined,
     });
     client.register("near:*", new ExactNearScheme(signer));

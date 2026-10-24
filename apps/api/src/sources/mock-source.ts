@@ -7,6 +7,7 @@ import {
   type SupportedChainKey,
 } from "@svalin-agent/shared";
 
+import type { RecipientSignals } from "../risk/check.js";
 import { finaliseAssets, type PortfolioSource } from "./portfolio-source.js";
 
 type Holding = {
@@ -75,5 +76,21 @@ export class MockPortfolioSource implements PortfolioSource {
       dataSource: "mock",
       refreshedAt: this.now().toISOString(),
     });
+  }
+
+  /** Sample recipient: an established wallet about a year old that the payer has not paid yet. */
+  async inspectRecipient(recipient: string, payer: string | null): Promise<RecipientSignals> {
+    return {
+      chain: detectAddressFamily(recipient) === "near" ? "near" : "solana",
+      recipient,
+      payer,
+      kind: "wallet",
+      createdAt: this.now().getTime() - 400 * 24 * 60 * 60 * 1000,
+      transactions: 120,
+      transactionsAtLeast: false,
+      payerSentTo: payer ? [] : null,
+      payerReceivedFrom: payer ? [] : null,
+      dataSource: "mock",
+    };
   }
 }

@@ -1,9 +1,16 @@
 import type { ChainFamily, PortfolioAsset, PortfolioOverview } from "@svalin-agent/shared";
 
+import type { RecipientSignals } from "../risk/check.js";
+
 export interface PortfolioSource {
   /** Whether this source can serve addresses of the given family. */
   supports(family: ChainFamily): boolean;
   getOverview(wallet: string): Promise<PortfolioOverview>;
+  /**
+   * What the chain shows about a payment recipient (kind, age, activity) and, given the payer,
+   * whom the payer recently paid and was paid by. Judged by `assessRecipient`.
+   */
+  inspectRecipient?(recipient: string, payer: string | null): Promise<RecipientSignals>;
 }
 
 type DraftAsset = Omit<PortfolioAsset, "allocationBps">;

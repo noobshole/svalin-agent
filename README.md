@@ -30,6 +30,10 @@ accounts, and no way to move funds.
   stablecoin, native, liquid staking, major, meme or long-tail. Staked SOL and NEAR count as staked.
 - **Briefs.** A headline, a short summary and up to three actions for explaining a wallet to a
   person, written by Claude when configured and by a template otherwise.
+- **Check before paying.** Before an agent sends money, `GET /v1/check/{address}` answers allow,
+  caution or block: token, program and non-existent addresses, brand-new or barely used wallets,
+  and, given the payer, an address imitating one the payer paid recently (address poisoning) or a
+  large first payment. If the payer's history cannot be read, it says so instead of guessing.
 - **Svalin Index.** Every NEAR token with a price, graded A-F by the real money in its Ref Finance
   pools (classic and concentrated liquidity), counting only backing that has held for 24 hours,
   with market cap, top-10 holder share and holder count. Rebuilt every few hours and published in the
@@ -116,7 +120,7 @@ flowchart TB
     end
     subgraph C["Agent tool catalogs"]
         direction TB
-        C1["Pay per call<br/>over x402"] ~~~ C2["OpenAPI and<br/>llms.txt"] ~~~ C3["One-line<br/>MCP install"]
+        C1["Pay per call<br/>over x402"] ~~~ C2["OpenAPI and<br/>llms.txt"] ~~~ C3["MCP server with<br/>spend caps"]
     end
 ```
 
@@ -152,10 +156,12 @@ Any orchestrator that can call MCP tools or make HTTP requests can use these pat
 | Endpoint | Price | Returns |
 | --- | --- | --- |
 | `GET /v1/demo/risk/{address}` | Free, 10 per hour per visitor | Risk report |
+| `GET /v1/demo/check/{address}` | Free, shares the demo limit | Recipient check, without the payer's history (no look-alike check) |
 | `GET /v1/index/near-tokens` | Free | The Svalin Index: every NEAR token graded A-F by the real money behind its price |
 | `GET /v1/portfolio/{address}` | $0.002 | Priced holdings, allocation and a risk category per token |
 | `GET /v1/risk/{address}` | $0.004 | Score, grade, exposure metrics and findings with actions |
 | `GET /v1/brief/{address}` | $0.02 | Headline, summary and up to 3 actions, plus the full report |
+| `GET /v1/check/{address}?payer=&amountUsd=` | $0.002 | Before paying someone: allow, caution or block, with reasons |
 | `GET /` · `/openapi.json` · `/llms.txt` | Free | Machine-readable service description for agents |
 
 `{address}` is a Solana address or a NEAR account ID. Prices are the defaults and can be changed
@@ -165,13 +171,9 @@ per deployment with the `PRICE_*` environment variables.
 
 **MCP (Claude Code, Claude Desktop, Cursor and any MCP client).** The free scan works with no
 setup. Add a dedicated hot wallet holding a few dollars of USDC, on Solana or NEAR, to unlock the
-paid tools.
-
-```bash
-claude mcp add svalin -e SVALIN_API_URL=https://YOUR-SVALIN-API -- npx -y svalin-mcp
-```
-
-Tools, configuration and spend limits are documented in [packages/mcp](packages/mcp#readme).
+paid tools. `svalin-mcp` is not on npm yet, so run it
+[from source](packages/mcp#from-source) for now. Tools, configuration and spend limits are
+documented in [packages/mcp](packages/mcp#readme).
 
 **Any x402 client (TypeScript):**
 
@@ -204,7 +206,7 @@ paid endpoint: you get a `402` with a `PAYMENT-REQUIRED` header offering Solana 
 testnet USDC.
 
 ```bash
-pnpm test        # risk engine, Helius and NEAR mapping, paywall, facilitators, rate limiting, narrator, MCP end-to-end payment
+pnpm test        # risk engine, recipient check, Helius and NEAR mapping, paywall, facilitators, rate limiting, narrator, MCP end-to-end payment
 pnpm typecheck
 ```
 
@@ -216,7 +218,7 @@ real NEAR USDC transfer, API paywall, facilitator verify and settle, handler, le
 | Path | What it is |
 | --- | --- |
 | `apps/api` | Hono API: Solana portfolios (Helius) and NEAR portfolios (FastNEAR, Ref Finance), deterministic risk engine, x402 paywall (Solana and NEAR USDC), payments ledger, OpenAPI and `llms.txt` |
-| `apps/web` | Next.js landing page and free wallet scanner |
+| `apps/web` | Next.js landing page, free wallet scanner, free check before paying, and the Svalin Index |
 | `packages/mcp` | `svalin-mcp`: MCP server with an auto-paying x402 client and hard spend caps |
 | `packages/shared` | Zod schemas: the single contract shared by the API, the website and the MCP server |
 | `packages/chain-config` | Chains, x402 networks (CAIP-2), facilitators, curated token registry |
@@ -247,7 +249,7 @@ public issue.
   `Dockerfile`.
 - **Website:** a static site (`apps/web`), deployed to Cloudflare with
   [`apps/web/wrangler.toml`](apps/web/wrangler.toml) or to any static host.
-- **MCP server:** npm and the official MCP Registry.
+- **MCP server:** npm and the official MCP Registry (not published yet).
 
 Step-by-step instructions, with a test after each step, are in
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

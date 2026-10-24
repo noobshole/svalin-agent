@@ -132,12 +132,24 @@ describe("svalin-mcp end to end", () => {
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       "svalin_brief",
+      "svalin_check_recipient",
+      "svalin_check_recipient_free",
       "svalin_portfolio",
       "svalin_risk_report",
       "svalin_risk_scan",
       "svalin_spend_status",
     ]);
     expect(tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
+  });
+
+  it("checks a recipient before paying, passing the payer and amount to the API", async () => {
+    const { apiFetch } = harness();
+    const { client } = await connect(apiFetch, {});
+    const result = await client.callTool({
+      name: "svalin_check_recipient_free",
+      arguments: { address: WALLET, payer: WALLET, amountUsd: 12.5 },
+    });
+    expect(JSON.parse(textOf(result))).toMatchObject({ recipient: WALLET, payer: WALLET, amountUsd: 12.5, verdict: "allow" });
   });
 
   it("free scan works without a wallet; paid tools explain how to enable payment", async () => {

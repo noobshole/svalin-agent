@@ -1,8 +1,10 @@
 import { SOL_NATIVE_MINT, categoriseToken, lookupToken } from "@svalin-agent/chain-config";
-import { portfolioOverviewSchema, type ChainFamily, type PortfolioOverview } from "@svalin-agent/shared";
+import { portfolioOverviewSchema, type ChainFamily, type PortfolioOverview, type RecipientKind } from "@svalin-agent/shared";
 
 import { ApiError, tokenAddressError } from "../lib/errors.js";
 import { callFetch } from "../lib/fetch.js";
+import { onChainLabel } from "../lib/text.js";
+import type { RecipientSignals } from "../risk/check.js";
 import { finaliseAssets, formatUnits, type PortfolioSource } from "./portfolio-source.js";
 
 /** The subset of the Helius DAS `getAssetsByOwner` response Svalin relies on. */
@@ -44,6 +46,12 @@ const TOKEN_PROGRAMS = new Set(["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "
 const MINT_SIZE = 82;
 /** Token-2022 accounts with extensions store their type after the 165-byte base: 1 is a mint. */
 const ACCOUNT_TYPE_OFFSET = 165;
+/** Signatures read for a recipient's age and activity; reaching the cap means "at least this many". */
+const SIGNATURE_CAP = 1000;
+/** The payer's recent transactions read for the look-alike and first-payment checks. */
+const PAYER_HISTORY = 15;
+/** The newest Solana transaction version Svalin parses; older RPC defaults refuse version 1. */
+const MAX_TRANSACTION_VERSION = 1;
 
 type FetchLike = typeof fetch;
 
@@ -52,6 +60,7 @@ export class HeliusPortfolioSource implements PortfolioSource {
     private readonly rpcUrl: string,
     private readonly fetchImpl: FetchLike = callFetch,
     private readonly timeoutMs = 10_000,
+    private readonly retryDelayMs = 500,
   ) {}
 
   supports(family: ChainFamily) {
@@ -80,6 +89,89 @@ export class HeliusPortfolioSource implements PortfolioSource {
     }
 
     return mapHeliusToOverview(wallet, pages);
+  }
+
+  async inspectRecipient(recipient: string, payer: string | null): Promise<RecipientSignals> {
+    const [account, signatures, history] = await Promise.all([
+      this.rpc<{ value?: SolanaAccountInfo | null }>("getAccountInfo", [
+        recipient,
+        { encoding: "base64", dataSlice: { offset: ACCOUNT_TYPE_OFFSET, length: 1 } },
+      ]),
+      this.rpc<{ blockTime?: number | null }[]>("getSignaturesForAddress", [recipient, { limit: SIGNATURE_CAP }]),
+      payer ? this.payerHistory(payer).catch(() => null) : Promise.resolve(null),
+    ]);
+
+    const info = account.value ?? null;
+    const classified = classifySolanaAccount(info);
+    let kind: RecipientKind = classified === "mint" ? "token" : classified;
+    if (kind === "wallet" && !info && signatures.length === 0) kind = "unused";
+
+    // Under the cap, the oldest signature is the address's first activity.
+    const times = signatures.map((entry) => entry.blockTime).filter((time): time is number => typeof time === "number");
+    const complete = signatures.length < SIGNATURE_CAP;
+    return {
+      chain: "solana",
+      recipient,
+      payer,
+      kind,
+      createdAt: complete && times.length > 0 ? Math.min(...times) * 1000 : null,
+      transactions: signatures.length,
+      transactionsAtLeast: !complete,
+      payerSentTo: history?.sentTo ?? null,
+      payerReceivedFrom: history?.receivedFrom ?? null,
+      dataSource: "helius",
+    };
+  }
+
+  /** Whom the payer paid, and was paid by, in its last few transactions. */
+  private async payerHistory(payer: string): Promise<{ sentTo: string[]; receivedFrom: string[] }> {
+    const signatures = await this.rpc<{ signature: string }[]>("getSignaturesForAddress", [payer, { limit: PAYER_HISTORY }]);
+    // One at a time: RPC providers rate-limit bursts. Any transaction that fails to load makes the
+    // whole history unknown, since a gap could hide the very payment a look-alike imitates.
+    const transactions: (SolanaParsedTransaction | null)[] = [];
+    for (const { signature } of signatures) {
+      transactions.push(
+        await this.rpc<SolanaParsedTransaction | null>("getTransaction", [
+          signature,
+          { encoding: "jsonParsed", maxSupportedTransactionVersion: MAX_TRANSACTION_VERSION },
+        ]),
+      );
+    }
+    const sentTo = new Set<string>();
+    const receivedFrom = new Set<string>();
+    for (const transaction of transactions) {
+      const parties = transferCounterparties(payer, transaction);
+      parties.sentTo.forEach((address) => sentTo.add(address));
+      parties.receivedFrom.forEach((address) => receivedFrom.add(address));
+    }
+    return { sentTo: [...sentTo], receivedFrom: [...receivedFrom] };
+  }
+
+  /** A JSON-RPC call. A rate-limited call is retried twice after a short wait before giving up. */
+  private async rpc<T>(method: string, params: unknown[], attempt = 1): Promise<T> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(this.rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: `svalin-${method}`, method, params }),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch {
+      throw new ApiError(502, "upstream_unavailable", "Solana data provider did not respond.");
+    }
+    if (response.status === 429) {
+      if (attempt < 3) {
+        await new Promise((resume) => setTimeout(resume, this.retryDelayMs * attempt));
+        return this.rpc(method, params, attempt + 1);
+      }
+      throw new ApiError(503, "upstream_rate_limited", "Solana data provider is rate limiting. Retry shortly.");
+    }
+    const body = (await response.json().catch(() => ({}))) as { result?: T; error?: { message?: string } };
+    if (!response.ok || body.error || !("result" in body)) {
+      throw new ApiError(502, "upstream_error", body.error?.message ?? `Solana data provider returned ${response.status}.`);
+    }
+    return body.result as T;
   }
 
   /** Reads the account's owner program. If the lookup fails, the address is treated as a wallet. */
@@ -158,6 +250,71 @@ export function classifySolanaAccount(account: SolanaAccountInfo | null | undefi
   return account.space === MINT_SIZE || typeByte === 1 ? "mint" : "token-account";
 }
 
+/** The parts of a `getTransaction` (jsonParsed) result that show who paid whom. */
+export type SolanaParsedTransaction = {
+  meta?: {
+    err?: unknown;
+    innerInstructions?: { instructions?: SolanaParsedInstruction[] }[] | null;
+    preTokenBalances?: SolanaTokenBalance[] | null;
+    postTokenBalances?: SolanaTokenBalance[] | null;
+  } | null;
+  transaction?: { message?: { instructions?: SolanaParsedInstruction[] } };
+};
+type SolanaParsedInstruction = { program?: string; parsed?: { type?: string; info?: { source?: string; destination?: string } } };
+type SolanaTokenBalance = { accountIndex: number; mint?: string; owner?: string; uiTokenAmount?: { amount?: string } };
+
+/**
+ * Pure, exported for tests: from one transaction, the wallets the payer sent SOL or tokens to and
+ * received them from. SOL comes from system transfers; tokens from balance changes per owner,
+ * since token transfers name token accounts, not their owners.
+ */
+export function transferCounterparties(payer: string, transaction: SolanaParsedTransaction | null): { sentTo: string[]; receivedFrom: string[] } {
+  const sentTo = new Set<string>();
+  const receivedFrom = new Set<string>();
+  if (!transaction || transaction.meta?.err) return { sentTo: [], receivedFrom: [] };
+
+  const instructions = [
+    ...(transaction.transaction?.message?.instructions ?? []),
+    ...(transaction.meta?.innerInstructions ?? []).flatMap((inner) => inner.instructions ?? []),
+  ];
+  for (const instruction of instructions) {
+    const type = instruction.parsed?.type;
+    if (instruction.program !== "system" || (type !== "transfer" && type !== "transferWithSeed")) continue;
+    const { source, destination } = instruction.parsed?.info ?? {};
+    if (source === payer && destination && destination !== payer) sentTo.add(destination);
+    if (destination === payer && source && source !== payer) receivedFrom.add(source);
+  }
+
+  // Net change per owner and mint, from the token balances before and after.
+  const change = new Map<string, bigint>();
+  const apply = (balances: SolanaTokenBalance[] | null | undefined, sign: bigint) => {
+    for (const balance of balances ?? []) {
+      if (!balance.owner || !balance.mint) continue;
+      let amount: bigint;
+      try {
+        amount = BigInt(balance.uiTokenAmount?.amount ?? "0");
+      } catch {
+        continue;
+      }
+      const key = `${balance.mint} ${balance.owner}`;
+      change.set(key, (change.get(key) ?? 0n) + sign * amount);
+    }
+  };
+  apply(transaction.meta?.preTokenBalances, -1n);
+  apply(transaction.meta?.postTokenBalances, 1n);
+  for (const [key, delta] of change) {
+    const [mint, owner] = key.split(" ");
+    if (owner !== payer || delta === 0n) continue;
+    for (const [otherKey, otherDelta] of change) {
+      const [otherMint, other] = otherKey.split(" ");
+      if (otherMint !== mint || other === payer) continue;
+      if (delta < 0n && otherDelta > 0n) sentTo.add(other);
+      if (delta > 0n && otherDelta < 0n) receivedFrom.add(other);
+    }
+  }
+  return { sentTo: [...sentTo], receivedFrom: [...receivedFrom] };
+}
+
 /** Pure mapping, exported for tests. */
 export function mapHeliusToOverview(
   wallet: string,
@@ -200,8 +357,8 @@ export function mapHeliusToOverview(
       const price = info.price_info?.price_per_token;
       const known = lookupToken("solana", item.id);
       const symbol =
-        known?.symbol ?? clean(info.symbol) ?? clean(item.content?.metadata?.symbol) ?? `${item.id.slice(0, 4)}…`;
-      const name = clean(item.content?.metadata?.name) ?? symbol;
+        known?.symbol ?? onChainLabel(info.symbol) ?? onChainLabel(item.content?.metadata?.symbol) ?? `${item.id.slice(0, 4)}…`;
+      const name = onChainLabel(item.content?.metadata?.name) ?? symbol;
 
       if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
         unpricedAssetCount += 1;
@@ -233,9 +390,4 @@ export function mapHeliusToOverview(
     dataSource: "helius",
     refreshedAt: now.toISOString(),
   });
-}
-
-function clean(value: string | undefined) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed.slice(0, 32) : undefined;
 }

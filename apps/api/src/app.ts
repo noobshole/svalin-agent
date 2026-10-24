@@ -4,7 +4,7 @@ import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 
-import { llmsTxt, openApiDocument, serviceInfo } from "./catalog.js";
+import { llmsTxt, openApiDocument, paidRoutes, serviceInfo } from "./catalog.js";
 import type { AppConfig } from "./env.js";
 import { createClientIpResolver } from "./lib/client-ip.js";
 import { ApiError } from "./lib/errors.js";
@@ -13,6 +13,7 @@ import { TtlCache } from "./lib/ttl-cache.js";
 import { AnthropicNarrator, TemplateNarrator, type Narrator } from "./narrate/narrator.js";
 import { LogLedger, SupabaseLedger, type PaymentLedger } from "./payments/ledger.js";
 import { createPaymentLayer } from "./payments/x402.js";
+import { assessRecipient } from "./risk/check.js";
 import { buildRiskReport } from "./risk/engine.js";
 import { ChainRouterSource } from "./sources/chain-router-source.js";
 import { HeliusPortfolioSource } from "./sources/helius-source.js";
@@ -37,7 +38,9 @@ export type AppDependencies = {
   indexFeed?: IndexFeed;
 };
 
-const PAID_PREFIXES = ["/v1/portfolio/", "/v1/risk/", "/v1/brief/"];
+const PAID_PREFIXES = Object.values(paidRoutes).map((route) => route.path.replace("{address}", ""));
+const DEMO_PREFIXES = ["/v1/demo/risk/", "/v1/demo/check/"];
+const CHECK_PREFIXES = ["/v1/check/", "/v1/demo/check/"];
 
 export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   const indexFeed = deps.indexFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexUrl);
@@ -53,6 +56,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
             poolsUrl: config.portfolio.nearPoolsApiUrl,
             dclDepthUrl: config.portfolio.nearDclDepthUrl,
             indexRow: async (contract) => indexFeed.row?.(contract),
+            txApiUrl: config.portfolio.fastnearTxApiUrl,
           }),
         })
       : new MockPortfolioSource());
@@ -116,11 +120,12 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   // that can only fail.
   app.use("/v1/*", async (c, next) => {
     const isPaid = PAID_PREFIXES.some((prefix) => c.req.path.startsWith(prefix));
-    const isDemo = c.req.path.startsWith("/v1/demo/risk/");
+    const isDemo = DEMO_PREFIXES.some((prefix) => c.req.path.startsWith(prefix));
     if (!isPaid && !isDemo) return next();
 
     const address = decodeURIComponent(c.req.path.split("/").pop() ?? "");
     assertServableAddress(address, source);
+    if (CHECK_PREFIXES.some((prefix) => c.req.path.startsWith(prefix))) checkQuery(c, address);
 
     if (isPaid && config.payments.mode === "disabled" && config.isProduction) {
       throw new ApiError(503, "payments_not_configured", "Paid endpoints are not available on this instance yet.");
@@ -162,6 +167,20 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     return c.json(report);
   });
 
+  app.get("/v1/demo/check/:address", async (c) => {
+    const retryAfter = await demoLimiter.check(clientIp(c));
+    if (retryAfter !== null) {
+      c.header("Retry-After", String(retryAfter));
+      throw new ApiError(
+        429,
+        "demo_limit_reached",
+        "Free demo limit reached.",
+        "Use the paid endpoint GET /v1/check/{address} via x402 for unlimited access.",
+      );
+    }
+    return c.json(await checkRecipient(c, false));
+  });
+
   // The Svalin Index: every NEAR token Ref Finance prices, graded by the real money behind it.
   app.get("/v1/index/near-tokens", async (c) => {
     const body = await indexFeed.latest();
@@ -179,6 +198,23 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     const report = buildRiskReport(await getOverview(c.req.param("address")));
     return c.json(await narrator.narrate(report));
   });
+
+  app.get("/v1/check/:address", async (c) => c.json(await checkRecipient(c)));
+
+  /**
+   * Is it safe to pay this address? The query was validated by the gate, before the paywall.
+   * The free demo skips the payer's history, the costly part of a check, so free use cannot burn
+   * the data budget.
+   */
+  async function checkRecipient(c: Context, withPayerHistory = true) {
+    if (!source.inspectRecipient) {
+      throw new ApiError(501, "chain_not_supported", "This instance cannot check recipients.");
+    }
+    const recipient = c.req.param("address") ?? "";
+    const { payer, amountUsd } = checkQuery(c, recipient);
+    const signals = await source.inspectRecipient(recipient, withPayerHistory ? payer : null);
+    return assessRecipient({ ...signals, payer }, amountUsd, new Date(), { payerHistorySkipped: !withPayerHistory });
+  }
 
   /* -------------------------------- errors --------------------------------- */
 
@@ -208,4 +244,25 @@ function assertServableAddress(address: string, source: PortfolioSource) {
       "Svalin analyses Solana wallets and NEAR accounts.",
     );
   }
+}
+
+/**
+ * The recipient check's query: an optional payer on the same chain as the recipient, and an
+ * optional amount in USD. Invalid values are rejected with 400 before the paywall.
+ */
+function checkQuery(c: Context, recipient: string): { payer: string | null; amountUsd: number | null } {
+  const payer = c.req.query("payer")?.trim() || null;
+  if (payer !== null) {
+    const family = detectAddressFamily(payer);
+    if (!family) throw new ApiError(400, "invalid_payer", "payer is not a valid Solana address or NEAR account ID.");
+    if (family !== detectAddressFamily(decodeURIComponent(recipient))) {
+      throw new ApiError(400, "chain_mismatch", "payer and recipient must be on the same chain.");
+    }
+  }
+  const rawAmount = c.req.query("amountUsd")?.trim();
+  const amountUsd = rawAmount ? Number(rawAmount) : null;
+  if (amountUsd !== null && (!Number.isFinite(amountUsd) || amountUsd < 0 || amountUsd > 1e12)) {
+    throw new ApiError(400, "invalid_amount", "amountUsd must be a number of US dollars, 0 or more.");
+  }
+  return { payer, amountUsd };
 }

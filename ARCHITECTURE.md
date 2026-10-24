@@ -74,7 +74,9 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
   Index, and from live pool depth if the Index cannot be read), and the Helius source
   reads the account's owner alongside the first balance page and answers 422 for a token mint,
   token account or program. None of these is settled.
-- `risk/engine.ts` is pure and deterministic: same holdings, same report. No I/O, no LLM.
+- `risk/engine.ts` is pure and deterministic: same holdings, same report. No I/O, no LLM. The
+  recipient check follows the same split: `inspectRecipient` on each source gathers signals
+  (account kind, age, activity, the payer's recent transfers), and `risk/check.ts` judges them.
 - `narrate/narrator.ts` turns a finished report into prose. The LLM never sees an instruction to
   compute anything, its output is schema-checked, and any failure falls back to the template.
 - `packages/shared` holds Zod schemas; types are `z.infer` of them. API responses, the web app

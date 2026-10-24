@@ -11,9 +11,11 @@ const envSchema = z.object({
     .max(64)
     .regex(/^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/, "SVALIN_NEAR_ACCOUNT_ID must be a NEAR account ID, e.g. alice.near")
     .optional(),
+  // ed25519 only: NEAR's secp256k1 keys sign through the `elliptic` package, whose ECDSA can leak
+  // the key in rare cases (GHSA-848j-6mx2-7j84, no fix released).
   SVALIN_NEAR_PRIVATE_KEY: z
     .string()
-    .regex(/^(ed25519|secp256k1):[1-9A-HJ-NP-Za-km-z]+$/, "SVALIN_NEAR_PRIVATE_KEY must look like ed25519:…")
+    .regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]+$/, "SVALIN_NEAR_PRIVATE_KEY must be an ed25519 key, like ed25519:…")
     .optional(),
   SVALIN_NEAR_RPC_URL: z.string().url().optional(),
   SVALIN_PREFERRED_NETWORK: z.enum(["solana", "near"]).default("solana"),
