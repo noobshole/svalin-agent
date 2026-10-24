@@ -1,7 +1,9 @@
 import {
   apiErrorSchema,
+  recipientCheckSchema,
   riskReportSchema,
   serviceInfoSchema,
+  type RecipientCheck,
   type RiskReport,
   type ServiceInfo,
   type TokenNotice,
@@ -38,6 +40,27 @@ export async function getDemoRisk(address: string, signal?: AbortSignal): Promis
       message: error.success ? error.data.error : `API returned ${response.status}.`,
       hint: error.success ? error.data.hint : undefined,
       token: error.success ? error.data.token : undefined,
+    };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { ok: false, status: 503, message: "The Svalin API is unreachable right now. Try again in a minute." };
+  }
+}
+
+export type CheckResult = { ok: true; check: RecipientCheck } | { ok: false; status: number; message: string; hint?: string };
+
+/** The free recipient check, from the browser so the demo limit applies to the visitor. */
+export async function getDemoCheck(address: string, signal?: AbortSignal): Promise<CheckResult> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/demo/check/${encodeURIComponent(address)}`, { signal });
+    const body = await response.json();
+    if (response.ok) return { ok: true, check: recipientCheckSchema.parse(body) };
+    const error = apiErrorSchema.safeParse(body);
+    return {
+      ok: false,
+      status: response.status,
+      message: error.success ? error.data.error : `API returned ${response.status}.`,
+      hint: error.success ? error.data.hint : undefined,
     };
   } catch (error) {
     if (signal?.aborted) throw error;

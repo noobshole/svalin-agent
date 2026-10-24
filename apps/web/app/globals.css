@@ -78,3 +78,69 @@ a {
   outline: 2px solid hsl(var(--foreground) / 0.6);
   outline-offset: 2px;
 }
+
+/* Long-form pages (About, Docs, Whitepaper): one readable column, quiet type, tables that scroll. */
+@layer components {
+  .doc {
+    @apply grid gap-0 text-[15px] leading-7 text-mutedForeground;
+  }
+  .doc h2 {
+    @apply mb-3 mt-12 scroll-mt-20 text-xl font-medium tracking-tight text-foreground;
+    text-wrap: balance;
+  }
+  .doc h3 {
+    @apply mb-2 mt-8 text-base font-medium text-foreground;
+  }
+  .doc p,
+  .doc ul,
+  .doc ol {
+    @apply mb-4 max-w-[68ch];
+  }
+  .doc ul,
+  .doc ol {
+    @apply grid gap-1.5 pl-5;
+  }
+  .doc ul {
+    @apply list-disc;
+  }
+  .doc ol {
+    @apply list-decimal;
+  }
+  .doc li::marker {
+    color: hsl(var(--subtle-foreground));
+  }
+  .doc strong {
+    @apply font-medium text-foreground;
+  }
+  .doc a {
+    @apply text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground;
+  }
+  .doc code {
+    @apply rounded bg-surface2 px-1.5 py-0.5 font-mono text-[13px] text-foreground;
+    overflow-wrap: anywhere;
+  }
+  .doc pre {
+    @apply mb-5 overflow-x-auto rounded-lg border border-border bg-surface p-4 font-mono text-[13px] leading-6 text-foreground;
+  }
+  .doc pre code {
+    @apply bg-transparent p-0;
+  }
+  .doc .table-wrap {
+    @apply mb-6 overflow-x-auto rounded-lg border border-border bg-surface;
+  }
+  .doc table {
+    @apply w-full border-collapse text-sm;
+  }
+  .doc th {
+    @apply border-b border-border bg-surface2 px-4 py-2.5 text-left font-mono text-[11px] font-normal uppercase tracking-wider text-subtleForeground;
+  }
+  .doc td {
+    @apply border-b border-border px-4 py-2.5 align-top;
+  }
+  .doc td code {
+    @apply whitespace-nowrap;
+  }
+  .doc tr:last-child td {
+    @apply border-b-0;
+  }
+}

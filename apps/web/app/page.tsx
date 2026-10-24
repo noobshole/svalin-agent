@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { ReportPreview } from "@/components/report-preview";
@@ -5,7 +6,7 @@ import { ScanForm } from "@/components/scan-form";
 import { API_BASE_URL, getServiceInfo } from "@/lib/api";
 import { exampleReport } from "@/lib/example-report";
 
-const fallbackPrices = { portfolio: "$0.002", risk: "$0.004", brief: "$0.02" };
+const fallbackPrices = { portfolio: "$0.002", risk: "$0.004", brief: "$0.02", check: "$0.002" };
 
 export default async function HomePage() {
   const info = await getServiceInfo();
@@ -20,6 +21,12 @@ export default async function HomePage() {
     { name: "Portfolio", path: "/v1/portfolio/{address}", returns: "Priced holdings with a risk category per token", price: price("/v1/portfolio/{address}", fallbackPrices.portfolio) },
     { name: "Risk report", path: "/v1/risk/{address}", returns: "Score, grade, exposure metrics and findings", price: riskPrice },
     { name: "Agent brief", path: "/v1/brief/{address}", returns: "Headline, summary and up to 3 actions, plus the report", price: price("/v1/brief/{address}", fallbackPrices.brief) },
+    {
+      name: "Recipient check",
+      path: "/v1/check/{address}",
+      returns: "Allow, caution or block before paying, including look-alike addresses",
+      price: price("/v1/check/{address}", fallbackPrices.check),
+    },
   ];
 
   return (
@@ -34,8 +41,14 @@ export default async function HomePage() {
             Svalin turns a Solana wallet or a NEAR account into a priced portfolio and a deterministic portfolio risk report. Agents pay per call in USDC.
             No keys, no accounts, and no way to move funds.
           </p>
-          <div className="max-w-lg">
+          <div className="grid max-w-lg gap-3">
             <ScanForm showExamples />
+            <p className="text-sm text-mutedForeground">
+              Paying someone?{" "}
+              <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/check">
+                Check the address first.
+              </Link>
+            </p>
           </div>
         </div>
         <ReportPreview label="example" report={exampleReport} />

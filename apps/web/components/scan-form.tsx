@@ -13,7 +13,7 @@ const EXAMPLES = [
 ];
 
 /** Returns the address to scan, or null when it is neither a Solana address nor a NEAR account. */
-function normaliseAddress(input: string): string | null {
+export function normaliseAddress(input: string): string | null {
   const value = input.trim();
   if (SOLANA_ADDRESS.test(value)) return value;
   // NEAR account IDs are lowercase; accept "Alice.near" as "alice.near".
