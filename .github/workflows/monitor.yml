@@ -1,0 +1,27 @@
+name: Monitor
+
+# Every hour: the API answers, payments go to our own accounts, the Index is fresh, and the website
+# serves its security headers and only its own scripts. A failed run emails the repository owner.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: node .github/scripts/monitor.mjs
+        env:
+          # The public receiving accounts (testnet for now). Update on the switch to mainnet.
+          SVALIN_PAYEES: AzfdbWXPC3BiPJqaeHsGqzZw8NoxYSZkZMob1VNivGBo,svalin-agent.testnet

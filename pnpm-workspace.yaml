@@ -3,3 +3,7 @@ packages:
   - packages/*
 
 offline: false
+
+# Never resolve a package version published less than 3 days ago: most hijacked releases are
+# caught and pulled within hours or days. Installs from the lockfile are not affected.
+minimumReleaseAge: 4320

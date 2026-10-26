@@ -1,0 +1,5 @@
+Contact: https://github.com/noobshole/svalin-agent/security/advisories/new
+Expires: 2027-10-26T00:00:00.000Z
+Policy: https://github.com/noobshole/svalin-agent/blob/main/SECURITY.md
+Preferred-Languages: en
+Canonical: https://svalin.noobshole.workers.dev/.well-known/security.txt

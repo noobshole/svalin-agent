@@ -2,7 +2,7 @@
   "name": "svalin-agent",
   "private": true,
   "version": "1.0.0",
-  "packageManager": "pnpm@10.8.1",
+  "packageManager": "pnpm@10.34.7",
   "scripts": {
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
