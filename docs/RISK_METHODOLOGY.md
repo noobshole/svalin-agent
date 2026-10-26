@@ -1,4 +1,4 @@
-# Risk methodology (v2026-10.6)
+# Risk methodology (v2026-10.7)
 
 Svalin's report is computed by `apps/api/src/risk/engine.ts`. It is deterministic: the same
 holdings always produce the same report. No number in a report comes from a language model.
@@ -37,6 +37,7 @@ holdings always produce the same report. No number in a report comes from a lang
 | `effectivePositions` | 10,000 / HHI: how many equal-sized positions the portfolio behaves like |
 | `*Pct` | Share of priced value per category |
 | `dataCoverage` | priced tokens / (priced + unpriced tokens), 0-100 |
+| `exitValueUsd`, `exitLossPct` | What selling every priced position now would fetch after price impact, and how much less that is than the priced value. Each NEAR token outside the registry fetches size × (1 − saleLoss(backing, size)), the Index's sale loss for the whole position against the backing it has held for 24 hours; registry tokens, NEAR and staked NEAR count at full value. Positions are treated as sold independently. Null when any position's depth is unknown (Solana for now) |
 
 ## Score (0 = safest, 100 = riskiest)
 
@@ -67,6 +68,7 @@ unpriced tokens. Scoring it 0 would grade a fresh or spam-only wallet as an A.
 | `idle-stablecoins` | stablecoins ≥ 50% | info |
 | `unpriced-holdings` | ≥ 5 unpriced tokens (usually spam) | low |
 | `small-portfolio` | priced value < $50 | info |
+| `exit-cost` | exit value ≥ 5% below priced value | high ≥ 25, medium ≥ 10, else low |
 
 ## Confidence
 
@@ -93,8 +95,8 @@ a $50,000 sale into $100,000 of backing loses about a third.
 | A | $1M or more | under 0.1% |
 | B | $100K or more | under 1% |
 | C | $20K or more | under 5% |
-| D | $3K or more | under 25% |
-| F | under $3K | 25% or more |
+| D | $3K or more | 25% or less |
+| F | under $3K | more than 25% |
 
 **Backing has to hold for 24 hours.** A token is graded on the lowest backing it had in the last
 24 hours, and backing that appeared less than 24 hours ago (a new pool, or a pool that was emptied
@@ -112,9 +114,42 @@ index is rebuilt every few hours by `apps/api/scripts/near-index.ts` and publish
 `near-token-backing-v1` (from 22 October 2026) added DCL pools, the 24-hour hold and the burn
 exclusion; earlier editions are `near-token-backing-v0` and still verify with the current code.
 
+**Circuit breaker.** A new edition is refused, and the previous one stays published, when it looks
+broken rather than like a market (`apps/api/src/ratings/edition-guard.ts`):
+- it prices under 70% of the tokens the previous edition did;
+- it grades under half as many tokens above F, when the previous edition had at least 20;
+- its total real backing falls below 40%, or rises above three times, the previous edition's, when
+  that was $1M or more.
+
+Such swings within a few hours point to a broken or manipulated data source. The refusal fails the
+run, so it is noticed. Replayed over the editions of 19–26 October 2026, it refused none, including
+the methodology change and the day DCL pools were added (backing up 53%).
+
+**Exit prices.** `GET /v1/exit/{contract}` (free trial at `/v1/demo/exit/{contract}`) turns a token's backing `B` into
+what selling it would fetch, from the same constant-product model (`apps/api/src/ratings/exit-prices.ts`):
+
+| Figure | Formula | Example: B = $100K |
+| --- | --- | --- |
+| A sale of `s` fetches | `s × B / (B + s)` | $10K fetches $9,091 |
+| Exit price (average received per token) | `price × B / (B + s)` | 9.1% under the quote for $10K |
+| Largest sale losing at most `L` (1% and 5%) | `B × L / (1 − L)` | $1,010 and $5,263 |
+| The whole supply, sold at once | the sale formula with `s` = market cap | at most $98,039 of a $5M market cap |
+
+Quotes are given for $1K, $10K, $100K and any `amountUsd` the caller adds. They need nothing but
+an edition's backing, so every edition carries them implicitly and anyone can recompute them; the
+website shows the same numbers. Splitting a sale across several pools fetches the same as one sale
+into a pool of their combined depth, so the model holds across a token's Ref pools. It counts only
+NEAR pools: a token that also trades on other chains or exchanges could fetch more there.
+
+**Track record.** Each edition also publishes `near-track-record.json`: how the grades of the
+editions sealed 1, 7 and 30 days earlier have moved since, as a transition matrix of grade then
+against grade now (or gone from the Index), with counts of upgrades, downgrades and tokens that lost
+all their backing. Only editions of the same methodology are compared, and the matrix is
+recomputable from any two sealed editions (`apps/api/src/ratings/track-record.ts`).
+
 ## Recipient check: is it safe to pay this address?
 
-`GET /v1/check/{address}` (version `2026-10.1`, `apps/api/src/risk/check.ts`) answers a different
+`GET /v1/check/{address}` (version `2026-10.2`, `apps/api/src/risk/check.ts`) answers a different
 question from the risk report: not how a wallet is spread, but whether to send it money. It is
 deterministic: data sources gather the signals, and one pure function judges them.
 
@@ -122,6 +157,8 @@ deterministic: data sources gather the signals, and one pure function judges the
 | --- | --- |
 | A token contract, a Solana program or token account, or a NEAR named account that does not exist | block |
 | Looks like an address the payer paid recently: the same first and last four characters but a different address (addresses of 32 characters or more) | block |
+| A NEAR name that reads like one the payer paid recently: the same once 0/o, 1/l, 5/s, rn/m and vv/w are folded and dashes, underscores and dots dropped (binance-hot.near and binancehot.near) | block |
+| A NEAR name one letter away from one the payer paid recently, after the same folding, when both names are 8 characters or more before their top-level suffix | caution |
 | Never used | caution |
 | A NEAR account running a contract (a DAO or an app) | caution |
 | Less than 7 days old, or fewer than 5 transactions | caution |
@@ -146,9 +183,12 @@ check, so it does not catch look-alikes and says so in its reasons. The paid che
 
 - Prices come from the data provider. On NEAR the pool check bounds what a thinly traded token
   can add, but a position is still shown at its quoted price up to that bound, which can be more
-  than a large sale would really fetch. A token that trades only outside Ref Finance, or only
-  against unvetted tokens, counts as unpriced.
+  than a large sale would really fetch; exit value estimates what it would fetch. A token that
+  trades only outside Ref Finance, or only against unvetted tokens, counts as unpriced.
 - Solana prices are used as Helius quotes them; the pool check covers NEAR only.
+- Exit value and exit prices model a token's Ref pools as one constant-product pool. Concentrated
+  liquidity can fill a small sale better and a large one worse than that, and a token that also
+  trades on other chains or exchanges could fetch more there.
 - Positions inside DeFi protocols (LP tokens, lending deposits, perps) are only seen if they are
   held as fungible tokens with a price.
 - The registry is hand-curated. Expanding it improves categorisation.
@@ -163,5 +203,6 @@ check, so it does not catch look-alikes and says so in its reasons. The paid che
   carries. 2026-10.2 added NEAR accounts. 2026-10.3 added the pool check for NEAR tokens
   outside the registry. 2026-10.4 stopped rating wallets with nothing priced. 2026-10.5 added
   Ref's concentrated-liquidity pools to the pool check, and 2026-10.6 capped it at backing that
-  has held for 24 hours. Weights and thresholds are unchanged since
-  2026-10.1.
+  has held for 24 hours. 2026-10.7 added exit value and the `exit-cost` finding, outside the
+  score. Weights and thresholds of the score are unchanged since 2026-10.1. The recipient check is
+  versioned apart: 2026-10.2 added look-alike NEAR names.

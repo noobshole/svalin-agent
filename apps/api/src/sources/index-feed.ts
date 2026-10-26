@@ -5,11 +5,32 @@ import { callFetch } from "../lib/fetch.js";
 
 type FetchLike = typeof fetch;
 
+/** The latest edition, parsed once for single-token lookups. */
+export type ParsedIndex = { generatedAt: string; methodology: string; byContract: Map<string, RatedTokenRow> };
+
 /** Something that returns the latest published index edition as JSON text. */
 export interface IndexFeed {
   latest(): Promise<string>;
-  /** One token's row in the latest edition, or undefined if it is not graded there. */
-  row?(contract: string): Promise<RatedTokenRow | undefined>;
+  /** The latest edition parsed, reused while the edition is unchanged. Rejects when it cannot be fetched. */
+  parsed?(): Promise<ParsedIndex>;
+}
+
+export function parseIndex(text: string): ParsedIndex {
+  const body = JSON.parse(text) as { generatedAt?: string; methodology?: string; rows?: RatedTokenRow[] };
+  return {
+    generatedAt: body.generatedAt ?? "",
+    methodology: body.methodology ?? "",
+    byContract: new Map((body.rows ?? []).map((row) => [row[0], row])),
+  };
+}
+
+/**
+ * One token's row in the latest edition (undefined if it is not graded there), with the edition.
+ * Rejects when the edition cannot be fetched, so callers can tell "not graded" from "unavailable".
+ */
+export async function indexedToken(feed: IndexFeed, contract: string): Promise<{ index: ParsedIndex; row: RatedTokenRow | undefined }> {
+  const index = feed.parsed ? await feed.parsed() : parseIndex(await feed.latest());
+  return { index, row: index.byContract.get(contract) };
 }
 
 /**
@@ -19,7 +40,7 @@ export interface IndexFeed {
  */
 export class RemoteIndexFeed implements IndexFeed {
   private cached: { at: number; body: Promise<string> } | undefined;
-  private rows: { body: Promise<string>; byContract: Promise<Map<string, RatedTokenRow>> } | undefined;
+  private parsedCache: { body: Promise<string>; parsed: Promise<ParsedIndex> } | undefined;
 
   constructor(
     private readonly url: string,
@@ -45,24 +66,13 @@ export class RemoteIndexFeed implements IndexFeed {
     });
   }
 
-  /**
-   * One token's row, parsed once per fetched edition so lookups do not re-read the whole file.
-   * Rejects when the edition cannot be fetched, so callers can tell "not graded" from "unavailable".
-   */
-  async row(contract: string): Promise<RatedTokenRow | undefined> {
+  /** Parsed once per fetched edition, so lookups do not re-read the whole file. */
+  parsed(): Promise<ParsedIndex> {
     const body = this.latest();
     const source = this.cached?.body ?? body;
-    let rows = this.rows;
-    if (!rows || rows.body !== source) {
-      rows = {
-        body: source,
-        byContract: body.then((text) => {
-          const parsed = (JSON.parse(text) as { rows?: RatedTokenRow[] }).rows ?? [];
-          return new Map(parsed.map((row) => [row[0], row]));
-        }),
-      };
-      this.rows = rows;
+    if (!this.parsedCache || this.parsedCache.body !== source) {
+      this.parsedCache = { body: source, parsed: body.then(parseIndex) };
     }
-    return (await rows.byContract).get(contract);
+    return this.parsedCache.parsed;
   }
 }

@@ -6,7 +6,7 @@ import { supportedChainKeySchema, walletAddressSchema } from "./address.js";
  * The recipient check answers a different question from the risk report: not "how is this wallet
  * spread?" but "is it safe to send money here?". Version it separately from the risk methodology.
  */
-export const RECIPIENT_CHECK_VERSION = "2026-10.1";
+export const RECIPIENT_CHECK_VERSION = "2026-10.2";
 
 /** Below this age (days) or activity (transactions), a recipient is new enough to be a throwaway. */
 export const NEW_RECIPIENT_DAYS = 7;
@@ -32,6 +32,8 @@ export const checkVerdictSchema = z.enum(["allow", "caution", "block"]);
 export const checkReasonSchema = z.object({
   code: z.enum([
     "lookalike",
+    /** A NEAR name one letter away from one the payer paid recently. */
+    "similar-name",
     "token-address",
     "program-address",
     "token-account",
@@ -68,8 +70,13 @@ export const recipientCheckSchema = z.object({
     transactionsAtLeast: z.boolean(),
     /** Whether the payer sent to this recipient in its recent history (null without a payer). */
     paidBefore: z.boolean().nullable(),
-    /** A past recipient of the payer that this address imitates (same first and last 4 characters). */
+    /**
+     * A past recipient of the payer that this address imitates: same first and last 4 characters,
+     * or, for a NEAR name, the same name once look-alike characters and separators are folded.
+     */
     lookalikeOf: z.string().nullable(),
+    /** A past recipient whose NEAR name is one letter away from this one. */
+    similarTo: z.string().nullable().optional(),
     /** Whether this recipient sent the payer something first, the usual address-poisoning move. */
     sentToPayer: z.boolean().nullable(),
   }),

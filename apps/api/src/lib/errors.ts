@@ -31,7 +31,7 @@ export function tokenAddressError(token: TokenNotice, explanation?: string): Api
   if (explanation) {
     hint = explanation;
   } else if (token.grade !== null && token.backingUsd !== null) {
-    hint = `Svalin Index grade ${token.grade}: $${token.backingUsd.toLocaleString("en-US")} of real backing in its pools. Every NEAR token's grade: GET /v1/index/near-tokens.`;
+    hint = `Svalin Index grade ${token.grade}: $${token.backingUsd.toLocaleString("en-US")} of real backing in its pools. What selling it would fetch: GET /v1/exit/${token.address} (free trial: /v1/demo/exit/${token.address}).`;
   } else if (token.chain === "near") {
     hint = "It is one of the trusted tokens Svalin values others against, so it has no grade.";
   } else {

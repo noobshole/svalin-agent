@@ -105,8 +105,10 @@ Settings → Instance Type).
   CDP_API_KEY_SECRET=...        # optional
   ```
 
-  Prices default to $0.002 (portfolio), $0.004 (risk) and $0.02 (brief). Override them with
-  `PRICE_PORTFOLIO_USD`, `PRICE_RISK_USD`, `PRICE_BRIEF_USD` and `PRICE_CHECK_USD`.
+  Prices default to $0.002 (portfolio, check and exit prices), $0.004 (risk) and $0.02 (brief).
+  Override them with `PRICE_PORTFOLIO_USD`, `PRICE_RISK_USD`, `PRICE_BRIEF_USD`, `PRICE_CHECK_USD`
+  and `PRICE_EXIT_USD`. Each visitor gets `DEMO_REQUESTS_PER_DAY` free calls (default 5), and
+  `LOCK_FREE_NEXT_STEPS=true` leaves next steps out of the free risk report.
 
 **Then, on any host:**
 
@@ -121,8 +123,8 @@ Settings → Instance Type).
       `"dataSource": "helius"`, and `https://<api>/v1/demo/risk/<any NEAR account>` one with
       `"dataSource": "fastnear"`.
 - [ ] **(test)** `https://<api>/v1/risk/<address>` returns HTTP 402.
-- [ ] **(test)** The free-scan limit cannot be dodged. Run this 11 times, changing the number each
-      time; the 11th call must return `429`:
+- [ ] **(test)** The free-scan limit cannot be dodged. Run this 6 times, changing the number each
+      time; the 6th call must return `429` (with the default 5 a day):
 
   ```bash
   curl -s -o /dev/null -w "%{http_code}\n" -H "X-Forwarded-For: 10.0.0.1" https://<api>/v1/demo/risk/<address>
@@ -171,6 +173,9 @@ security headers from `apps/web/out/_headers` into the host's header settings.
 - [ ] Request a NEAR **mainnet** facilitator key for your mainnet `PAY_TO_NEAR` account (keys are
       per network), set it as `NEAR_FACILITATOR_API_KEY`, and set `X402_ENV=mainnet`. Redeploy.
 - [ ] Pay for one call with real USDC to confirm settlement end to end.
+- [ ] Update `SVALIN_PAYEES` in `.github/workflows/monitor.yml` to the mainnet receiving accounts.
+      The hourly Monitor workflow fails, and GitHub emails you, if a paid route ever names a payee
+      outside that list, the Index goes stale, or the website's security headers or scripts change.
 - [ ] With CDP keys set, run CDP's free validation check on `https://<api>/v1/risk/<address>` and
       fix any "required" failure. The x402 Bazaar lists endpoints after a settlement through the
       CDP facilitator and drops them after 30 days without one.

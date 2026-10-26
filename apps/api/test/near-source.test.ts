@@ -8,6 +8,7 @@ import { MockPortfolioSource } from "../src/sources/mock-source.js";
 import {
   NearPortfolioSource,
   type NearSourceOptions,
+  exitValue,
   mapNearToOverview,
   parseRefPools,
   poolDepth,
@@ -114,6 +115,14 @@ describe("NEAR pool check", () => {
     ]);
     expect(overview.totalValueUsd).toBe(600);
     expect(overview.unpricedAssetCount).toBe(1);
+    // Selling $5,000 of REF into $100 of backing would fetch about $98, never more than the backing.
+    expect(overview.assets.map((asset) => [asset.symbol, asset.exitValueUsd])).toEqual([
+      ["USDC", 300],
+      ["NEAR", 200],
+      ["REF", 98.04],
+    ]);
+    expect(exitValue(50, 100)).toBeCloseTo(33.33, 2);
+    expect(exitValue(50, 0)).toBe(0);
   });
 
   it("counts only registry tokens in a pool, so junk paired with junk has no depth", () => {

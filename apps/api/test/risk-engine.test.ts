@@ -10,7 +10,13 @@ import { SOLANA_WALLET } from "./helpers.js";
 const NOW = new Date("2026-10-13T00:00:00.000Z");
 
 function overview(
-  holdings: { symbol: string; category: PortfolioOverview["assets"][number]["category"]; valueUsd: number; address?: string }[],
+  holdings: {
+    symbol: string;
+    category: PortfolioOverview["assets"][number]["category"];
+    valueUsd: number;
+    address?: string;
+    exitValueUsd?: number;
+  }[],
   unpricedAssetCount = 0,
 ): PortfolioOverview {
   const { assets, totalValueUsd } = finaliseAssets(
@@ -23,6 +29,7 @@ function overview(
       priceUsd: holding.valueUsd,
       valueUsd: holding.valueUsd,
       category: holding.category,
+      ...(holding.exitValueUsd === undefined ? {} : { exitValueUsd: holding.exitValueUsd }),
     })),
   );
   return {
@@ -35,6 +42,43 @@ function overview(
     refreshedAt: NOW.toISOString(),
   };
 }
+
+describe("exit value", () => {
+  it("totals what each position would fetch if sold now, and flags a large haircut", () => {
+    const report = buildRiskReport(
+      overview([
+        { symbol: "NEAR", category: "native", valueUsd: 3000, exitValueUsd: 3000 },
+        { symbol: "JAMBO", category: "long-tail", valueUsd: 1000, exitValueUsd: 500 },
+      ]),
+      NOW,
+    );
+    expect(report.metrics).toMatchObject({ exitValueUsd: 3500, exitLossPct: 12.5 });
+    const finding = report.findings.find((item) => item.kind === "exit-cost");
+    expect(finding).toMatchObject({ severity: "medium", value: 12.5, threshold: 5 });
+    expect(finding?.title).toBe("Selling everything now would fetch about $3,500, 12.5% less");
+  });
+
+  it("stays silent below 5% and reports nothing when any position's depth is unknown", () => {
+    const small = buildRiskReport(
+      overview([
+        { symbol: "NEAR", category: "native", valueUsd: 3000, exitValueUsd: 3000 },
+        { symbol: "REF", category: "long-tail", valueUsd: 100, exitValueUsd: 98 },
+      ]),
+      NOW,
+    );
+    expect(small.metrics.exitLossPct).toBeCloseTo(0.06, 2);
+    expect(small.findings.some((item) => item.kind === "exit-cost")).toBe(false);
+
+    const unknown = buildRiskReport(
+      overview([
+        { symbol: "SOL", category: "native", valueUsd: 3000 },
+        { symbol: "BONK", category: "meme", valueUsd: 1000, exitValueUsd: 400 },
+      ]),
+      NOW,
+    );
+    expect(unknown.metrics).toMatchObject({ exitValueUsd: null, exitLossPct: null });
+  });
+});
 
 describe("risk engine", () => {
   it("scores a balanced portfolio as low risk with no material findings", () => {

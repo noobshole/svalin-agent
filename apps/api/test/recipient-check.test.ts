@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/app.js";
-import { assessRecipient, looksAlike, type RecipientSignals } from "../src/risk/check.js";
+import { assessRecipient, looksAlike, namesLookAlike, namesNearlyAlike, type RecipientSignals } from "../src/risk/check.js";
 import { HeliusPortfolioSource, transferCounterparties, type SolanaParsedTransaction } from "../src/sources/helius-source.js";
 import { NearPortfolioSource, transferCounterpartiesNear } from "../src/sources/near-source.js";
 import { SOLANA_WALLET, testConfig } from "./helpers.js";
@@ -43,6 +43,25 @@ describe("recipient check rules", () => {
     expect(check.verdict).toBe("block");
     expect(check.signals).toMatchObject({ lookalikeOf: PAYEE, sentToPayer: true, paidBefore: false });
     expect(check.reasons[0].message).toContain("sent this wallet a transfer first");
+  });
+
+  it("blocks NEAR names that read like one the payer paid, and cautions on names one letter off", () => {
+    expect(namesLookAlike("binancehot.near", "binance-hot.near")).toBe(true);
+    expect(namesLookAlike("b1nance-wallet.near", "blnance-wallet.near")).toBe(true);
+    expect(namesLookAlike("rnyshop.near", "myshop.near")).toBe(true);
+    expect(namesLookAlike("mail.near", "mall.near")).toBe(false);
+    expect(namesLookAlike("alice.near", "bob.near")).toBe(false);
+    expect(namesLookAlike("a".repeat(64), "a".repeat(63) + "b")).toBe(false);
+    expect(namesNearlyAlike("treasuryops.near", "treasuryop.near")).toBe(true);
+    expect(namesNearlyAlike("bob1.near", "bob2.near")).toBe(false);
+
+    const near = { ...base, chain: "near" as const, payer: "payer.near" };
+    const lure = assessRecipient({ ...near, recipient: "binancehot.near", payerSentTo: ["binance-hot.near"] }, 10, NOW);
+    expect([lure.verdict, codes(lure), lure.signals.lookalikeOf]).toEqual(["block", ["lookalike"], "binance-hot.near"]);
+    const typo = assessRecipient({ ...near, recipient: "treasuryop.near", payerSentTo: ["treasuryops.near"] }, 10, NOW);
+    expect([typo.verdict, codes(typo), typo.signals.similarTo]).toEqual(["caution", ["similar-name"], "treasuryops.near"]);
+    // Solana addresses keep the first-and-last-characters rule only.
+    expect(codes(assessRecipient({ ...base, payerSentTo: [PAYEE.toLowerCase()] }, 10, NOW))).toEqual(["established"]);
   });
 
   it("blocks addresses that are not wallets, and NEAR accounts that do not exist", () => {

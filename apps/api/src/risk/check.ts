@@ -45,6 +45,63 @@ export function looksAlike(left: string, right: string): boolean {
   return left.slice(0, 4) === right.slice(0, 4) && left.slice(-4) === right.slice(-4);
 }
 
+/** Characters and pairs that read alike in a NEAR account name, folded to one form. */
+const LOOKALIKE_PAIRS: [RegExp, string][] = [
+  [/rn/g, "m"],
+  [/vv/g, "w"],
+  [/0/g, "o"],
+  [/1/g, "l"],
+  [/5/g, "s"],
+];
+const IMPLICIT = /^([0-9a-f]{64}|0x[0-9a-f]{40})$/;
+/** Below this length, names one letter apart are usually just different names (bob1, bob2). */
+const SIMILAR_NAME_MIN = 8;
+
+/** A NEAR account name as a reader sees it: look-alike characters folded, separators dropped. */
+export function nameSkeleton(name: string): string {
+  let skeleton = name.toLowerCase();
+  for (const [pattern, replacement] of LOOKALIKE_PAIRS) skeleton = skeleton.replace(pattern, replacement);
+  return skeleton.replace(/[-_.]/g, "");
+}
+
+/** Two different NEAR names that read the same, such as binance-hot.near and binancehot.near. */
+export function namesLookAlike(left: string, right: string): boolean {
+  if (left === right || IMPLICIT.test(left) || IMPLICIT.test(right)) return false;
+  return nameSkeleton(left) === nameSkeleton(right);
+}
+
+/** Two NEAR names one letter apart once look-alikes are folded, both long enough to be telling. */
+export function namesNearlyAlike(left: string, right: string): boolean {
+  if (left === right || IMPLICIT.test(left) || IMPLICIT.test(right)) return false;
+  // Length is judged without the top-level suffix: bob1.near is a 4-letter name.
+  const own = (name: string) => name.split(".").slice(0, -1).join("").length || name.length;
+  if (Math.min(own(left), own(right)) < SIMILAR_NAME_MIN) return false;
+  return editDistanceIsOne(nameSkeleton(left), nameSkeleton(right));
+}
+
+function editDistanceIsOne(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1 || a === b) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    if (a.length > b.length) i += 1;
+    else if (b.length > a.length) j += 1;
+    else {
+      i += 1;
+      j += 1;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) === 1;
+}
+
 const KIND_REASONS: Partial<Record<RecipientKind, CheckReason>> = {
   token: { code: "token-address", severity: "block", message: "This is a token contract, not a wallet. Money sent here is usually lost." },
   program: { code: "program-address", severity: "block", message: "This is a program, not a wallet. Money sent here is usually lost." },
@@ -81,16 +138,39 @@ export function assessRecipient(
   const kindReason = KIND_REASONS[signals.kind];
   if (kindReason) reasons.push(kindReason);
 
-  const lookalikeOf = signals.payerSentTo?.find((known) => looksAlike(signals.recipient, known)) ?? null;
+  const near = signals.chain === "near";
+  const lookalikeAddress = signals.payerSentTo?.find((known) => looksAlike(signals.recipient, known)) ?? null;
+  const lookalikeName = near ? (signals.payerSentTo?.find((known) => namesLookAlike(signals.recipient, known)) ?? null) : null;
+  const lookalikeOf = lookalikeAddress ?? lookalikeName;
   const sentToPayer = signals.payerReceivedFrom === null ? null : signals.payerReceivedFrom.includes(signals.recipient);
   const paidBefore = signals.payerSentTo === null ? null : signals.payerSentTo.includes(signals.recipient);
-  if (lookalikeOf) {
+  const bait = sentToPayer ? " It also sent this wallet a transfer first, the usual bait." : "";
+  if (lookalikeAddress) {
     reasons.push({
       code: "lookalike",
       severity: "block",
       message:
-        `This address imitates ${lookalikeOf}, which this wallet paid recently: same first and last characters, different address. ` +
-        `That is how address poisoning steals payments.${sentToPayer ? " It also sent this wallet a transfer first, the usual bait." : ""}`,
+        `This address imitates ${lookalikeAddress}, which this wallet paid recently: same first and last characters, different address. ` +
+        `That is how address poisoning steals payments.${bait}`,
+    });
+  } else if (lookalikeName) {
+    reasons.push({
+      code: "lookalike",
+      severity: "block",
+      message:
+        `This account name imitates ${lookalikeName}, which this wallet paid recently: it differs only by characters that look alike, ` +
+        `such as 0 and o, 1 and l, or a dash.${bait}`,
+    });
+  }
+  const similarTo =
+    near && !lookalikeOf && !paidBefore
+      ? (signals.payerSentTo?.find((known) => namesNearlyAlike(signals.recipient, known)) ?? null)
+      : null;
+  if (similarTo) {
+    reasons.push({
+      code: "similar-name",
+      severity: "caution",
+      message: `This name is one letter away from ${similarTo}, which this wallet paid recently. Check that it is the account you mean.`,
     });
   }
 
@@ -174,6 +254,7 @@ export function assessRecipient(
       transactionsAtLeast: signals.transactionsAtLeast,
       paidBefore,
       lookalikeOf,
+      similarTo,
       sentToPayer,
     },
     reasons,

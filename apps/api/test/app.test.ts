@@ -63,7 +63,7 @@ describe("free surface", () => {
   });
 
   it("rate limits the free demo per client", async () => {
-    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_HOUR: "2" }), { clientIp: () => "1.2.3.4" });
+    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_DAY: "2" }), { clientIp: () => "1.2.3.4" });
     const statuses = [];
     for (let index = 0; index < 3; index += 1) {
       statuses.push((await limited.request(`/v1/demo/risk/${SOLANA_WALLET}`)).status);
@@ -71,8 +71,47 @@ describe("free surface", () => {
     expect(statuses).toEqual([200, 200, 429]);
   });
 
+  it("shares one daily allowance across every free route and says how much is left", async () => {
+    const edition = JSON.stringify({ generatedAt: "2026-10-26T00:00:00.000Z", methodology: "near-token-backing-v1", rows: [["token.v2.ref-finance.near", "REF", 2, 100_000, "B", null, null, null]] });
+    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_DAY: "3" }), { clientIp: () => "1.2.3.4", indexFeed: { latest: async () => edition } });
+    const scan = await limited.request(`/v1/demo/risk/${SOLANA_WALLET}`);
+    expect(scan.headers.get("X-Free-Remaining")).toBe("2");
+    const check = await limited.request(`/v1/demo/check/${SOLANA_WALLET}`);
+    expect(check.headers.get("X-Free-Remaining")).toBe("1");
+    expect((await limited.request("/v1/demo/exit/token.v2.ref-finance.near")).headers.get("X-Free-Remaining")).toBe("0");
+    const refused = await limited.request(`/v1/demo/risk/${SOLANA_WALLET}`);
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("X-Free-Remaining")).toBe("0");
+    expect((await refused.json()).error).toContain("00:00 UTC");
+  });
+
+  it("leaves next steps out of the free report only when the lock is on, never out of the paid one", async () => {
+    const open = await (await app.request(`/v1/demo/risk/${SOLANA_WALLET}`)).json();
+    expect(open.findings.length).toBeGreaterThan(0);
+    expect(open.findings.every((finding: { action: string | null }) => typeof finding.action === "string")).toBe(true);
+    expect(open.locked).toBeUndefined();
+
+    const locking = createApp(testConfig({ LOCK_FREE_NEXT_STEPS: "true" }));
+    const free = await (await locking.request(`/v1/demo/risk/${SOLANA_WALLET}`)).json();
+    expect(free.findings.every((finding: { action: string | null }) => finding.action === null)).toBe(true);
+    expect(free.locked.nextSteps).toBe(true);
+    expect(JSON.stringify(free)).not.toContain(open.findings[0].action);
+
+    const paid = await (await locking.request(`/v1/risk/${SOLANA_WALLET}`)).json();
+    expect(paid.findings[0].action).toBe(open.findings[0].action);
+    expect(paid.locked).toBeUndefined();
+  });
+
+  it("answers broken percent-encoding with 400, never a server error", async () => {
+    for (const path of ["/v1/risk/%E0%A4%A", "/v1/demo/risk/%", "/v1/exit/%ZZ", "/v1/check/%25E0"]) {
+      const response = await app.request(path);
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe("invalid_address");
+    }
+  });
+
   it("ignores a caller-chosen X-Forwarded-For entry when rate limiting the demo", async () => {
-    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_HOUR: "1" }));
+    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_DAY: "1" }));
     // Our proxy appends the real client IP last; everything before it is whatever the caller sent.
     const call = (spoofed: string) =>
       limited.request(`/v1/demo/risk/${SOLANA_WALLET}`, { headers: { "x-forwarded-for": `${spoofed}, 203.0.113.7` } });
@@ -90,7 +129,7 @@ describe("free surface", () => {
   });
 
   it("keys the demo on CF-Connecting-IP on Cloudflare, ignoring X-Forwarded-For", async () => {
-    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_HOUR: "1" }), {
+    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_DAY: "1" }), {
       clientIp: createClientIpResolver({ trustedProxyHops: 0, cloudflare: true }),
     });
     const call = (connecting: string, spoofed: string) =>
@@ -105,7 +144,7 @@ describe("free surface", () => {
 
   it("gives each website visitor their own demo allowance only when the web app proves the shared secret", async () => {
     const secret = "s".repeat(32);
-    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_HOUR: "1", WEB_FORWARDING_SECRET: secret }));
+    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_DAY: "1", WEB_FORWARDING_SECRET: secret }));
     const viaWeb = (visitor: string, presented: string) =>
       limited.request(`/v1/demo/risk/${SOLANA_WALLET}`, {
         headers: {
@@ -366,5 +405,63 @@ describe("Svalin Index", () => {
 
     expect((await app.request("/v1/index/near-tokens")).status).toBe(503);
     expect((await app.request("/v1/index/near-tokens")).status).toBe(200);
+  });
+});
+
+describe("exit prices for one token", () => {
+  const edition = JSON.stringify({
+    generatedAt: "2026-10-25T00:40:00.000Z",
+    methodology: "near-token-backing-v1",
+    counts: { A: 0, B: 1, C: 0, D: 0, F: 0 },
+    rows: [["token.v2.ref-finance.near", "REF", 2, 100_000, "B", 5_000_000, 41.2, 12_000]],
+  });
+  const indexFeed = { latest: async () => edition };
+  const app = createApp(testConfig(), { indexFeed });
+  const paywalled = createApp(testConfig({ PAY_TO_SOLANA }), { facilitator: fakeFacilitator(), indexFeed });
+
+  it("answers a token's grade and exit prices, with the caller's own sale size", async () => {
+    const response = await app.request("/v1/exit/token.v2.ref-finance.near?amountUsd=25000");
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.grade).toBe("B");
+    expect(body.exit.quotes.map((quote: { saleUsd: number }) => quote.saleUsd)).toEqual([1_000, 10_000, 25_000, 100_000]);
+    expect(body.edition).toEqual({ generatedAt: "2026-10-25T00:40:00.000Z", methodology: "near-token-backing-v1" });
+  });
+
+  it("is paid, and asks for payment only for a token it can answer", async () => {
+    const graded = await paywalled.request("/v1/exit/token.v2.ref-finance.near");
+    expect(graded.status).toBe(402);
+    expect(graded.headers.get("PAYMENT-REQUIRED")).not.toBeNull();
+    for (const [path, code] of [
+      ["/v1/exit/unknown.near", "not_in_index"],
+      ["/v1/exit/wrap.near", "trusted_token"],
+      ["/v1/exit/token.v2.ref-finance.near?amountUsd=-5", "invalid_amount"],
+    ]) {
+      const response = await paywalled.request(path);
+      expect(response.headers.get("PAYMENT-REQUIRED")).toBeNull();
+      expect((await response.json()).code).toBe(code);
+    }
+  });
+
+  it("has a free trial at the standard sizes; your own size needs the paid route", async () => {
+    const trial = await paywalled.request("/v1/demo/exit/token.v2.ref-finance.near");
+    expect(trial.status).toBe(200);
+    expect((await trial.json()).exit.quotes).toHaveLength(3);
+    const custom = await paywalled.request("/v1/demo/exit/token.v2.ref-finance.near?amountUsd=25000");
+    expect(custom.status).toBe(400);
+    expect((await custom.json()).code).toBe("amount_needs_paid_route");
+  });
+
+  it("accepts a contract typed in capitals", async () => {
+    expect((await app.request("/v1/exit/TOKEN.v2.ref-finance.near")).status).toBe(200);
+  });
+
+  it("rejects a bad contract or amount with 400", async () => {
+    expect((await app.request("/v1/exit/not%20a%20token!")).status).toBe(400);
+    for (const amount of ["0", "-5", "abc", "1e13"]) {
+      const response = await app.request(`/v1/exit/token.v2.ref-finance.near?amountUsd=${amount}`);
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe("invalid_amount");
+    }
   });
 });

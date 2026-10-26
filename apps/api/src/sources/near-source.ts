@@ -2,6 +2,7 @@ import { NEAR_NATIVE_TOKEN, WNEAR_TOKEN, categoriseToken, knownTokens, lookupTok
 import {
   isNearAccountId,
   portfolioOverviewSchema,
+  saleProceeds,
   tokenGradeFor,
   type ChainFamily,
   type PortfolioOverview,
@@ -13,7 +14,7 @@ import { ApiError, tokenAddressError } from "../lib/errors.js";
 import type { RecipientSignals } from "../risk/check.js";
 import { callFetch } from "../lib/fetch.js";
 import { onChainLabel } from "../lib/text.js";
-import { finaliseAssets, formatUnits, type PortfolioSource } from "./portfolio-source.js";
+import { finaliseAssets, formatUnits, round, type PortfolioSource } from "./portfolio-source.js";
 
 /** The subset of FastNEAR's `GET /v1/account/{id}/full` response Svalin relies on. */
 export type FastNearAccount = {
@@ -415,6 +416,7 @@ export function mapNearToOverview(
       balance: formatUnits(nativeYocto, NEAR_DECIMALS),
       priceUsd: nearPrice,
       valueUsd: nearPrice === null ? 0 : toAmount(nativeYocto, NEAR_DECIMALS) * nearPrice,
+      exitValueUsd: nearPrice === null ? 0 : round(toAmount(nativeYocto, NEAR_DECIMALS) * nearPrice, 2),
       category: "native",
     });
   }
@@ -431,6 +433,7 @@ export function mapNearToOverview(
       balance: formatUnits(stake.yocto, NEAR_DECIMALS),
       priceUsd: nearPrice,
       valueUsd: nearPrice === null ? 0 : toAmount(stake.yocto, NEAR_DECIMALS) * nearPrice,
+      exitValueUsd: nearPrice === null ? 0 : round(toAmount(stake.yocto, NEAR_DECIMALS) * nearPrice, 2),
       category: "liquid-staking",
     });
   }
@@ -449,14 +452,17 @@ export function mapNearToOverview(
     const known = lookupToken("near", token.contract_id);
     // Anyone can send an account a token whose quoted price is fake or stale, so a token outside
     // the registry is worth at most what its pools could pay out, and nothing without a pool.
-    let valueUsd = toAmount(raw, entry.decimal) * price;
+    const quotedUsd = toAmount(raw, entry.decimal) * price;
+    let valueUsd = quotedUsd;
+    let exitValueUsd = quotedUsd;
     if (!known) {
       const sellable = depth.get(token.contract_id) ?? 0;
       if (sellable <= 0) {
         unpricedAssetCount += 1;
         continue;
       }
-      valueUsd = Math.min(valueUsd, sellable);
+      valueUsd = Math.min(quotedUsd, sellable);
+      exitValueUsd = exitValue(quotedUsd, sellable);
     }
 
     const symbol = known?.symbol ?? onChainLabel(entry.symbol) ?? `${token.contract_id.slice(0, 6)}…`;
@@ -468,6 +474,7 @@ export function mapNearToOverview(
       balance: formatUnits(raw, entry.decimal),
       priceUsd: price,
       valueUsd,
+      exitValueUsd: round(exitValueUsd, 2),
       category: categoriseToken("near", token.contract_id),
     });
   }
@@ -572,6 +579,16 @@ function holdsUnvettedTokens(account: FastNearAccount, prices: NearPriceList): b
 function priceOf(prices: NearPriceList, contract: string): number | null {
   const price = Number(prices[contract]?.price);
   return Number.isFinite(price) && price > 0 ? price : null;
+}
+
+/**
+ * What selling `quotedUsd` worth of a token would fetch from pools holding `backingUsd` of
+ * registry tokens on the other side: the Index's sale loss applied to the whole position. The bigger
+ * the sale against the pool, the worse the price, and never more than the backing itself. Registry
+ * tokens trade deep enough to count at full value.
+ */
+export function exitValue(quotedUsd: number, backingUsd: number): number {
+  return saleProceeds(backingUsd, quotedUsd);
 }
 
 /**

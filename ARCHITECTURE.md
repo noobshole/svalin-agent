@@ -84,7 +84,7 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
 
 ## Free demo rate limiting (`lib/client-ip.ts`, `lib/rate-limit.ts`)
 
-The demo is limited per visitor per hour plus a global daily cap. The visitor key is never the
+The free routes share one allowance per visitor per UTC day (5 by default), plus a global daily cap. The visitor key is never the
 first `X-Forwarded-For` entry, because the caller chooses that. It is, in order:
 
 1. The visitor IP passed by a server-side frontend in `x-svalin-client-ip`, accepted only with the

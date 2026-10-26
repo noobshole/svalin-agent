@@ -55,6 +55,11 @@ const MAX_TRANSACTION_VERSION = 1;
 
 type FetchLike = typeof fetch;
 
+/** Records a provider error for the operator; the RPC URL (which holds the API key) is never logged. */
+function upstreamLog(method: string, status: number, message: string | undefined) {
+  console.error(JSON.stringify({ level: "error", msg: "helius_error", method, status, upstream: message?.slice(0, 200) }));
+}
+
 export class HeliusPortfolioSource implements PortfolioSource {
   constructor(
     private readonly rpcUrl: string,
@@ -169,7 +174,9 @@ export class HeliusPortfolioSource implements PortfolioSource {
     }
     const body = (await response.json().catch(() => ({}))) as { result?: T; error?: { message?: string } };
     if (!response.ok || body.error || !("result" in body)) {
-      throw new ApiError(502, "upstream_error", body.error?.message ?? `Solana data provider returned ${response.status}.`);
+      // The provider's own wording stays in our logs: callers (often agents) get ours, never theirs.
+      upstreamLog(method, response.status, body.error?.message);
+      throw new ApiError(502, "upstream_error", `Solana data provider returned an error (${response.status}).`);
     }
     return body.result as T;
   }
@@ -232,7 +239,8 @@ export class HeliusPortfolioSource implements PortfolioSource {
       if (body.error.code === -32602) {
         throw new ApiError(400, "invalid_address", "Helius rejected this address.");
       }
-      throw new ApiError(502, "upstream_error", body.error.message ?? "Solana data provider error.");
+      upstreamLog("getAssetsByOwner", response.status, body.error.message);
+      throw new ApiError(502, "upstream_error", "Solana data provider error.");
     }
     return body;
   }

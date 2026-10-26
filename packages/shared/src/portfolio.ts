@@ -31,6 +31,11 @@ export const portfolioAssetSchema = z.object({
   /** Share of total *priced* value, in basis points. */
   allocationBps: z.number().int().min(0).max(10_000),
   category: assetCategorySchema,
+  /**
+   * What selling the whole position now would fetch after price impact, given the real money in
+   * its pools. Absent or null when the market depth is not known.
+   */
+  exitValueUsd: z.number().nonnegative().nullable().optional(),
 });
 
 export const portfolioOverviewSchema = z.object({

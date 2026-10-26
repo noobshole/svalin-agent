@@ -24,6 +24,8 @@ accounts, and no way to move funds.
 - **Portfolio risk reports.** A 0-100 score and A-F grade from concentration, stablecoin buffer and long-tail
   exposure, with findings that explain each risk in plain English and suggest a next step. A
   wallet with nothing priced is not rated, so a fresh or spam-only wallet never shows as an A.
+- **Exit value.** On NEAR, a report also says what the wallet would actually fetch if everything
+  were sold now, given the real money in each token's pools, and flags a large gap.
 - **Solana and NEAR.** Solana wallets (`7xKX…`) and NEAR accounts (`alice.near`) go through the
   same engine and the same endpoints.
 - **Priced portfolios.** Live balances and USD prices, with each token placed in a risk category:
@@ -32,16 +34,23 @@ accounts, and no way to move funds.
   person, written by Claude when configured and by a template otherwise.
 - **Check before paying.** Before an agent sends money, `GET /v1/check/{address}` answers allow,
   caution or block: token, program and non-existent addresses, brand-new or barely used wallets,
-  and, given the payer, an address imitating one the payer paid recently (address poisoning) or a
-  large first payment. If the payer's history cannot be read, it says so instead of guessing.
+  and, given the payer, an address or NEAR name imitating one the payer paid recently (address
+  poisoning) or a large first payment. If the payer's history cannot be read, it says so instead of
+  guessing.
 - **Svalin Index.** Every NEAR token with a price, graded A-F by the real money in its Ref Finance
   pools (classic and concentrated liquidity), counting only backing that has held for 24 hours,
-  with market cap, top-10 holder share and holder count. Rebuilt every few hours and published in the
+  with market cap, top-10 holder share, holder count, and a track record of how earlier grades
+  moved. Every token also has exit prices: what selling $1K, $10K or $100K of it would actually
+  fetch, and the most its whole supply could. Rebuilt every few hours and published in the
   [svalin-index](https://github.com/noobshole/svalin-index) repository;
   [see it live](https://svalin.noobshole.workers.dev/ratings).
-- **Pay per call.** USDC over x402 on Solana or NEAR. No keys, no accounts, no subscription.
+- **Pay per call.** Agents pay in USDC over x402 on Solana or NEAR: no keys, no accounts, no
+  subscription. Everyone gets 5 free calls a day.
 - **MCP server.** `svalin-mcp` brings the tools to Claude, Cursor and any MCP client, with a hard
   per-call price cap and a session budget.
+- **Payment guard.** Before an agent pays any x402 service, `svalin-mcp` asks for the price without
+  paying and blocks a payee or price that changed since the service was first seen, a token that
+  is not USDC, or an inflated price, and runs Svalin's check on the payee.
 - **Read-only.** Svalin never asks for keys, approvals or signatures from the wallet it analyses,
   and it has no code path that moves funds.
 - **Deterministic.** Same holdings, same report. No LLM computes a number, and the
@@ -88,7 +97,7 @@ A trimmed risk report:
       "confidence": 64
     }
   ],
-  "methodologyVersion": "2026-10.6"
+  "methodologyVersion": "2026-10.7"
 }
 ```
 
@@ -147,7 +156,7 @@ flowchart LR
 | Scheduled treasury check | `risk` for each wallet on each run | $0.004 per run |
 | Wallet explainer in chat | `brief` | $0.02 |
 | Batch research | `portfolio` or `risk` for each wallet | $0.002 to $0.004 |
-| Trying it out | free scan | Free, 10 per hour |
+| Trying it out | free scan | Free, 5 calls a day |
 
 Any orchestrator that can call MCP tools or make HTTP requests can use these patterns.
 
@@ -155,13 +164,15 @@ Any orchestrator that can call MCP tools or make HTTP requests can use these pat
 
 | Endpoint | Price | Returns |
 | --- | --- | --- |
-| `GET /v1/demo/risk/{address}` | Free, 10 per hour per visitor | Risk report |
-| `GET /v1/demo/check/{address}` | Free, shares the demo limit | Recipient check, without the payer's history (no look-alike check) |
+| `GET /v1/demo/risk/{address}` | Free, 5 calls a day per visitor (back at 00:00 UTC) | Risk report; its next steps can be switched to paid-only |
+| `GET /v1/demo/check/{address}` | Free, shares the 5 a day | Recipient check, without the payer's history (no look-alike check) |
 | `GET /v1/index/near-tokens` | Free | The Svalin Index: every NEAR token graded A-F by the real money behind its price |
+| `GET /v1/demo/exit/{contract}` | Free, shares the 5 a day | Exit prices at $1K, $10K and $100K |
 | `GET /v1/portfolio/{address}` | $0.002 | Priced holdings, allocation and a risk category per token |
 | `GET /v1/risk/{address}` | $0.004 | Score, grade, exposure metrics and findings with actions |
 | `GET /v1/brief/{address}` | $0.02 | Headline, summary and up to 3 actions, plus the full report |
 | `GET /v1/check/{address}?payer=&amountUsd=` | $0.002 | Before paying someone: allow, caution or block, with reasons |
+| `GET /v1/exit/{contract}?amountUsd=` | $0.002 | A NEAR token's grade and exit prices, at your own sale size too: what selling it would actually fetch |
 | `GET /` · `/openapi.json` · `/llms.txt` | Free | Machine-readable service description for agents |
 
 `{address}` is a Solana address or a NEAR account ID. Prices are the defaults and can be changed
@@ -206,7 +217,7 @@ paid endpoint: you get a `402` with a `PAYMENT-REQUIRED` header offering Solana 
 testnet USDC.
 
 ```bash
-pnpm test        # risk engine, recipient check, Helius and NEAR mapping, paywall, facilitators, rate limiting, narrator, MCP end-to-end payment
+pnpm test        # risk engine, recipient check, exit prices, Helius and NEAR mapping, paywall, facilitators, rate limiting, narrator, payment guard, MCP end-to-end payment
 pnpm typecheck
 ```
 
@@ -236,11 +247,14 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the request pipeline and module bound
 | No fake data in production | The API refuses to start in production without a live data source |
 | Bounded agent spending | `svalin-mcp` enforces a per-call price cap and a per-session budget |
 | Free tier cannot be abused | Per-visitor and global daily limits, keyed on addresses the caller cannot forge |
+| No surprise scripts on the website | Each page's policy allows only the scripts it was built with |
+| Broken data is not published | The Index refuses an edition that swings far more than a market can in a few hours |
+| Problems are noticed | An hourly check of the live API, payees, Index freshness and website headers |
 | Deterministic scoring | The risk engine has no I/O and no LLM; methodology changes bump a version number |
 
 Found a security issue? Please report it privately through a
 [security advisory](https://github.com/noobshole/svalin-agent/security/advisories/new) rather than a
-public issue.
+public issue; see [SECURITY.md](SECURITY.md).
 
 ## Deploy
 

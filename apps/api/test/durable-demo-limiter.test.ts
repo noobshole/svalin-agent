@@ -37,20 +37,20 @@ function sharedNamespace(now: () => number) {
 }
 
 describe("Durable Object demo limiter", () => {
-  it("enforces one hourly limit across separate isolates", async () => {
-    let now = 1_000_000;
+  it("enforces one daily allowance across separate isolates, renewed at 00:00 UTC", async () => {
+    let now = Date.UTC(2026, 9, 26, 22, 0);
     const { namespace } = sharedNamespace(() => now);
     const isolateA = new DurableDemoLimiter(namespace, 3, 100);
     const isolateB = new DurableDemoLimiter(namespace, 3, 100);
 
-    expect(await isolateA.check("1.1.1.1")).toBeNull();
-    expect(await isolateB.check("1.1.1.1")).toBeNull();
-    expect(await isolateA.check("1.1.1.1")).toBeNull();
-    expect(await isolateB.check("1.1.1.1")).toBeGreaterThan(0);
-    expect(await isolateA.check("2.2.2.2")).toBeNull();
+    expect(await isolateA.check("1.1.1.1")).toEqual({ retryAfter: null, remaining: 2 });
+    expect(await isolateB.check("1.1.1.1")).toEqual({ retryAfter: null, remaining: 1 });
+    expect(await isolateA.check("1.1.1.1")).toEqual({ retryAfter: null, remaining: 0 });
+    expect(await isolateB.check("1.1.1.1")).toEqual({ retryAfter: 2 * 60 * 60, remaining: 0 });
+    expect((await isolateA.check("2.2.2.2")).retryAfter).toBeNull();
 
-    now += 60 * 60 * 1000;
-    expect(await isolateB.check("1.1.1.1")).toBeNull();
+    now = Date.UTC(2026, 9, 27, 0, 1);
+    expect(await isolateB.check("1.1.1.1")).toEqual({ retryAfter: null, remaining: 2 });
   });
 
   it("enforces the global daily cap, then starts a fresh day with empty storage", async () => {
@@ -58,12 +58,12 @@ describe("Durable Object demo limiter", () => {
     const { namespace, storage } = sharedNamespace(() => now);
     const limiter = new DurableDemoLimiter(namespace, 10, 2);
 
-    expect(await limiter.check("a")).toBeNull();
-    expect(await limiter.check("b")).toBeNull();
-    expect(await limiter.check("c")).toBeGreaterThan(0);
+    expect((await limiter.check("a")).retryAfter).toBeNull();
+    expect((await limiter.check("b")).retryAfter).toBeNull();
+    expect((await limiter.check("c")).retryAfter).toBeGreaterThan(0);
 
     now += 24 * 60 * 60 * 1000;
-    expect(await limiter.check("c")).toBeNull();
+    expect((await limiter.check("c")).retryAfter).toBeNull();
     expect(storage.size()).toBe(2);
   });
 
@@ -76,7 +76,7 @@ describe("Durable Object demo limiter", () => {
         },
       }),
     };
-    expect(await new DurableDemoLimiter(namespace, 10, 100).check("1.1.1.1")).toBe(60);
+    expect(await new DurableDemoLimiter(namespace, 10, 100).check("1.1.1.1")).toEqual({ retryAfter: 60, remaining: 0 });
   });
 
   it("is used by the demo route", async () => {

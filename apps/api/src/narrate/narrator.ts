@@ -40,7 +40,10 @@ export function templateBrief(report: RiskReport, now: Date = new Date()): Brief
     wallet: report.wallet,
     headline: headline.slice(0, 200),
     summary: parts.join(" "),
-    actions: report.findings.slice(0, 3).map((finding) => finding.action),
+    actions: report.findings
+      .slice(0, 3)
+      .map((finding) => finding.action)
+      .filter((action): action is string => action !== null),
     narrator: "template",
     risk: report,
     generatedAt: now.toISOString(),

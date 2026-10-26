@@ -6,12 +6,16 @@
  * generated per run and never holds funds.
  */
 import { generateKeyPairSync } from "node:crypto";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { base58 } from "@scure/base";
+import { encodePaymentRequiredHeader } from "@x402/core/http";
 import { decodeSignedDelegateB64, parseFtTransferArgs } from "@x402/near";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -29,6 +33,7 @@ const MISSING_ACCOUNT = "nobody-here.testnet";
 const PAY_TO_NEAR = "svalin-pay.testnet";
 const PAYER = "svalin-buyer.testnet";
 const TESTNET_USDC = "3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af";
+const NEAR_USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
 
 /** A fresh ed25519 key in NEAR's `ed25519:<base58(seed || publicKey)>` format. */
 function testNearKey(): string {
@@ -93,14 +98,29 @@ function harness() {
     facilitator,
     portfolioSource: new SampleSource(),
     ledger: { record: async (entry) => void settled.push(entry) },
+    indexFeed: {
+      latest: async () =>
+        JSON.stringify({
+          generatedAt: "2026-10-25T00:40:00.000Z",
+          methodology: "near-token-backing-v1",
+          counts: { A: 0, B: 1, C: 0, D: 0, F: 0 },
+          rows: [["token.v2.ref-finance.near", "REF", 2, 100_000, "B", 5_000_000, 41.2, 12_000]],
+        }),
+    },
   });
   const apiFetch = ((input: RequestInfo | URL, init?: RequestInit) => api.fetch(new Request(input, init))) as typeof fetch;
 
   return { apiFetch, facilitator, settled };
 }
 
+/** A fresh payee memory file per connection, so tests never touch ~/.svalin. */
+const memoryFile = () => join(mkdtempSync(join(tmpdir(), "svalin-mcp-")), "payees.json");
+
 async function connect(apiFetch: typeof fetch, env: Record<string, string>) {
-  const svalin = await createSvalinClient(loadMcpConfig({ SVALIN_API_URL: "http://svalin.test", ...env }), apiFetch);
+  const svalin = await createSvalinClient(
+    loadMcpConfig({ SVALIN_API_URL: "http://svalin.test", SVALIN_PAYEE_MEMORY: memoryFile(), ...env }),
+    apiFetch,
+  );
   const server = createSvalinMcpServer(svalin);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -134,12 +154,32 @@ describe("svalin-mcp end to end", () => {
       "svalin_brief",
       "svalin_check_recipient",
       "svalin_check_recipient_free",
+      "svalin_check_x402_payment",
       "svalin_portfolio",
       "svalin_risk_report",
       "svalin_risk_scan",
       "svalin_spend_status",
+      "svalin_token_exit",
+      "svalin_token_exit_free",
     ]);
     expect(tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
+  });
+
+  it("quotes exit prices: a free trial, and the paid tool with your own sale size", async () => {
+    const trial = await (await connect(harness().apiFetch, {})).client.callTool({
+      name: "svalin_token_exit_free",
+      arguments: { contract: "token.v2.ref-finance.near" },
+    });
+    expect(JSON.parse(textOf(trial)).exit.quotes).toHaveLength(3);
+
+    const { apiFetch, settled } = harness();
+    const { client } = await connect(apiFetch, nearWallet);
+    const result = await client.callTool({ name: "svalin_token_exit", arguments: { contract: "token.v2.ref-finance.near", amountUsd: 2_500 } });
+    expect(result.isError).toBeFalsy();
+    const exit = JSON.parse(textOf(result));
+    expect(exit.grade).toBe("B");
+    expect(exit.exit.quotes.map((quote: { saleUsd: number }) => quote.saleUsd)).toEqual([1_000, 2_500, 10_000, 100_000]);
+    expect(settled[0]).toMatchObject({ network: "near:testnet", amount: "2000" });
   });
 
   it("checks a recipient before paying, passing the payer and amount to the API", async () => {
@@ -206,5 +246,49 @@ describe("svalin-mcp end to end", () => {
     expect(second.isError).toBe(true);
     expect(textOf(second)).toMatch(/session budget/);
     expect(settled).toHaveLength(1);
+  });
+
+  it("checks an x402 payment before paying: remembers the payee, then blocks a changed one", async () => {
+    const { apiFetch } = harness();
+    let payTo = "good-shop.near";
+    const shop = (async () => {
+      const header = encodePaymentRequiredHeader({
+        x402Version: 2,
+        resource: { url: "https://shop.test/report" },
+        accepts: [{ scheme: "exact", network: "near:mainnet", asset: NEAR_USDC, amount: "10000", payTo, maxTimeoutSeconds: 60, extra: {} }],
+      });
+      return new Response(null, { status: 402, headers: { "PAYMENT-REQUIRED": header } });
+    }) as typeof fetch;
+    const routed = ((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input instanceof Request ? input.url : input).startsWith("https://shop.test") ? shop(input, init) : apiFetch(input, init)) as typeof fetch;
+    const { client } = await connect(routed, {});
+
+    const first = JSON.parse(textOf(await client.callTool({ name: "svalin_check_x402_payment", arguments: { url: "https://shop.test/report" } })));
+    expect(first.options[0]).toMatchObject({ network: "near:mainnet", payTo: "good-shop.near", price: "$0.01" });
+    const firstCodes = first.options[0].reasons.map((reason: { code: string }) => reason.code);
+    expect(firstCodes).toContain("new-service");
+    // Svalin's recipient check of the payee ran too (the free trial: this server has no wallet).
+    expect(firstCodes.some((code: string) => code.startsWith("payee-"))).toBe(true);
+
+    payTo = "g00d-shop.near";
+    const second = JSON.parse(textOf(await client.callTool({ name: "svalin_check_x402_payment", arguments: { url: "https://shop.test/report" } })));
+    expect(second.verdict).toBe("block");
+    expect(second.options[0].reasons.map((reason: { code: string }) => reason.code)).toContain("payee-changed");
+  });
+
+  it("refuses to pay Svalin itself if its payee changed since first seen", async () => {
+    const { apiFetch, settled } = harness();
+    const file = memoryFile();
+    writeFileSync(
+      file,
+      JSON.stringify({
+        "http://svalin.test": { "near:testnet": { payTo: "someone-else.testnet", asset: TESTNET_USDC, amount: "20000", firstSeen: "2026-10-20T00:00:00.000Z" } },
+      }),
+    );
+    const { client } = await connect(apiFetch, { ...nearWallet, SVALIN_PAYEE_MEMORY: file });
+
+    const result = await client.callTool({ name: "svalin_brief", arguments: { address: WALLET } });
+    expect(result.isError).toBe(true);
+    expect(settled).toHaveLength(0);
   });
 });

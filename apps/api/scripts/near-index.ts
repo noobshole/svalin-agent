@@ -14,8 +14,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 
-import { nearTokenIndexSchema, tokenGradeFor, type RatedTokenRow } from "@svalin-agent/shared";
+import { nearTokenIndexSchema, tokenGradeFor, trackRecordSchema, type RatedTokenRow } from "@svalin-agent/shared";
 
+import { editionAnomaly } from "../src/ratings/edition-guard.js";
 import { sealEdition, sha256Hex } from "../src/ratings/edition.js";
 import {
   heldDepth,
@@ -26,6 +27,7 @@ import {
   type BackingHistory,
   type TokenStats,
 } from "../src/ratings/near-tokens.js";
+import { gradeMigration } from "../src/ratings/track-record.js";
 import { parseRefPools, poolDepth, type NearPriceList, type RefDclPool } from "../src/sources/near-source.js";
 
 const PRICES_URL = process.env.NEAR_PRICE_API_URL ?? "https://indexer.ref.finance/list-token-price";
@@ -37,6 +39,9 @@ const DCL_CONTRACT = process.env.NEAR_DCL_CONTRACT ?? "dclv2.ref-labs.near";
 const DATA_DIR = resolve(process.argv[2] ?? "index-out");
 const STATS_FILE = resolve(DATA_DIR, "near-token-stats.json");
 const HISTORY_FILE = resolve(DATA_DIR, "inputs/history.json.gz");
+/** Sealed daily editions, compared with this one for the track record. */
+const SEALED_URL = process.env.NEAR_INDEX_SEALED_URL ?? "https://raw.githubusercontent.com/noobshole/svalin-index/main/editions";
+const TRACK_WINDOWS = [1, 7, 30];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Zero-backing tokens with the highest quoted prices also get a market cap: the loudest claims. */
@@ -214,6 +219,18 @@ const index = nearTokenIndexSchema.parse({
   ...rateNearTokens(prices, depth, stats, new Date(now)),
   provenance: { code, inputs: { pricesSha256: sha256Hex(pricesText), poolsSha256: sha256Hex(poolsText) } },
 });
+// The circuit breaker (src/ratings/edition-guard.ts): an edition that looks broken is refused before
+// anything is written, so the previous one stays published and the failed run alerts the owner.
+// After checking the inputs by hand, NEAR_INDEX_ACCEPT_ANOMALY=1 publishes it anyway.
+const previousIndexFile = resolve(DATA_DIR, "near-token-index.json");
+if (existsSync(previousIndexFile) && process.env.NEAR_INDEX_ACCEPT_ANOMALY !== "1") {
+  const anomaly = editionAnomaly(nearTokenIndexSchema.parse(JSON.parse(readFileSync(previousIndexFile, "utf8"))), index);
+  if (anomaly) {
+    console.error(JSON.stringify({ level: "error", msg: "edition_refused", anomaly }));
+    process.exit(2);
+  }
+}
+
 const indexText = JSON.stringify(index);
 mkdirSync(resolve(DATA_DIR, "inputs"), { recursive: true });
 writeFileSync(resolve(DATA_DIR, "inputs/prices.json.gz"), gzipSync(pricesText));
@@ -243,6 +260,24 @@ const edition = sealEdition({
 });
 writeFileSync(resolve(DATA_DIR, "edition.json"), `${JSON.stringify(edition, null, 2)}\n`);
 writeFileSync(STATS_FILE, JSON.stringify(Object.fromEntries(cache)));
+
+// The track record: how grades moved since the editions sealed 1, 7 and 30 days ago. Only editions
+// graded by the same methodology are compared, and a sealed edition that cannot be read skips its
+// window rather than holding up this one.
+const windows = [];
+for (const days of TRACK_WINDOWS) {
+  const sealedDay = new Date(now - days * DAY_MS).toISOString().slice(0, 10);
+  try {
+    const response = await fetch(`${SEALED_URL}/${sealedDay}/near-token-index.json`, { signal: AbortSignal.timeout(30_000) });
+    if (!response.ok) continue;
+    const baseline = nearTokenIndexSchema.parse(await response.json());
+    if (baseline.methodology === index.methodology) windows.push(gradeMigration(baseline, index, days, sealedDay));
+  } catch {
+    failures.set("track-record", (failures.get("track-record") ?? 0) + 1);
+  }
+}
+const trackRecord = trackRecordSchema.parse({ generatedAt: index.generatedAt, methodology: index.methodology, windows });
+writeFileSync(resolve(DATA_DIR, "near-track-record.json"), JSON.stringify(trackRecord));
 console.log(
   JSON.stringify({
     msg: "near_index_built",
@@ -254,6 +289,7 @@ console.log(
     withTop10: index.rows.filter((row) => row[6] !== null).length,
     withHolders: index.rows.filter((row) => row[7] !== null).length,
     fingerprint: edition.fingerprint,
+    trackRecordWindows: windows.map((window) => window.days),
     seconds: Math.round((Date.now() - now) / 1000),
     failures: Object.fromEntries(failures),
   }),

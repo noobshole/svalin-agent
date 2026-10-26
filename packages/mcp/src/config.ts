@@ -21,6 +21,8 @@ const envSchema = z.object({
   SVALIN_PREFERRED_NETWORK: z.enum(["solana", "near"]).default("solana"),
   SVALIN_MAX_PRICE_USD: z.coerce.number().positive().default(0.05),
   SVALIN_BUDGET_USD: z.coerce.number().positive().default(1),
+  /** Where the payment guard remembers each service's payee and price (default ~/.svalin/payees.json). */
+  SVALIN_PAYEE_MEMORY: z.string().optional(),
 }).refine((env) => Boolean(env.SVALIN_NEAR_ACCOUNT_ID) === Boolean(env.SVALIN_NEAR_PRIVATE_KEY), {
   message: "Set both SVALIN_NEAR_ACCOUNT_ID and SVALIN_NEAR_PRIVATE_KEY, or neither.",
 });

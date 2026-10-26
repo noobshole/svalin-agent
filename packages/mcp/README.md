@@ -12,13 +12,16 @@ per-call limit and a session budget. Svalin never holds your funds and can never
 
 | Tool | Default cost | What it returns |
 | --- | --- | --- |
-| `svalin_risk_scan` | free, rate limited | Risk score 0-100, grade A-F, exposure metrics, findings with actions |
+| `svalin_risk_scan` | free, 5 a day (shared by the free tools) | Risk score 0-100, grade A-F, exposure metrics, findings (next steps may be locked; the paid report has them) |
 | `svalin_risk_report` | $0.004 | Same report, no rate limit |
 | `svalin_portfolio` | $0.002 | Priced holdings with allocation and risk category per token |
 | `svalin_brief` | $0.02 | Headline, summary and up to 3 actions, plus the full report |
 | `svalin_check_recipient` | $0.002 | Before paying someone: allow, caution or block, with reasons (address poisoning, brand-new wallets, tokens and programs) |
-| `svalin_check_recipient_free` | free, rate limited | The same check as a free trial, without the payer's history (no look-alike check) |
-| `svalin_spend_status` | free | Paying wallet, amount spent, budget remaining |
+| `svalin_check_recipient_free` | free, 5 a day (shared) | The same check as a free trial, without the payer's history (no look-alike check) |
+| `svalin_token_exit` | $0.002 | A NEAR token's grade and exit prices: what selling $1K, $10K, $100K or your own amount would actually fetch |
+| `svalin_token_exit_free` | free, 5 a day (shared) | The same at $1K, $10K and $100K as a free trial |
+| `svalin_check_x402_payment` | free, or one check ($0.002) with a wallet | Before paying **any** x402 service: allow, caution or block (see [Payment guard](#payment-guard)) |
+| `svalin_spend_status` | free | Paying wallet, amount spent, budget remaining, payee memory file |
 
 Prices are set by the API you point at. The MCP refuses any payment above `SVALIN_MAX_PRICE_USD`.
 
@@ -79,6 +82,7 @@ Then, in the configuration above, replace `"command": "npx"` and its `"args"` wi
 | `SVALIN_PREFERRED_NETWORK` | `solana` | `solana` or `near` when both wallets are set |
 | `SVALIN_MAX_PRICE_USD` | `0.05` | Hard per-call cap |
 | `SVALIN_BUDGET_USD` | `1` | Hard cap per MCP session (resets when the client restarts) |
+| `SVALIN_PAYEE_MEMORY` | `~/.svalin/payees.json` | Where the payment guard remembers each service's payee and price |
 
 **Use a dedicated hot wallet** holding only a few dollars of USDC. Never put a main wallet key
 in an MCP config. With no key set, only the free scan works.
@@ -91,3 +95,27 @@ in an MCP config. With no key set, only the free scan works.
    (on NEAR, a delegated `ft_transfer` whose gas the facilitator pays), and retries.
 4. A facilitator settles the transfer on-chain and the API returns the data. You are not charged
    if the API returns an error.
+
+svalin-mcp also refuses to pay Svalin itself if Svalin's payee address ever differs from the one it
+saw first, the same rule the payment guard applies to every service.
+
+## Payment guard
+
+x402 trusts the server: whoever answers `402` names the price, the token and the address to pay.
+A hostile or hijacked service can raise its price, ask for a different token, or name a new
+address. `svalin_check_x402_payment` asks the URL for its price **without paying** and answers
+allow, caution or block:
+
+| Rule | Verdict |
+| --- | --- |
+| The payee differs from the one this service named the first time | block |
+| The price is 10 times the first price or more (twice or more: caution) | block |
+| The token asked for is not USDC on that network | block |
+| Above your `maxUsd`, or twice your `expectedUsd` or more (just above it: caution) | block |
+| The payment is for a different site than the one called, or the URL redirects | caution |
+| Svalin's recipient check of the payee on Solana and NEAR mainnet: token or program addresses, brand-new wallets, look-alikes of addresses you paid | its verdict |
+
+The first payee and price of each service are remembered in `SVALIN_PAYEE_MEMORY`. They are never
+overwritten, so neither a later request nor an agent can move them. If a service really changed its
+address, its owner confirms it and you delete that service's entry. The guard only reads; the
+wallet that pays decides.

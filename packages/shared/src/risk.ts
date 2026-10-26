@@ -3,7 +3,7 @@ import { z } from "zod";
 import { supportedChainKeySchema, walletAddressSchema } from "./address.js";
 import { dataSourceSchema } from "./portfolio.js";
 
-export const RISK_METHODOLOGY_VERSION = "2026-10.6";
+export const RISK_METHODOLOGY_VERSION = "2026-10.7";
 
 export const riskSeveritySchema = z.enum(["info", "low", "medium", "high"]);
 export const riskLevelSchema = z.enum(["low", "moderate", "elevated", "high"]);
@@ -18,6 +18,7 @@ export const riskFindingKindSchema = z.enum([
   "idle-stablecoins",
   "unpriced-holdings",
   "small-portfolio",
+  "exit-cost",
 ]);
 
 export const riskFindingSchema = z.object({
@@ -26,8 +27,11 @@ export const riskFindingSchema = z.object({
   severity: riskSeveritySchema,
   title: z.string().min(1),
   summary: z.string().min(1),
-  /** A concrete, read-only next step. Svalin never executes it. */
-  action: z.string().min(1),
+  /**
+   * A concrete, read-only next step. Svalin never executes it. Null in a free report when next
+   * steps are locked (see the report's `locked`).
+   */
+  action: z.string().min(1).nullable(),
   /** The measured value that triggered the finding (percent unless noted). */
   value: z.number(),
   /** The threshold the value was compared against. */
@@ -59,6 +63,12 @@ export const riskMetricsSchema = z.object({
   majorPct: z.number().min(0).max(100),
   memePct: z.number().min(0).max(100),
   longTailPct: z.number().min(0).max(100),
+  /**
+   * What selling every priced position now would fetch after price impact, and how much less that
+   * is than the priced value. Null when any position's market depth is unknown (Solana for now).
+   */
+  exitValueUsd: z.number().nonnegative().nullable().optional(),
+  exitLossPct: z.number().min(0).max(100).nullable().optional(),
 });
 
 export const riskScoreBreakdownSchema = z.object({
@@ -82,6 +92,8 @@ export const riskReportSchema = z.object({
   dataSource: dataSourceSchema,
   methodologyVersion: z.string(),
   generatedAt: z.string().datetime(),
+  /** Present on a free report whose next steps are left out, with how to get them. */
+  locked: z.object({ nextSteps: z.literal(true), unlock: z.string().min(1) }).optional(),
 });
 
 export const briefSchema = z.object({

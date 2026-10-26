@@ -36,7 +36,7 @@ export default {
         }),
         // Without the binding, limits fall back to per-isolate memory, which Workers cannot enforce.
         demoLimiter: namespace
-          ? new DurableDemoLimiter(namespace, config.demo.perHour, config.demo.perDayGlobal)
+          ? new DurableDemoLimiter(namespace, config.demo.perDay, config.demo.perDayGlobal)
           : undefined,
         paymentInitialization: "first-paid-request",
         paymentDiscovery: false,

@@ -9,11 +9,16 @@ import { ExactSvmScheme } from "@x402/svm/exact/client";
 
 import { SpendBudget, usdToAtomic } from "./budget.js";
 import type { McpConfig } from "./config.js";
+import { PayeeMemory, judgePayment, serviceOf, type PaymentOption } from "./payment-guard.js";
 
 export type SvalinClient = {
   apiUrl: string;
   /** Fetch that pays x402 challenges from the configured wallet, within budget. */
   fetch: typeof fetch;
+  /** Plain fetch that never pays: the payment guard uses it to ask a service its price. */
+  probe: typeof fetch;
+  /** Payees and prices first seen per service; see payment-guard.ts. */
+  memory: PayeeMemory;
   canPay: boolean;
   payers: { solana?: string; near?: string };
   budget: SpendBudget;
@@ -22,6 +27,8 @@ export type SvalinClient = {
 export async function createSvalinClient(config: McpConfig, baseFetch: typeof fetch = fetch): Promise<SvalinClient> {
   const budget = new SpendBudget(usdToAtomic(config.SVALIN_MAX_PRICE_USD), usdToAtomic(config.SVALIN_BUDGET_USD));
   const payers: SvalinClient["payers"] = {};
+  const memory = new PayeeMemory(config.SVALIN_PAYEE_MEMORY);
+  const service = serviceOf(config.SVALIN_API_URL);
 
   const preferred = `${config.SVALIN_PREFERRED_NETWORK}:`;
   const client = new x402Client((_version: number, options: PaymentRequirements[]) => {
@@ -46,21 +53,35 @@ export async function createSvalinClient(config: McpConfig, baseFetch: typeof fe
 
   const canPay = Boolean(payers.solana || payers.near);
   if (!canPay) {
-    return { apiUrl: config.SVALIN_API_URL, fetch: baseFetch, canPay, payers, budget };
+    return { apiUrl: config.SVALIN_API_URL, fetch: baseFetch, probe: baseFetch, memory, canPay, payers, budget };
   }
 
   client.setSpendControls({ maxAmountPerPayment: `$${config.SVALIN_MAX_PRICE_USD}` });
-  client.onBeforePaymentCreation(async ({ selectedRequirements }) => {
+  const asOption = ({ network, asset, amount, payTo }: PaymentRequirements): PaymentOption => ({ network, asset, amount: BigInt(amount), payTo });
+  client.onBeforePaymentCreation(async ({ paymentRequired, selectedRequirements }) => {
     const reason = budget.check(BigInt(selectedRequirements.amount));
-    return reason ? { abort: true as const, reason } : undefined;
+    if (reason) return { abort: true as const, reason };
+    // The same guard as svalin_check_x402_payment, on this server's own payments to Svalin.
+    const option = asOption(selectedRequirements);
+    const blocked = judgePayment({
+      requestedUrl: config.SVALIN_API_URL,
+      request: { resourceUrl: paymentRequired.resource?.url ?? null, options: [option] },
+      option,
+      pin: memory.get(service, option.network),
+      memoryFile: memory.file,
+    }).filter((entry) => entry.severity === "block");
+    return blocked.length > 0 ? { abort: true as const, reason: blocked.map((entry) => entry.message).join(" ") } : undefined;
   });
   client.onAfterPaymentCreation(async ({ selectedRequirements }) => {
     budget.commit(BigInt(selectedRequirements.amount));
+    memory.remember(service, asOption(selectedRequirements));
   });
 
   return {
     apiUrl: config.SVALIN_API_URL,
     fetch: wrapFetchWithPayment(baseFetch, client),
+    probe: baseFetch,
+    memory,
     canPay,
     payers,
     budget,

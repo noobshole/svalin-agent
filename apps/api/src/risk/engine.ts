@@ -32,6 +32,7 @@ export const THRESHOLDS = {
   idleStablePct: 50,
   unpricedCount: 5,
   smallPortfolioUsd: 50,
+  exitCostPct: 5,
 } as const;
 
 const WEIGHTS = { concentration: 45, stableBuffer: 20, longTail: 35 } as const;
@@ -65,6 +66,10 @@ export function buildRiskReport(overview: PortfolioOverview, now: Date = new Dat
 
   const hhi = assets.reduce((sum, asset) => sum + pctOf(asset.valueUsd) ** 2, 0);
 
+  // Exit value needs every position's market depth; one unknown makes the total unknown.
+  const exitKnown = total > 0 && assets.every((asset) => typeof asset.exitValueUsd === "number");
+  const exit = exitKnown ? assets.reduce((sum, asset) => sum + (asset.exitValueUsd ?? 0), 0) : null;
+
   const metrics: RiskReport["metrics"] = {
     totalValueUsd: round(total, 2),
     pricedAssetCount,
@@ -81,6 +86,8 @@ export function buildRiskReport(overview: PortfolioOverview, now: Date = new Dat
     majorPct: round(majorPct, 2),
     memePct: round(memePct, 2),
     longTailPct: round(longTailPct, 2),
+    exitValueUsd: exit === null ? null : round(Math.min(exit, total), 2),
+    exitLossPct: exit === null ? null : round(Math.max(0, Math.min(100, pctOf(total - exit))), 2),
   };
 
   const breakdown =
@@ -219,7 +226,13 @@ function buildFindings({ metrics, total, dataCoverage, chain }: FindingInput): R
       id: "stable-buffer",
       kind: "stable-buffer",
       severity: metrics.stablecoinPct < 5 ? "medium" : "low",
-      title: `Only ${pct(metrics.stablecoinPct)} held in stablecoins`,
+      // Below 0.05% the share would print as "0.0%", which reads like a glitch.
+      title:
+        metrics.stablecoinPct === 0
+          ? "No stablecoins held"
+          : metrics.stablecoinPct < 0.05
+            ? "Almost nothing held in stablecoins"
+            : `Only ${pct(metrics.stablecoinPct)} held in stablecoins`,
       summary: "With almost no stable buffer, there is no dry powder for drawdowns and every fee or opportunity forces a sale of volatile assets.",
       action: `Hold at least ${THRESHOLDS.stableBufferPct}% in a major stablecoin (USDC/USDT) as a buffer.`,
       value: metrics.stablecoinPct,
@@ -254,6 +267,22 @@ function buildFindings({ metrics, total, dataCoverage, chain }: FindingInput): R
       value: metrics.stablecoinPct,
       threshold: THRESHOLDS.idleStablePct,
       confidence: conf(metrics.stablecoinPct, THRESHOLDS.idleStablePct),
+    });
+  }
+
+  const exitLoss = metrics.exitLossPct;
+  if (typeof exitLoss === "number" && typeof metrics.exitValueUsd === "number" && exitLoss >= THRESHOLDS.exitCostPct) {
+    findings.push({
+      id: "exit-cost",
+      kind: "exit-cost",
+      severity: severityBands(exitLoss, [10, 25]),
+      title: `Selling everything now would fetch about ${usd(metrics.exitValueUsd)}, ${pct(exitLoss)} less`,
+      summary:
+        "Some positions are large next to the real money in their trading pools, so selling them would push the price down. This assumes each position is sold on its own, at today's pool depth.",
+      action: "Count these positions at their exit value, not their quoted value, and sell large ones in parts if you need to.",
+      value: exitLoss,
+      threshold: THRESHOLDS.exitCostPct,
+      confidence: conf(exitLoss, THRESHOLDS.exitCostPct),
     });
   }
 
@@ -339,6 +368,10 @@ function ramp(value: number, from: number, to: number) {
 
 function clampInt(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function usd(value: number) {
+  return `$${Math.round(value).toLocaleString("en-US")}`;
 }
 
 function round(value: number, digits: number) {

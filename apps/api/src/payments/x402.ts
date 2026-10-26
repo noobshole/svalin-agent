@@ -39,6 +39,11 @@ const outputExamples: Record<PaidRouteKey, unknown> = {
     kind: "wallet",
     reasons: [{ code: "lookalike", severity: "block", message: "This address imitates 7xKX…AsU, which this wallet paid recently…" }],
   },
+  exit: {
+    contract: "token.v2.ref-finance.near",
+    grade: "B",
+    exit: { quotes: [{ saleUsd: 10000, fetchesUsd: 9292.95, lossPct: 7.07 }], within1PctUsd: 1327.61, wholeSupplyUsd: 128493.1 },
+  },
 };
 
 /**
@@ -136,14 +141,14 @@ export function createPaymentLayer(config: AppConfig, options: PaymentLayerOptio
           tags: route.tags,
           ...(discovery && {
             extensions: declareDiscoveryExtension({
-              pathParams: { address: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" },
+              pathParams: { address: route.address?.example ?? "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" },
               pathParamsSchema: {
                 type: "object",
                 properties: {
                   address: {
                     type: "string",
                     pattern: ADDRESS_PATTERN,
-                    description: "Solana wallet address (base58) or NEAR account ID to analyse",
+                    description: route.address?.description ?? "Solana wallet address (base58) or NEAR account ID to analyse",
                   },
                 },
                 required: ["address"],

@@ -55,9 +55,12 @@ const envSchema = z.object({
   PRICE_RISK_USD: usdPrice.default("$0.004"),
   PRICE_BRIEF_USD: usdPrice.default("$0.02"),
   PRICE_CHECK_USD: usdPrice.default("$0.002"),
+  PRICE_EXIT_USD: usdPrice.default("$0.002"),
 
-  DEMO_REQUESTS_PER_HOUR: z.coerce.number().int().nonnegative().default(10),
+  DEMO_REQUESTS_PER_DAY: z.coerce.number().int().nonnegative().default(5),
   DEMO_REQUESTS_PER_DAY_GLOBAL: z.coerce.number().int().nonnegative().default(2000),
+  // "true" leaves each finding's next step out of the free risk report; the paid report keeps it.
+  LOCK_FREE_NEXT_STEPS: z.enum(["true", "false"]).default("false"),
   // How many proxies your host puts in front of the API (Railway, Render and Fly.io: 1).
   TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
   // Shared with the web app so it can pass each visitor's IP for the per-visitor demo limit.
@@ -150,12 +153,14 @@ export function loadConfig(source: Record<string, string | undefined> = process.
         risk: env.PRICE_RISK_USD,
         brief: env.PRICE_BRIEF_USD,
         check: env.PRICE_CHECK_USD,
+        exit: env.PRICE_EXIT_USD,
       },
     },
 
     demo: {
-      perHour: env.DEMO_REQUESTS_PER_HOUR,
+      perDay: env.DEMO_REQUESTS_PER_DAY,
       perDayGlobal: env.DEMO_REQUESTS_PER_DAY_GLOBAL,
+      lockNextSteps: env.LOCK_FREE_NEXT_STEPS === "true",
       trustedProxyHops: env.TRUSTED_PROXY_HOPS,
       forwardingSecret: env.WEB_FORWARDING_SECRET,
     },

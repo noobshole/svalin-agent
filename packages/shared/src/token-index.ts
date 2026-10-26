@@ -29,6 +29,22 @@ export function saleLoss(backingUsd: number, saleUsd: number = TOKEN_SALE_USD): 
   return backingUsd > 0 ? saleUsd / (backingUsd + saleUsd) : 1;
 }
 
+/**
+ * What a sale of `saleUsd` at the quoted price would actually fetch: sale x backing / (backing + sale).
+ * Always less than the backing itself, however large the sale.
+ */
+export function saleProceeds(backingUsd: number, saleUsd: number): number {
+  return saleUsd > 0 ? saleUsd * (1 - saleLoss(backingUsd, saleUsd)) : 0;
+}
+
+/** The largest sale that loses at most `maxLoss` (0 to 1): backing x maxLoss / (1 - maxLoss). */
+export function largestSale(backingUsd: number, maxLoss: number): number {
+  return backingUsd > 0 && maxLoss > 0 && maxLoss < 1 ? (backingUsd * maxLoss) / (1 - maxLoss) : 0;
+}
+
+/** Sale sizes every token's exit prices are quoted at. */
+export const EXIT_SALE_SIZES_USD: readonly number[] = [1_000, 10_000, 100_000];
+
 /** Backing must hold this long before it can raise a grade, so a fresh pool cannot buy one. */
 export const BACKING_HOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -94,8 +110,74 @@ export const indexEditionSchema = z.object({
   fingerprint: sha256Schema,
 });
 
+/** Where a token stands at the end of a window: a grade, or gone from the Index altogether. */
+const migrationTargetSchema = z.enum(["A", "B", "C", "D", "F", "gone"]);
+
+/**
+ * How grades moved between a sealed edition and a later one, the way rating agencies publish
+ * transition matrices: `matrix[grade then][grade now]` counts tokens.
+ */
+export const gradeMigrationSchema = z.object({
+  days: z.number().int().positive(),
+  /** The sealed edition the window starts from (editions/<day> in the svalin-index repository). */
+  sealedDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  from: z.string().datetime(),
+  tokens: z.number().int().nonnegative(),
+  matrix: z.record(tokenGradeSchema, z.record(migrationTargetSchema, z.number().int().nonnegative())),
+  upgraded: z.number().int().nonnegative(),
+  downgraded: z.number().int().nonnegative(),
+  unchanged: z.number().int().nonnegative(),
+  gone: z.number().int().nonnegative(),
+  /** Tokens that had real backing at the start and have none now. */
+  lostAllBacking: z.number().int().nonnegative(),
+});
+
+/** Published beside each edition. Windows appear once there are sealed editions old enough. */
+export const trackRecordSchema = z.object({
+  generatedAt: z.string().datetime(),
+  methodology: z.string(),
+  windows: z.array(gradeMigrationSchema),
+});
+
+/** One sale size: what it fetches, the share lost, and the average price per token received. */
+export const exitQuoteSchema = z.object({
+  saleUsd: z.number().positive(),
+  fetchesUsd: z.number().nonnegative(),
+  lossPct: z.number().min(0).max(100),
+  exitPriceUsd: z.number().nonnegative(),
+});
+
+/**
+ * One token's grade and exit prices: what selling it would actually fetch from the real money in
+ * its pools, derived from an Index edition's backing so anyone can recompute it.
+ */
+export const tokenExitSchema = z.object({
+  contract: z.string(),
+  symbol: z.string(),
+  grade: tokenGradeSchema,
+  priceUsd: z.number().positive(),
+  backingUsd: z.number().nonnegative(),
+  marketCapUsd: z.number().nonnegative().nullable(),
+  top10Pct: z.number().min(0).max(100).nullable(),
+  holders: z.number().int().nonnegative().nullable(),
+  exit: z.object({
+    quotes: z.array(exitQuoteSchema),
+    /** The largest sales that lose at most 1% and 5%: how much can leave near the quoted price. */
+    within1PctUsd: z.number().nonnegative(),
+    within5PctUsd: z.number().nonnegative(),
+    /** The most the whole supply could fetch if it were all sold now; null when supply is unknown. */
+    wholeSupplyUsd: z.number().nonnegative().nullable(),
+  }),
+  edition: z.object({ generatedAt: z.string(), methodology: z.string() }),
+  note: z.string(),
+});
+
 export type TokenGrade = z.infer<typeof tokenGradeSchema>;
+export type ExitQuote = z.infer<typeof exitQuoteSchema>;
+export type TokenExit = z.infer<typeof tokenExitSchema>;
 export type RatedTokenRow = z.infer<typeof ratedTokenSchema>;
+export type GradeMigration = z.infer<typeof gradeMigrationSchema>;
+export type TrackRecord = z.infer<typeof trackRecordSchema>;
 export type NearTokenIndex = z.infer<typeof nearTokenIndexSchema>;
 export type IndexProvenance = z.infer<typeof indexProvenanceSchema>;
 export type IndexEdition = z.infer<typeof indexEditionSchema>;
