@@ -8,7 +8,7 @@ export function DocPage({ eyebrow, title, lede, children }: { eyebrow: string; t
     <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-14 md:px-8">
       <div className="mx-auto grid w-full max-w-3xl gap-0">
         <header className="grid gap-4 border-b border-border pb-10">
-          <p className="font-mono text-xs text-mutedForeground">{eyebrow}</p>
+          <p className="eyebrow">{eyebrow}</p>
           <h1 className="text-3xl font-medium leading-tight tracking-tight md:text-4xl" style={{ textWrap: "balance" }}>
             {title}
           </h1>

@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 /*
- * Light ("Instrument") and dark ("Graphite") themes follow the visitor's system setting.
+ * Light ("Instrument") and dark ("Graphite") themes follow the visitor's system setting until
+ * they pick one with the switch in the header, which sets data-theme on <html>.
  * Colours are HSL triplets so Tailwind can apply opacity. One accent family, used only to
  * mean something: the risk grade and finding severity. Everything else is greyscale.
  */
@@ -30,7 +31,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --background: 210 7% 6%;
     --surface: 220 7% 9%;
@@ -53,6 +54,29 @@
   }
 }
 
+/* The same dark palette, when the visitor picks dark with the switch. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: 210 7% 6%;
+  --surface: 220 7% 9%;
+  --surface-2: 225 6% 12%;
+  --foreground: 45 9% 92%;
+  --muted-foreground: 48 2% 54%;
+  --subtle-foreground: 48 2% 42%;
+  --border: 225 5% 16%;
+  --border-strong: 225 4% 24%;
+  --primary: 45 9% 92%;
+  --primary-foreground: 210 7% 6%;
+  --risk-low: 112 15% 60%;
+  --risk-medium: 38 50% 57%;
+  --risk-high: 8 46% 56%;
+  --risk-info: 48 2% 54%;
+  --exposure-1: 45 9% 92%;
+  --exposure-2: 45 4% 68%;
+  --exposure-3: 48 2% 46%;
+  --exposure-4: 225 4% 28%;
+}
+
 * {
   border-color: hsl(var(--border));
 }
@@ -70,6 +94,24 @@ a {
   text-decoration: none;
 }
 
+/* Headlines are serif; everything else is the sans. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), Georgia, ui-serif, serif;
+  font-optical-sizing: auto;
+}
+
+/* Small labels above sections, columns and tables: one style everywhere. */
+.eyebrow {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
 ::selection {
   background: hsl(var(--foreground) / 0.15);
 }
@@ -77,6 +119,24 @@ a {
 :focus-visible {
   outline: 2px solid hsl(var(--foreground) / 0.6);
   outline-offset: 2px;
+}
+
+/* The bar components/nav-progress.tsx shows while the next page loads. */
+@keyframes loading-bar {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+.loading-bar {
+  animation: loading-bar 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar {
+    animation: none;
+  }
 }
 
 /* Long-form pages (About, Docs, Whitepaper): one readable column, quiet type, tables that scroll. */

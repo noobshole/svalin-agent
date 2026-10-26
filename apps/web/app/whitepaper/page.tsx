@@ -9,8 +9,6 @@ export const metadata: Metadata = {
     "Svalin: verifiable risk ratings, a check before paying, and on-chain guardrails for agent money on NEAR and Solana.",
 };
 
-const REPO = "https://github.com/noobshole/svalin-agent";
-
 const contents = [
   ["problem", "The problem"],
   ["principles", "Design principles"],
@@ -27,12 +25,12 @@ const contents = [
 export default function WhitepaperPage() {
   return (
     <DocPage
-      eyebrow="whitepaper · public edition · october 2026"
+      eyebrow="Whitepaper · Public edition · October 2026"
       lede="A read-only service that tells AI agents what is real before they spend, a check before every payment, and a guard contract that makes the chain enforce it."
       title="Verifiable risk ratings and on‑chain guardrails for agent money"
     >
       <nav aria-label="Contents" className="mt-8 rounded-lg border border-border bg-surface px-5 py-4">
-        <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-subtleForeground">Contents</p>
+        <p className="eyebrow mb-2">Contents</p>
         <ol className="!mb-0 grid gap-1 sm:grid-cols-2">
           {contents.map(([id, label]) => (
             <li key={id}>
@@ -54,7 +52,7 @@ export default function WhitepaperPage() {
         wallets for concentration and exposure, and checks a recipient before a payment. Every token grade can be recomputed by anyone from archived
         inputs. Two planned additions follow: the <strong>Svalin Registry</strong> puts grades on-chain where contracts can read them, and{" "}
         <strong>Svalin Guard</strong> lets an owner give an agent spending power under rules the blockchain enforces. Svalin itself never holds a key to
-        anyone&apos;s funds.
+        anyone&apos;s funds. What is live and what comes next is on the <Link href="/roadmap">roadmap</Link>.
       </p>
 
       <h2 id="problem">1. The problem</h2>
@@ -67,7 +65,7 @@ export default function WhitepaperPage() {
       <h3>A quoted price is only a quote</h3>
       <p>
         Anyone can create a token, give it a price and send it to a wallet. A tool that trusts the quoted price sees a fortune that cannot be sold. In
-        the Svalin Index edition of 24 October 2026, only 96 of 4,419 NEAR tokens with a quoted price had $3,000 or more of real money behind it.
+        the Svalin Index edition of 24 October 2026, only 96 of 4,419 NEAR tokens with a quoted price had enough real money behind them to grade above F.
         Several unvetted tokens borrow famous names such as NEAR or USDT, quoted like the real thing with a few dollars behind them.
       </p>
       <h3>A look-alike address steals the next payment</h3>
@@ -129,61 +127,37 @@ export default function WhitepaperPage() {
         <Status kind="live" />
       </h3>
       <p>
-        Given a Solana wallet or a NEAR account, Svalin returns a priced portfolio and a deterministic risk report: a score from 0 (safest) to 100, a
-        grade from A to F, exposure metrics and findings with next steps. It measures how holdings are spread, not whether the owner can be trusted.
+        Given a Solana wallet or a NEAR account, Svalin returns a priced portfolio and a risk report: a score from 0 (safest) to 100, a grade from A
+        to F, and findings with next steps. The score looks at how much rides on a single asset, how large the stablecoin cushion is, and how much
+        sits in unvetted or meme tokens. It measures how holdings are spread, not whether the owner can be trusted.
       </p>
-      <pre>
-        <code>{`concentration = 45 × ramp(largest volatile exposure %, 30 → 80)
-stableBuffer  = 20 × ramp(15 − stablecoin %, 0 → 15)
-longTail      = 35 × ramp(long-tail % + 0.6 × meme %, 0 → 50)
-score         = concentration + stableBuffer + longTail
-# grades: A ≤ 20, B ≤ 40, C ≤ 60, D ≤ 80, F above`}</code>
-      </pre>
       <p>
-        A wallet with nothing Svalin can price is not rated, so a fresh or spam-only wallet never shows as an A. Native, wrapped and staked forms of one
-        asset count as one exposure.
+        On NEAR, a report also says what the wallet would actually fetch if everything were sold now. A position that is large next to the real money
+        in its pools cannot be sold at its quoted price, so a wallet that looks rich may not be. A wallet with nothing Svalin can price is not rated,
+        so a fresh or spam-only wallet never shows as an A.
       </p>
 
       <h3>
-        Check before paying
+        Check Before Paying
         <Status kind="live" />
       </h3>
       <p>
         Before money moves, the check answers <strong>allow</strong>, <strong>caution</strong> or <strong>block</strong>, with reasons. It is
         deterministic: data sources gather the signals, and one function judges them.
       </p>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Signal</th>
-              <th>Verdict</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>A token contract, a Solana program or token account, or a NEAR account that does not exist</td>
-              <td>Block</td>
-            </tr>
-            <tr>
-              <td>Same first and last four characters as an address the payer paid recently, but a different address</td>
-              <td>Block</td>
-            </tr>
-            <tr>
-              <td>Never used, a contract account, under 7 days old, or fewer than 5 transactions</td>
-              <td>Caution</td>
-            </tr>
-            <tr>
-              <td>A first payment of $100 or more, or history that could not be read</td>
-              <td>Caution</td>
-            </tr>
-            <tr>
-              <td>None of the above</td>
-              <td>Allow</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <ul>
+        <li>
+          <strong>Block:</strong> the address is not a wallet (a token or a program), the account does not exist, or it imitates an address or
+          name the payer has paid before.
+        </li>
+        <li>
+          <strong>Caution:</strong> the address is brand new or barely used, runs a contract, is about to receive a large first payment, or its
+          history could not be read.
+        </li>
+        <li>
+          <strong>Allow:</strong> none of the above.
+        </li>
+      </ul>
       <p>
         If the payer&apos;s history cannot be read, the check says so and cautions instead of guessing, because a gap could hide the very payment a
         look-alike imitates. <Link href="/check">Try the free check.</Link>
@@ -194,30 +168,28 @@ score         = concentration + stableBuffer + longTail
         <Status kind="live" />
       </h3>
       <p>
-        The Index grades every NEAR token that Ref Finance prices by its <strong>real backing</strong>: the value of trusted tokens (wNEAR, USDC,
-        USDT, liquid-staked NEAR and similar) in its pools, classic and concentrated liquidity. A sale can never take out more than that. The grade
-        answers how much of a $1,000 sale would be lost to price movement.
+        The Index grades every NEAR token that Ref Finance prices by its <strong>real backing</strong>: the money its trading pools hold in tokens
+        Svalin trusts, such as NEAR and USDC. A sale can never take out more than that. The grade answers one question: how much of a $1,000 sale
+        would be lost to price movement?
       </p>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Grade</th>
-              <th>Real backing</th>
               <th>A $1,000 sale loses</th>
             </tr>
           </thead>
           <tbody>
             {[
-              ["A", "$1M or more", "under 0.1%"],
-              ["B", "$100K or more", "under 1%"],
-              ["C", "$20K or more", "under 5%"],
-              ["D", "$3K or more", "under 25%"],
-              ["F", "under $3K", "25% or more"],
-            ].map(([grade, backing, loss]) => (
+              ["A", "under 0.1%"],
+              ["B", "under 1%"],
+              ["C", "under 5%"],
+              ["D", "25% or less"],
+              ["F", "more than 25%"],
+            ].map(([grade, loss]) => (
               <tr key={grade}>
                 <td className="font-mono text-foreground">{grade}</td>
-                <td>{backing}</td>
                 <td>{loss}</td>
               </tr>
             ))}
@@ -225,9 +197,15 @@ score         = concentration + stableBuffer + longTail
         </table>
       </div>
       <p>
-        Backing has to hold for 24 hours before it counts, and a token is graded on its lowest backing in that time, so a pool added this morning
-        cannot lift a grade today. This closes the trick behind the April 2026 Rhea Finance exploit, where fake tokens and new pools distorted prices.
+        Only trusted money counts, so pools where fake tokens trade against each other add nothing: fake tokens and freshly seeded pools were part of
+        the April 2026 Rhea Finance exploit. New money also has to stay put before it counts, so a pool added this morning cannot lift a grade today.
         Grades describe how sellable a token is, not whether its project is good. <Link href="/ratings">See the live Index.</Link>
+      </p>
+      <p>
+        Every token also has <strong>exit prices</strong>: what selling $1K, $10K or $100K of it would actually fetch, how much can be sold close
+        to the quoted price, and the most its whole supply could fetch. A wallet can show them beside a balance, a lender can size a loan by them,
+        and an agent can check them before accepting a token as payment, at any sale size, through the API. They need nothing but an
+        edition&apos;s data, so anyone can recompute them.
       </p>
 
       <h3>
@@ -235,9 +213,9 @@ score         = concentration + stableBuffer + longTail
         <Status kind="live" />
       </h3>
       <p>
-        The Index is rebuilt every few hours by a public workflow. Each edition archives the exact data it was computed from, records their SHA-256
-        hashes, the hash of the index and the code commit, and combines them into a fingerprint. Once a day an edition is sealed and never rewritten. A
-        verification script recomputes every grade from the archived inputs and reports any difference.
+        The Index is rebuilt every few hours by a public workflow. Each edition keeps the exact data it was computed from and a fingerprint of it, and
+        once a day an edition is sealed and never rewritten, so anyone can check that a grade was not changed after the fact. Each edition also
+        records how earlier grades moved since, building a public track record.
       </p>
 
       <h3>
@@ -266,18 +244,16 @@ score         = concentration + stableBuffer + longTail
           <strong>Unknown means F:</strong> a token that is not listed has no backing worth grading.
         </li>
         <li>
-          <strong>Who can write:</strong> only Svalin&apos;s publishing key, a NEAR function-call key that can call <code>publish</code> and nothing
-          else, so even if it leaked it could not move money.
+          <strong>Who can write:</strong> only Svalin&apos;s publishing key, a NEAR key that can publish grades and do nothing else, so even if it
+          leaked it could not move money.
         </li>
         <li>
-          <strong>How to check it:</strong> the fingerprint on-chain must match the public edition, where every grade can be recomputed.
+          <strong>How to check it:</strong> the fingerprint on-chain must match the public edition.
+        </li>
+        <li>
+          <strong>Reading is free:</strong> any contract or agent can look up a token&apos;s grade.
         </li>
       </ul>
-      <pre>
-        <code>{`publish(edition)   # Svalin's publishing key only
-grade_of(token)    # → { grade, backing_usd, edition, published_at } or null (= F)
-edition()          # → { fingerprint, generated_at, methodology }`}</code>
-      </pre>
 
       <h2 id="guard">
         6. Svalin Guard
@@ -301,18 +277,13 @@ edition()          # → { fingerprint, generated_at, methodology }`}</code>
           <strong>Svalin:</strong> publishes grades to the Registry. It has no key to any Guard and no say over any owner&apos;s funds.
         </li>
       </ul>
-      <h3>Policy</h3>
-      <pre>
-        <code>{`{
-  "min_grade": "C",              # refuse tokens graded below C, or not graded
-  "max_per_trade_usd": 25,
-  "max_per_day_usd": 100,
-  "allowed_recipients": ["alice.near"],
-  "new_recipient_delay_hours": 24,
-  "approval_above_usd": 50,      # queue for the owner above this
-  "frozen": false
-}`}</code>
-      </pre>
+      <h3>Rules an owner can set</h3>
+      <ul>
+        <li>A minimum grade for any token the agent buys.</li>
+        <li>Spending limits per payment and per day.</li>
+        <li>A list of approved recipients, and a waiting period before paying a new one.</li>
+        <li>Owner approval above a set amount, and a freeze switch.</li>
+      </ul>
       <p>
         The Guard is a general engine: one owner, one limited spender, rules the chain enforces. AI agents come first because they act fastest and are
         easiest to trick, but the same contract suits a trading bot, a team member paying contributors, or a person&apos;s own wallet in a safe mode.
@@ -365,6 +336,7 @@ edition()          # → { fingerprint, generated_at, methodology }`}</code>
       </p>
 
       <h2 id="security">8. Security model</h2>
+      <p>Rows about the Guard and the Registry describe their planned design; the rest is how Svalin works today.</p>
       <div className="table-wrap">
         <table>
           <thead>
@@ -388,7 +360,7 @@ edition()          # → { fingerprint, generated_at, methodology }`}</code>
             </tr>
             <tr>
               <td>A pool propped up for a short time</td>
-              <td>Backing must hold for 24 hours; the lowest value in that time counts.</td>
+              <td>New money has to stay put before it counts.</td>
             </tr>
             <tr>
               <td>A look-alike payment address</td>
@@ -415,19 +387,17 @@ edition()          # → { fingerprint, generated_at, methodology }`}</code>
         <li>Grades measure sellability, not quality, and are not investment advice.</li>
         <li>Solana prices are used as the data provider quotes them; the pool check covers NEAR only for now.</li>
         <li>The recipient check sees recent history only, and there is no NEAR scam list yet.</li>
-        <li>The Registry and the Guard are designs; the Guard will not be audited at first.</li>
         <li>
-          The full method, with every threshold, is in the <a href={`${REPO}/blob/main/docs/RISK_METHODOLOGY.md`}>methodology</a>.
+          Exit value and exit prices cover NEAR for now and count only NEAR pools, so a token that also trades elsewhere could fetch more. Exit value
+          assumes each position is sold on its own.
         </li>
+        <li>The Registry and the Guard are designs; the Guard will not be audited at first.</li>
       </ul>
 
       <h2 id="references">References</h2>
       <ol className="text-sm">
         <li>
-          <a href={`${REPO}/blob/main/docs/RISK_METHODOLOGY.md`}>Svalin risk methodology</a>
-        </li>
-        <li>
-          <a href="https://github.com/noobshole/svalin-index">Svalin Index editions and verification</a>
+          <a href="https://github.com/noobshole/svalin-index">Svalin Index editions</a>
         </li>
         <li>
           <a href="https://metamask.io/news/crypto-security-report-may-2026">MetaMask, crypto security report, May 2026</a> (Grok and Bankr)

@@ -1,14 +1,19 @@
 import "./globals.css";
 
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Source_Code_Pro, Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import type { ReactNode } from "react";
 
+import { NavProgress } from "@/components/nav-progress";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { THEME_BOOT } from "@/lib/theme";
 
-const sans = Geist({ subsets: ["latin"], variable: "--font-sans" });
-const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
+// Adobe's Source family (SIL Open Font License): serif headlines for the authority of a rating
+// report, a plain sans for reading, and a mono for figures. next/font serves them from this site.
+const display = Source_Serif_4({ subsets: ["latin"], variable: "--font-display" });
+const sans = Source_Sans_3({ subsets: ["latin"], variable: "--font-sans" });
+const mono = Source_Code_Pro({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Svalin — portfolio risk intelligence for AI agents",
@@ -22,8 +27,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html className={`${sans.variable} ${mono.variable}`} lang="en">
+    <html className={`${display.variable} ${sans.variable} ${mono.variable}`} lang="en" suppressHydrationWarning>
+      <head>
+        {/* A fixed string, not user content: applies the saved theme before the first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      </head>
       <body className="bg-background font-sans text-foreground antialiased">
+        <NavProgress />
         <SiteHeader />
         {children}
         <SiteFooter />

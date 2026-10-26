@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <DocPage
-      eyebrow="about"
+      eyebrow="About"
       lede="Svalin is an independent, read-only rating service for agent money on NEAR and Solana. It tells AI agents, and the people behind them, what is real before they spend."
       title="Know what is real before you spend."
     >
@@ -34,14 +34,14 @@ export default function AboutPage() {
           <tbody>
             <tr>
               <td>
-                <Link href="/#scan">Wallet scan</Link>
+                <Link href="/#scan">Wallet Scan</Link>
                 <Status kind="live" />
               </td>
               <td>How risky is this wallet&apos;s mix of holdings?</td>
             </tr>
             <tr>
               <td>
-                <Link href="/check">Check before paying</Link>
+                <Link href="/check">Check Before Paying</Link>
                 <Status kind="live" />
               </td>
               <td>Is it safe to send money to this address?</td>
@@ -89,7 +89,7 @@ export default function AboutPage() {
       <h2>Status</h2>
       <p>
         Svalin is early. The scan, the check and the Index are live; payments currently run on test networks. The Registry and the Guard are designed
-        and described in the <Link href="/whitepaper">whitepaper</Link>.
+        and described in the <Link href="/whitepaper">whitepaper</Link>, and the <Link href="/roadmap">roadmap</Link> shows what comes next.
       </p>
       <p>
         Questions, bugs and ideas are welcome on <a href="https://github.com/noobshole/svalin-agent/issues">GitHub</a>.

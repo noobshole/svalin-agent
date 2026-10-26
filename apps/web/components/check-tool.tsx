@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
+import { FreeCallsLeft, FreeLimitReached } from "@/components/free-calls";
+import { checkedAt } from "@/components/risk-report";
 import { normaliseAddress } from "@/components/scan-form";
 import { getDemoCheck, type CheckResult } from "@/lib/api";
 import { cn } from "@/lib/utils/cn";
@@ -52,14 +54,14 @@ export function CheckTool() {
   }, [address]);
 
   useEffect(() => {
-    document.title = address ? `Check ${address} — Svalin` : "Check before paying — Svalin";
+    document.title = address ? `Check ${address} — Svalin` : "Check Before Paying — Svalin";
   }, [address]);
 
   return (
     <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 pb-20 pt-10 md:px-8">
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] md:items-end">
         <div className="grid min-w-0 gap-2">
-          <p className="font-mono text-xs text-mutedForeground">check before paying · solana + near</p>
+          <p className="eyebrow">Check Before Paying · NEAR + Solana</p>
           <h1 className="break-all text-2xl font-medium tracking-tight md:text-3xl">
             {address ? <span className="font-mono text-xl md:text-2xl">{address}</span> : "Is it safe to pay this address?"}
           </h1>
@@ -75,7 +77,12 @@ export function CheckTool() {
       {!address ? null : result === null ? (
         <div aria-busy="true" aria-label="Checking address" className="h-48 animate-pulse rounded-lg border border-border bg-surface" />
       ) : result.ok ? (
-        <CheckView check={result.check} />
+        <div className="grid gap-3">
+          <CheckView check={result.check} />
+          <FreeCallsLeft left={result.freeLeft} />
+        </div>
+      ) : result.status === 429 ? (
+        <FreeLimitReached message={result.message} />
       ) : (
         <div className="rounded-lg border border-riskHigh/40 bg-surface p-6">
           <p className="font-medium text-riskHigh">{result.message}</p>
@@ -175,7 +182,7 @@ function CheckView({ check }: { check: RecipientCheck }) {
   return (
     <section aria-label="Check result" className={cn("grid gap-6 rounded-lg border bg-surface p-6", verdict.border)}>
       <div className="grid gap-1">
-        <p className="font-mono text-xs text-mutedForeground">verdict · {check.chain}</p>
+        <p className="eyebrow">Verdict · {check.chain}</p>
         <p className={cn("text-3xl font-medium tracking-tight", verdict.text)}>{verdict.label}</p>
         <p className="text-sm text-mutedForeground">{verdict.summary}</p>
       </div>
@@ -202,7 +209,7 @@ function CheckView({ check }: { check: RecipientCheck }) {
       </ul>
 
       <p className="font-mono text-xs text-subtleForeground">
-        checked {new Date(check.checkedAt).toLocaleString("en-US")} · data {check.dataSource} · method {check.methodologyVersion}
+        Checked {checkedAt(check.checkedAt)}
       </p>
     </section>
   );

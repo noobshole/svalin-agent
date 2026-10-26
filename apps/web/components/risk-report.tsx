@@ -1,7 +1,14 @@
 import type { RiskFinding, RiskGrade, RiskReport } from "@svalin-agent/shared";
+import { Lock } from "lucide-react";
+import Link from "next/link";
 
 import { cn } from "@/lib/utils/cn";
 import { formatPct, formatUsd } from "@/lib/utils/formatting";
+
+/** "26 Oct 2026, 06:30 UTC": when a report or check was made. */
+export function checkedAt(iso: string) {
+  return `${new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })} UTC`;
+}
 
 /* Colour only carries meaning here: the grade and finding severity. Everything else is grey. */
 const gradeText: Record<RiskGrade, string> = {
@@ -51,7 +58,7 @@ export function GradeMark({ report, size = "lg" }: { report: RiskReport; size?: 
       </span>
       <div className="pb-1">
         <p className="text-sm font-medium">{level ? `${level.charAt(0).toUpperCase()}${level.slice(1)} risk` : "Not rated"}</p>
-        <p className="font-mono text-xs text-mutedForeground">{score === null ? "nothing priced to score" : `score ${score}/100`}</p>
+        <p className="font-mono text-xs text-mutedForeground">{score === null ? "Nothing priced to score" : `Score ${score}/100`}</p>
       </div>
     </div>
   );
@@ -98,12 +105,11 @@ export function FindingRow({ finding, compact = false }: { finding: RiskFinding;
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h3 className="font-medium leading-6">{finding.title}</h3>
             <span className={cn("font-mono text-xs", style.text)}>{style.label}</span>
-            {compact ? null : <span className="ml-auto font-mono text-xs text-subtleForeground">confidence {finding.confidence}%</span>}
           </div>
           {compact ? null : <p className="mt-1 text-sm leading-6 text-mutedForeground">{finding.summary}</p>}
           <p className={cn("text-sm leading-6", compact ? "text-mutedForeground" : "mt-1")}>
             <span className="text-mutedForeground">Next step: </span>
-            {finding.action}
+            {finding.action ?? <LockedStep />}
           </p>
         </div>
       </div>
@@ -111,16 +117,41 @@ export function FindingRow({ finding, compact = false }: { finding: RiskFinding;
   );
 }
 
+/**
+ * A next step the free report leaves out. The blurred words are a fixed placeholder, never the real
+ * advice, which the API does not send in a free report.
+ */
+function LockedStep() {
+  return (
+    <span className="inline-flex flex-wrap items-baseline gap-x-2">
+      <span aria-hidden="true" className="select-none text-mutedForeground blur-[3px]">
+        Trim this position over the coming weeks and keep a stable reserve
+      </span>
+      <Link className="inline-flex items-center gap-1 text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/pro">
+        <Lock aria-hidden="true" className="h-3 w-3" />
+        Unlock with Pro
+      </Link>
+    </span>
+  );
+}
+
 export function RiskReportView({ report }: { report: RiskReport }) {
   const { metrics } = report;
   const stats = [
-    { label: "Priced value", value: formatUsd(metrics.totalValueUsd) },
+    {
+      label: "Priced value",
+      value: formatUsd(metrics.totalValueUsd),
+      sub:
+        typeof metrics.exitValueUsd === "number" && typeof metrics.exitLossPct === "number"
+          ? `${formatUsd(metrics.exitValueUsd)} if sold now${metrics.exitLossPct >= 0.5 ? ` (−${formatPct(metrics.exitLossPct)})` : ""}`
+          : undefined,
+    },
     {
       label: "Largest volatile bet",
       value: metrics.largestVolatilePosition ? formatPct(metrics.largestVolatilePosition.pct) : "—",
       sub: metrics.largestVolatilePosition?.symbol,
     },
-    { label: "Behaves like", value: `${metrics.effectivePositions.toFixed(1)} positions`, sub: `HHI ${metrics.hhi}` },
+    { label: "Behaves like", value: `${metrics.effectivePositions.toFixed(1)} positions`, sub: "of equal size" },
     {
       label: "Data coverage",
       value: `${report.dataCoverage}%`,
@@ -155,7 +186,7 @@ export function RiskReportView({ report }: { report: RiskReport }) {
             >
               <dt className="text-xs text-mutedForeground">{stat.label}</dt>
               <dd className="font-mono text-xl tracking-tight">{stat.value}</dd>
-              {stat.sub ? <dd className="truncate font-mono text-xs text-subtleForeground">{stat.sub}</dd> : null}
+              {stat.sub ? <dd className="font-mono text-xs leading-5 text-subtleForeground [overflow-wrap:anywhere]">{stat.sub}</dd> : null}
             </div>
           ))}
         </dl>
@@ -191,7 +222,7 @@ export function RiskReportView({ report }: { report: RiskReport }) {
       </section>
 
       <p className="font-mono text-xs leading-5 text-subtleForeground">
-        methodology {report.methodologyVersion} · source {report.dataSource} · {new Date(report.generatedAt).toUTCString()}
+        Checked {checkedAt(report.generatedAt)}
         <br />
         Not financial advice. Svalin is read-only and never moves funds.
       </p>

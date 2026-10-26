@@ -4,7 +4,7 @@ import { ExposureBar, FindingRow, GradeMark, ScoreBar } from "@/components/risk-
 import { formatPct, formatUsd } from "@/lib/utils/formatting";
 
 /** A compact report card for the landing page. */
-export function ReportPreview({ report, label }: { report: RiskReport; label: string }) {
+export function ReportPreview({ report }: { report: RiskReport }) {
   const { metrics } = report;
   const stats = [
     { label: "Value", value: formatUsd(metrics.totalValueUsd) },
@@ -18,9 +18,8 @@ export function ReportPreview({ report, label }: { report: RiskReport; label: st
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-surface">
-      <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
-        <span className="truncate font-mono text-xs">{report.wallet}</span>
-        <span className="shrink-0 font-mono text-xs text-subtleForeground">{label}</span>
+      <div className="border-b border-border px-5 py-3">
+        <span className="block truncate font-mono text-xs">{report.wallet}</span>
       </div>
       <div className="grid gap-5 p-5">
         <GradeMark report={report} size="md" />

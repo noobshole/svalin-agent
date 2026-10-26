@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { FreeCallsLeft, FreeLimitReached } from "@/components/free-calls";
 import { RiskReportView } from "@/components/risk-report";
 import { ScanForm } from "@/components/scan-form";
 import { gradeTone } from "@/components/token-index";
@@ -32,7 +33,7 @@ export function ScanResult() {
     <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 pb-20 pt-10 md:px-8">
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] md:items-end">
         <div className="grid min-w-0 gap-2">
-          <p className="font-mono text-xs text-mutedForeground">risk scan{result?.ok ? ` · ${result.report.chain}` : ""}</p>
+          <p className="eyebrow">Risk scan{result?.ok ? ` · ${result.report.chain}` : ""}</p>
           <h1 className="break-all font-mono text-xl tracking-tight md:text-2xl">{address || "Scan a wallet"}</h1>
         </div>
         <ScanForm key={address} />
@@ -43,9 +44,14 @@ export function ScanResult() {
       ) : result === null ? (
         <ReportSkeleton />
       ) : result.ok ? (
-        <RiskReportView report={result.report} />
+        <div className="grid gap-3">
+          <RiskReportView report={result.report} />
+          <FreeCallsLeft left={result.freeLeft} />
+        </div>
       ) : result.token ? (
         <TokenNoticeView hint={result.hint} message={result.message} token={result.token} />
+      ) : result.status === 429 ? (
+        <FreeLimitReached message={result.message} />
       ) : (
         <div className="rounded-lg border border-riskHigh/40 bg-surface p-6">
           <p className="font-medium text-riskHigh">{result.message}</p>
