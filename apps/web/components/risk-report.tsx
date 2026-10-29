@@ -127,7 +127,7 @@ function LockedStep() {
       <span aria-hidden="true" className="select-none text-mutedForeground blur-[3px]">
         Trim this position over the coming weeks and keep a stable reserve
       </span>
-      <Link className="inline-flex items-center gap-1 text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/pro">
+      <Link className="inline-flex items-center gap-1 text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/pricing">
         <Lock aria-hidden="true" className="h-3 w-3" />
         Unlock with Pro
       </Link>
@@ -221,10 +221,8 @@ export function RiskReportView({ report }: { report: RiskReport }) {
         )}
       </section>
 
-      <p className="font-mono text-xs leading-5 text-subtleForeground">
-        Checked {checkedAt(report.generatedAt)}
-        <br />
-        Not financial advice. Svalin is read-only and never moves funds.
+      <p className="text-xs leading-5 text-subtleForeground">
+        Checked {checkedAt(report.generatedAt)}. Not financial advice; Svalin only reads public data and never moves funds.
       </p>
     </div>
   );

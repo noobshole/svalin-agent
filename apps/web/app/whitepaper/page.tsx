@@ -25,8 +25,8 @@ const contents = [
 export default function WhitepaperPage() {
   return (
     <DocPage
-      eyebrow="Whitepaper · Public edition · October 2026"
       lede="A read-only service that tells AI agents what is real before they spend, a check before every payment, and a guard contract that makes the chain enforce it."
+      note="Whitepaper, public edition, October 2026"
       title="Verifiable risk ratings and on‑chain guardrails for agent money"
     >
       <nav aria-label="Contents" className="mt-8 rounded-lg border border-border bg-surface px-5 py-4">
@@ -148,7 +148,7 @@ export default function WhitepaperPage() {
       <ul>
         <li>
           <strong>Block:</strong> the address is not a wallet (a token or a program), the account does not exist, or it imitates an address or
-          name the payer has paid before.
+          name the payer has paid before, or a well-known NEAR account.
         </li>
         <li>
           <strong>Caution:</strong> the address is brand new or barely used, runs a contract, is about to receive a large first payment, or its

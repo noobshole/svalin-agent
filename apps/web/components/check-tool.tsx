@@ -7,13 +7,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { FreeCallsLeft, FreeLimitReached } from "@/components/free-calls";
+import { ProReminder, useProPass } from "@/components/pro-status";
 import { checkedAt } from "@/components/risk-report";
 import { normaliseAddress } from "@/components/scan-form";
 import { getDemoCheck, type CheckResult } from "@/lib/api";
+import { isRunning } from "@/lib/pro";
 import { cn } from "@/lib/utils/cn";
 
 const EXAMPLES = [
-  { label: "root.near", address: "root.near" },
+  { label: "intent5.near", address: "intent5.near" },
   { label: "REF token (NEAR)", address: "token.v2.ref-finance.near" },
   { label: "USDC mint (Solana)", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
 ];
@@ -42,16 +44,21 @@ const kindLabel: Record<RecipientCheck["kind"], string> = {
 };
 
 export function CheckTool() {
-  const address = useSearchParams().get("address")?.trim() ?? "";
+  const params = useSearchParams();
+  const address = params.get("address")?.trim() ?? "";
+  const payer = params.get("payer")?.trim() ?? "";
+  const pass = useProPass();
+  const pro = isRunning(pass.status);
   const [result, setResult] = useState<CheckResult | null>(null);
 
   useEffect(() => {
-    if (!address) return;
+    // Wait for the stored pass, so a Pro visitor's check is not first sent as a free one.
+    if (!address || !pass.ready) return;
     const controller = new AbortController();
     setResult(null);
-    getDemoCheck(address, controller.signal).then(setResult, () => undefined);
+    getDemoCheck(address, controller.signal, pro && payer ? payer : undefined).then(setResult, () => undefined);
     return () => controller.abort();
-  }, [address]);
+  }, [address, payer, pro, pass.ready]);
 
   useEffect(() => {
     document.title = address ? `Check ${address} — Svalin` : "Check Before Paying — Svalin";
@@ -61,25 +68,32 @@ export function CheckTool() {
     <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 pb-20 pt-10 md:px-8">
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] md:items-end">
         <div className="grid min-w-0 gap-2">
-          <p className="eyebrow">Check Before Paying · NEAR + Solana</p>
+          <p className="eyebrow">Check Before Paying</p>
           <h1 className="break-all text-2xl font-medium tracking-tight md:text-3xl">
             {address ? <span className="font-mono text-xl md:text-2xl">{address}</span> : "Is it safe to pay this address?"}
           </h1>
           {!address ? (
             <p className="max-w-lg text-sm leading-6 text-mutedForeground">
-              Paste the address you are about to send money to. Svalin answers allow, caution or block, and says why. It only reads public data.
+              Paste the address you are about to send money to, on NEAR or Solana. Svalin answers allow, caution or block, and says why. It
+              only reads public data. To grade what a wallet holds instead, use{" "}
+              <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/scan">
+                Wallet Scan
+              </Link>
+              .
             </p>
           ) : null}
         </div>
-        <CheckForm initialValue={address} key={address} />
+        <CheckForm initialPayer={payer} initialValue={address} key={address + payer} pro={pro} />
       </div>
+
+      <ProReminder />
 
       {!address ? null : result === null ? (
         <div aria-busy="true" aria-label="Checking address" className="h-48 animate-pulse rounded-lg border border-border bg-surface" />
       ) : result.ok ? (
         <div className="grid gap-3">
           <CheckView check={result.check} />
-          <FreeCallsLeft left={result.freeLeft} />
+          <FreeCallsLeft usage={result} />
         </div>
       ) : result.status === 429 ? (
         <FreeLimitReached message={result.message} />
@@ -92,28 +106,32 @@ export function CheckTool() {
 
       <div className="grid gap-2 border-t border-border pt-6 text-sm leading-6 text-mutedForeground">
         <p>
-          This free check looks at the address itself: what kind of account it is, how old it is and how much it has been used. The paid check also
-          compares it with your own wallet&apos;s recent payments, to catch a look-alike address planted in your history (address poisoning).
-        </p>
-        <p>
-          Agents can call it before every payment.{" "}
-          <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/#agents">
-            Use the paid API or the MCP server.
+          Every check looks at the address itself: what kind of account it is, how old it is, how much it has been used, and whether its name
+          imitates a well-known NEAR account. With{" "}
+          <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/pricing">
+            Svalin Pro
+          </Link>{" "}
+          or the paid API, it also compares it with your own wallet&apos;s recent payments, to catch a look-alike address planted in your
+          history (address poisoning). Agents can{" "}
+          <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/docs">
+            call it before every payment
           </Link>
+          .
         </p>
       </div>
     </main>
   );
 }
 
-function CheckForm({ initialValue }: { initialValue: string }) {
+function CheckForm({ initialValue, initialPayer, pro }: { initialValue: string; initialPayer: string; pro: boolean }) {
   const router = useRouter();
   const [value, setValue] = useState(initialValue);
+  const [payer, setPayer] = useState(initialPayer);
   const [error, setError] = useState<string | null>(null);
 
-  function check(address: string) {
+  function check(address: string, from = "") {
     setError(null);
-    router.push(`/check?address=${encodeURIComponent(address)}`);
+    router.push(`/check?address=${encodeURIComponent(address)}${from ? `&payer=${encodeURIComponent(from)}` : ""}`);
   }
 
   function onSubmit(event: FormEvent) {
@@ -123,7 +141,12 @@ function CheckForm({ initialValue }: { initialValue: string }) {
       setError("That doesn't look like a Solana address or a NEAR account.");
       return;
     }
-    check(address);
+    const from = pro && payer.trim() ? normaliseAddress(payer) : "";
+    if (from === null) {
+      setError("Your wallet doesn't look like a Solana address or a NEAR account.");
+      return;
+    }
+    check(address, from);
   }
 
   return (
@@ -145,10 +168,26 @@ function CheckForm({ initialValue }: { initialValue: string }) {
           className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primaryForeground transition-opacity hover:opacity-90"
           type="submit"
         >
-          Check free
+          {pro ? "Check" : "Check free"}
           <ArrowRight aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>
+      {pro ? (
+        <div className="grid gap-1">
+          <label className="text-xs text-mutedForeground" htmlFor="payer">
+            Your wallet (Pro, optional): also catches look-alikes of addresses you paid
+          </label>
+          <input
+            autoComplete="off"
+            className="min-w-0 rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm outline-none placeholder:text-subtleForeground focus:border-borderStrong"
+            id="payer"
+            onChange={(event) => setPayer(event.target.value)}
+            placeholder="The wallet you will pay from"
+            spellCheck={false}
+            value={payer}
+          />
+        </div>
+      ) : null}
       {error ? <p className="text-sm text-riskHigh">{error}</p> : null}
       <p className="flex flex-wrap items-center gap-2 text-xs text-mutedForeground">
         Try
@@ -182,7 +221,7 @@ function CheckView({ check }: { check: RecipientCheck }) {
   return (
     <section aria-label="Check result" className={cn("grid gap-6 rounded-lg border bg-surface p-6", verdict.border)}>
       <div className="grid gap-1">
-        <p className="eyebrow">Verdict · {check.chain}</p>
+        <p className="eyebrow">Verdict</p>
         <p className={cn("text-3xl font-medium tracking-tight", verdict.text)}>{verdict.label}</p>
         <p className="text-sm text-mutedForeground">{verdict.summary}</p>
       </div>
@@ -208,7 +247,7 @@ function CheckView({ check }: { check: RecipientCheck }) {
         ))}
       </ul>
 
-      <p className="font-mono text-xs text-subtleForeground">
+      <p className="text-xs text-subtleForeground">
         Checked {checkedAt(check.checkedAt)}
       </p>
     </section>

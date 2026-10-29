@@ -4,6 +4,9 @@ import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { useProPass } from "@/components/pro-status";
+import { isRunning } from "@/lib/pro";
+
 const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const NEAR_ACCOUNT_ID = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
 
@@ -26,6 +29,7 @@ export function ScanForm({ initialValue = "", showExamples = false }: { initialV
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const pro = isRunning(useProPass().status);
 
   function scan(address: string) {
     setError(null);
@@ -63,7 +67,7 @@ export function ScanForm({ initialValue = "", showExamples = false }: { initialV
           disabled={pending}
           type="submit"
         >
-          {pending ? "Scanning…" : "Scan free"}
+          {pending ? "Scanning…" : pro ? "Scan" : "Scan free"}
           <ArrowRight aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>

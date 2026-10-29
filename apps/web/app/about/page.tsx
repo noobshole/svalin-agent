@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { DocPage, Status } from "@/components/doc-page";
+import { PaymentNetworks } from "@/components/payment-networks";
 
 export const metadata: Metadata = {
   title: "About — Svalin",
@@ -11,7 +12,6 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <DocPage
-      eyebrow="About"
       lede="Svalin is an independent, read-only rating service for agent money on NEAR and Solana. It tells AI agents, and the people behind them, what is real before they spend."
       title="Know what is real before you spend."
     >
@@ -34,7 +34,7 @@ export default function AboutPage() {
           <tbody>
             <tr>
               <td>
-                <Link href="/#scan">Wallet Scan</Link>
+                <Link href="/scan">Wallet Scan</Link>
                 <Status kind="live" />
               </td>
               <td>How risky is this wallet&apos;s mix of holdings?</td>
@@ -67,7 +67,7 @@ export default function AboutPage() {
       <h2>How we work</h2>
       <ul>
         <li>
-          <strong>Read-only.</strong> Svalin never asks for keys, approvals or signatures, and has no way to move anyone&apos;s funds.
+          <strong>Read-only.</strong> Svalin never asks for wallet keys, approvals or signatures, and has no way to move anyone&apos;s funds.
         </li>
         <li>
           <strong>Deterministic.</strong> The same data always gives the same answer. No language model computes a number.
@@ -88,9 +88,11 @@ export default function AboutPage() {
 
       <h2>Status</h2>
       <p>
-        Svalin is early. The scan, the check and the Index are live; payments currently run on test networks. The Registry and the Guard are designed
-        and described in the <Link href="/whitepaper">whitepaper</Link>, and the <Link href="/roadmap">roadmap</Link> shows what comes next.
+        Svalin is early. The scan, the check and the Index are live, and each chain moves from its test network to real USDC on its own. The
+        Registry and the Guard are designed and described in the <Link href="/whitepaper">whitepaper</Link>, and the{" "}
+        <Link href="/roadmap">roadmap</Link> shows what comes next.
       </p>
+      <PaymentNetworks className="not-prose" />
       <p>
         Questions, bugs and ideas are welcome on <a href="https://github.com/noobshole/svalin-agent/issues">GitHub</a>.
       </p>

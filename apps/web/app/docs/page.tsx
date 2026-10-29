@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { DocPage } from "@/components/doc-page";
+import { PaymentNetworks } from "@/components/payment-networks";
 import { API_BASE_URL, getServiceInfo } from "@/lib/api";
 
 export const metadata: Metadata = {
@@ -19,15 +20,19 @@ const paidRoutes = [
   { path: "/v1/exit/{address}", fallback: "$0.002", returns: "A NEAR token's exit prices: what selling it would fetch, at your own sale size too (?amountUsd=)" },
 ];
 
+const KEY_PLANS = [
+  { path: "/v1/keys/pro", name: "Svalin Pro", fallback: "$5", calls: "100 calls a day" },
+  { path: "/v1/keys/business", name: "Svalin Business", fallback: "$79", calls: "200,000 calls" },
+];
+
 export default async function DocsPage() {
   const info = await getServiceInfo();
   const price = (path: string, fallback: string) => info?.endpoints.find((endpoint) => endpoint.path === path)?.price ?? fallback;
-  const networks = info?.payments.networks.map((network) => network.label) ?? [];
+  const keyPlans = KEY_PLANS.map((plan) => ({ ...plan, price: price(plan.path, plan.fallback) }));
 
   return (
     <DocPage
-      eyebrow="Docs"
-      lede="Svalin is a plain HTTP API. Free routes need nothing. Paid routes are paid per call in USDC over x402, with no account and no API key."
+      lede="Svalin is a plain HTTP API. Free routes need nothing. Paid routes are paid per call in USDC over x402, with no account, or with a monthly pass bought the same way."
       title="Use Svalin from code or from an agent."
     >
       <h2>Quick start</h2>
@@ -114,14 +119,48 @@ export default async function DocsPage() {
           Call again with the <code>PAYMENT-SIGNATURE</code> header. The answer comes back with a receipt.
         </li>
       </ol>
+      <PaymentNetworks className="not-prose my-4" />
       <p>
-        {networks.length > 0 ? (
-          <>
-            Accepted networks: <strong>{networks.join(", ")}</strong>.{" "}
-          </>
-        ) : null}
-        Bad input is rejected before any payment, and a call that fails is never charged. A token address sent where a wallet was expected gets
+        Each chain moves from its test network to real USDC on its own; the line above is read live from the API. Bad input is rejected before any
+        payment, and a call that fails is never charged. A token address sent where a wallet was expected gets
         HTTP 422 with code <code>token_address</code>, and for a NEAR token, its grade.
+      </p>
+
+      <h2 id="keys">Passes for agents</h2>
+      <p>
+        For steady use, an agent can buy a pass over x402 once a month and send its key instead of paying each call:{" "}
+        <code>Authorization: Bearer &lt;key&gt;</code> works on every paid route. A call that fails is not counted, and{" "}
+        <code>GET /v1/keys/me</code> says what is left.
+      </p>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Pass</th>
+              <th>Buy at</th>
+              <th>Price</th>
+              <th>Calls, for 30 days</th>
+            </tr>
+          </thead>
+          <tbody>
+            {keyPlans.map((plan) => (
+              <tr key={plan.path}>
+                <td className="whitespace-nowrap text-foreground">{plan.name}</td>
+                <td>
+                  <code>POST {plan.path}</code>
+                </td>
+                <td className="whitespace-nowrap font-mono text-foreground">{plan.price}</td>
+                <td>{plan.calls}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The key is in the answer to that one paid call, and only there: Svalin keeps a fingerprint of it, not the key, and cannot show it again.
+        To renew, buy the same pass again with the key in the <code>Authorization</code> header: the new days start where the current ones end,
+        and a Business key keeps its unused calls. A Pro code bought on the <Link href="/pricing">Pricing page</Link> is the same pass and works
+        here too. In the MCP server, set <code>SVALIN_API_KEY</code>.
       </p>
 
       <h2>For AI agents (MCP)</h2>

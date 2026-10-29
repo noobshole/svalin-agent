@@ -8,10 +8,10 @@ const columns = [
   {
     title: "Product",
     links: [
-      { href: "/#scan", label: "Wallet Scan" },
+      { href: "/scan", label: "Wallet Scan" },
       { href: "/check", label: "Check Before Paying" },
       { href: "/ratings", label: "Svalin Index" },
-      { href: "/pro", label: "Svalin Pro" },
+      { href: "/pricing", label: "Pricing" },
     ],
   },
   {

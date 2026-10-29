@@ -31,10 +31,16 @@ const phases: Phase[] = [
         body: "Every NEAR token graded by the real money behind its price, in editions anyone can verify, with a public track record.",
       },
       { title: "Exit prices", body: "What selling any NEAR token, or everything in a NEAR wallet, would actually fetch now." },
-      { title: "Pay per call and MCP", body: "USDC over x402, and an MCP server with spend caps. Payments run on test networks for now." },
+      { title: "Pay per call and MCP", body: "USDC over x402, and an MCP server with spend caps. Each chain moves to real USDC on its own." },
       {
         title: "Payment guard",
-        body: "Before an agent pays any x402 service: blocks a payee or price that changed since first seen, and checks the payee.",
+        body: "Before an agent pays any x402 service: blocks a changed payee or price, and warns before paying the same request twice.",
+      },
+      { title: "Famous-name check", body: "Check Before Paying catches look-alikes of well-known NEAR accounts, even on a first payment." },
+      { title: "Hidden-instruction alarm", body: "Token names written to give an AI agent orders are hidden and flagged, never passed on." },
+      {
+        title: "Svalin Pro and Business",
+        body: "One pass for people and agents: Pro by QR code, an exact amount on NEAR or over x402, and Business for heavy agent use. On test USDC until each chain takes real USDC.",
       },
     ],
   },
@@ -44,13 +50,11 @@ const phases: Phase[] = [
     status: "planned",
     items: [
       { title: "Early warnings", body: "The Index flags tokens whose real money is leaving their pools, before the price moves." },
-      { title: "Famous-name check", body: "Check Before Paying catches look-alikes of well-known NEAR accounts, even on a first payment." },
       { title: "Who can move this money", body: "Wallet reports show the keys that could move its funds, and warn when a new one appears." },
-      { title: "Hidden-instruction alarm", body: "Token names written to give an AI agent orders are flagged, not followed." },
       { title: "Stress test", body: "What a wallet would still fetch if prices fell and pools thinned." },
       {
-        title: "Mainnet payments and Svalin Pro",
-        body: "Paying per call on NEAR and Solana mainnet, svalin-mcp on npm, and Svalin Pro for people, paid in USDC.",
+        title: "Real USDC",
+        body: "Payments, Pro and keys move to real USDC chain by chain (Solana first, NEAR next), and svalin-mcp goes on npm.",
       },
       { title: "Svalin Registry", body: "Token grades published on NEAR, so any contract or agent can read them on-chain." },
       {
@@ -87,7 +91,6 @@ const phases: Phase[] = [
 export default function RoadmapPage() {
   return (
     <DocPage
-      eyebrow="Roadmap"
       lede="Svalin starts with ratings an agent can read, then puts them on-chain where contracts can enforce them, then brings the same method to more chains."
       title="What is live, and what comes next"
     >
@@ -106,7 +109,7 @@ export default function RoadmapPage() {
             {index < phases.length - 1 ? <span aria-hidden="true" className="absolute bottom-0 left-[9px] top-5 w-px bg-border" /> : null}
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h2 className="!m-0 !text-lg">{phase.name}</h2>
-              <span className="font-mono text-xs text-subtleForeground">{phase.when}</span>
+              <span className="text-sm text-subtleForeground">{phase.when}</span>
             </div>
             <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
               {phase.items.map((item) => (

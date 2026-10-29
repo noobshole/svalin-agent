@@ -1,230 +1,73 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import { ReportPreview } from "@/components/report-preview";
-import { ScanForm } from "@/components/scan-form";
-import { API_BASE_URL, getServiceInfo } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/api";
 import { exampleReport } from "@/lib/example-report";
 
-const fallbackPrices = { portfolio: "$0.002", risk: "$0.004", brief: "$0.02", check: "$0.002", exit: "$0.002" };
+const linkClass = "text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground";
 
-export default async function HomePage() {
-  const info = await getServiceInfo();
-  const price = (path: string, fallback: string) =>
-    info?.endpoints.find((endpoint) => endpoint.path === path)?.price ?? fallback;
-  const apiUrl = API_BASE_URL;
-  const networks = info?.payments.networks.map((network) => network.label) ?? [];
-  const riskPrice = price("/v1/risk/{address}", fallbackPrices.risk);
+const tools = [
+  {
+    name: "Wallet Scan",
+    body: "A grade from A to F for how risky the money in a wallet is, and what to do about it.",
+    href: "/scan",
+  },
+  {
+    name: "Check Before Paying",
+    body: "Allow, caution or block before you send money to an address, with the reason.",
+    href: "/check",
+  },
+  {
+    name: "Svalin Index",
+    body: "Every NEAR token graded by the real money behind its price.",
+    href: "/ratings",
+  },
+];
 
-  const plans = [
-    { name: "Free scan", path: "/v1/demo/risk/{address}", returns: "Risk report, 5 free calls a day", price: "Free" },
-    { name: "Portfolio", path: "/v1/portfolio/{address}", returns: "Priced holdings with a risk category per token", price: price("/v1/portfolio/{address}", fallbackPrices.portfolio) },
-    { name: "Risk report", path: "/v1/risk/{address}", returns: "Score, grade, exposure metrics and findings", price: riskPrice },
-    { name: "Agent brief", path: "/v1/brief/{address}", returns: "Headline, summary and up to 3 actions, plus the report", price: price("/v1/brief/{address}", fallbackPrices.brief) },
-    {
-      name: "Recipient check",
-      path: "/v1/check/{address}",
-      returns: "Allow, caution or block before paying, including look-alike addresses",
-      price: price("/v1/check/{address}", fallbackPrices.check),
-    },
-    {
-      name: "Exit prices",
-      path: "/v1/exit/{address}",
-      returns: "What selling a NEAR token would actually fetch, at any size",
-      price: price("/v1/exit/{address}", fallbackPrices.exit),
-    },
-  ];
-
+export default function HomePage() {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 md:px-8">
-      <section className="grid scroll-mt-14 items-center gap-12 py-16 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] md:py-24" id="scan">
-        <div className="grid gap-6">
-          <p className="eyebrow">Read-only · NEAR + Solana · x402</p>
-          <h1 className="max-w-xl text-4xl font-medium leading-[1.08] tracking-tight md:text-[3.25rem]">
+      <section className="grid items-center gap-14 py-20 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] md:py-28">
+        <div className="grid justify-items-start gap-7">
+          <h1 className="max-w-xl text-5xl font-medium leading-[1.05] tracking-tight md:text-6xl" style={{ textWrap: "balance" }}>
             Know the risk before your agent acts.
           </h1>
-          <p className="max-w-lg text-base leading-7 text-mutedForeground">
-            Svalin rates what an AI agent is about to touch: wallets, tokens and the addresses it pays, on NEAR and Solana. Agents pay per call in USDC.
-            No keys, no accounts, and no way to move funds.
+          <p className="max-w-md text-lg leading-8 text-mutedForeground">
+            Risk ratings for wallets, tokens and payments on NEAR and Solana. Read-only, so it can never move your money.
           </p>
-          <div className="grid max-w-lg gap-3">
-            <ScanForm showExamples />
-            <p className="text-sm text-mutedForeground">
-              Paying someone?{" "}
-              <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/check">
-                Check the address first.
-              </Link>
-            </p>
-          </div>
+          <Link
+            className="rounded-full bg-primary px-6 py-3 text-base font-medium text-primaryForeground transition-opacity hover:opacity-90"
+            href="/scan"
+          >
+            Scan a wallet free
+          </Link>
         </div>
         <ReportPreview report={exampleReport} />
       </section>
 
-      <section className="grid border-y border-border md:grid-cols-3">
-        {[
-          { title: "Cannot move funds", body: "No keys, approvals or signatures from the wallet it analyses. Public data only." },
-          { title: "Never charged for errors", body: "Bad input is rejected before payment, and failed calls never settle." },
-          { title: "Deterministic", body: "Same holdings, same report. No language model computes a number." },
-        ].map((item, index) => (
-          <div className={`grid gap-1.5 py-6 md:px-6 ${index > 0 ? "border-t border-border md:border-l md:border-t-0" : "md:pl-0"}`} key={item.title}>
-            <h2 className="text-sm font-medium">{item.title}</h2>
-            <p className="text-sm leading-6 text-mutedForeground">{item.body}</p>
-          </div>
+      <section className="grid gap-10 border-t border-border py-16 md:grid-cols-3">
+        {tools.map((tool) => (
+          <Link className="group grid content-start gap-2" href={tool.href} key={tool.name}>
+            <h2 className="text-lg font-medium tracking-tight group-hover:underline group-hover:decoration-border group-hover:underline-offset-4">
+              {tool.name}
+            </h2>
+            <p className="text-sm leading-6 text-mutedForeground">{tool.body}</p>
+          </Link>
         ))}
       </section>
 
-      <Section eyebrow="Products" id="products" title="Three answers before money moves.">
-        <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
-          {[
-            {
-              name: "Wallet Scan",
-              question: "How risky is this wallet?",
-              body: "A grade, plain findings, and on NEAR what the wallet would actually fetch if sold now.",
-              href: "/#scan",
-              cta: "Scan a wallet",
-            },
-            {
-              name: "Check Before Paying",
-              question: "Is it safe to pay this address?",
-              body: "Allow, caution or block, including addresses and names made to look like ones you paid.",
-              href: "/check",
-              cta: "Check an address",
-            },
-            {
-              name: "Svalin Index",
-              question: "Is the price real?",
-              body: "Every NEAR token graded by the real money behind it, in editions anyone can verify.",
-              href: "/ratings",
-              cta: "See the ratings",
-            },
-          ].map((product) => (
-            <Link className="group grid content-start gap-3 bg-surface p-6 transition-colors hover:bg-surface2" href={product.href} key={product.name}>
-              <p className="eyebrow">{product.name}</p>
-              <h3 className="text-lg font-medium tracking-tight">{product.question}</h3>
-              <p className="text-sm leading-6 text-mutedForeground">{product.body}</p>
-              <span className="mt-1 text-sm text-foreground">
-                {product.cta} <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      </Section>
-
-      <Section eyebrow="How it works" id="how" title="One call, one answer, nothing executed.">
-        <ol className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
-          {[
-            { step: "01", title: "Ask", body: "Your agent requests a report for any Solana wallet or NEAR account.", code: "GET /v1/risk/{address}" },
-            {
-              step: "02",
-              title: "Pay",
-              body: `The API answers 402 with the price: ${riskPrice} in USDC on ${networks.length > 0 ? networks.join(" or ") : "Solana or NEAR"}. The client pays and retries.`,
-              code: "402 → PAYMENT-SIGNATURE",
-            },
-            { step: "03", title: "Act", body: "Grade, metrics and findings with a next step. Your agent or a human decides; Svalin never executes.", code: "200 → risk report" },
-          ].map((item) => (
-            <li className="grid content-start gap-3 bg-surface p-6" key={item.step}>
-              <span className="font-mono text-xs text-subtleForeground">{item.step}</span>
-              <h3 className="font-medium">{item.title}</h3>
-              <p className="text-sm leading-6 text-mutedForeground">{item.body}</p>
-              <code className="font-mono text-xs text-foreground">{item.code}</code>
-            </li>
-          ))}
-        </ol>
-      </Section>
-
-      <Section eyebrow="Use cases" title="The read-only risk step in an agent workflow.">
-        <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            { title: "Agent guardrails", body: "Check the grade before a swap or rebalance, and ask a human when it is poor." },
-            { title: "Wallet copilots", body: "Explain a wallet in plain English, on request or on a schedule." },
-            { title: "Treasuries and DAOs", body: "Concentration limits and stablecoin buffer checks for each treasury wallet." },
-            { title: "Research and analytics", body: "Score many wallets in one format across Solana and NEAR." },
-            { title: "Agent tool catalogs", body: "Self-describing with OpenAPI and llms.txt, and an MCP server with spend caps." },
-          ].map((item) => (
-            <div className="grid gap-1.5 border-l border-border pl-4" key={item.title}>
-              <h3 className="text-sm font-medium">{item.title}</h3>
-              <p className="text-sm leading-6 text-mutedForeground">{item.body}</p>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section eyebrow="Pricing" id="pricing" title="Pay per call, in USDC.">
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
-          {plans.map((plan, index) => (
-            <div
-              className={`grid gap-1 px-5 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center sm:gap-6 ${index > 0 ? "border-t border-border" : ""}`}
-              key={plan.name}
-            >
-              <p className="text-sm font-medium">{plan.name}</p>
-              <div className="min-w-0">
-                <p className="text-sm text-mutedForeground">{plan.returns}</p>
-                <code className="block truncate font-mono text-xs text-subtleForeground">GET {plan.path}</code>
-              </div>
-              <p className="font-mono text-sm">{plan.price}</p>
-            </div>
-          ))}
-        </div>
-        <p className="text-sm text-mutedForeground">
-          Agents need no subscription or sign-up: they read the price from the 402 response, and failed calls are never charged.
-          People who scan by hand get 5 free calls a day, and <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/pro">Svalin Pro</Link> for more.
+      <section className="grid gap-4 border-t border-border py-16 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-12">
+        <h2 className="text-2xl font-medium tracking-tight">Built for AI agents</h2>
+        <p className="text-sm leading-6 text-mutedForeground">
+          Agents call the same checks over HTTP or through the MCP server, and pay per call in USDC with x402: no account needed. People get 5 free
+          checks a day, or <Link className={linkClass} href="/pricing">Svalin Pro</Link> for $5 a month. See the{" "}
+          <Link className={linkClass} href="/docs">docs</Link>, or the machine-readable{" "}
+          <a className={linkClass} href={`${API_BASE_URL}/llms.txt`}>
+            llms.txt
+          </a>
+          .
         </p>
-      </Section>
-
-      <Section eyebrow="For agents" id="agents" title="Built to be called by agents.">
-        <div className="grid gap-8 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <div className="grid content-start gap-4 text-sm leading-6 text-mutedForeground">
-            <p>
-              Add the MCP server to Claude, Cursor or any MCP client. The free scan works straight away. Add a dedicated wallet with a few dollars
-              of USDC for the paid tools, with a hard per-call cap and a session budget.
-            </p>
-            <p>
-              Building your own agent? Any x402 client can call the API directly. Machine-readable docs:{" "}
-              <a className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href={`${apiUrl}/llms.txt`}>
-                llms.txt
-              </a>{" "}
-              and{" "}
-              <a className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href={`${apiUrl}/openapi.json`}>
-                openapi.json
-              </a>
-              .
-            </p>
-          </div>
-          <div className="grid min-w-0 gap-3">
-            <Snippet
-              code={`git clone https://github.com/noobshole/svalin-agent\ncd svalin-agent && pnpm install && pnpm build\n\nclaude mcp add svalin \\\n  -e SVALIN_API_URL=${apiUrl} \\\n  -- node "$PWD/packages/mcp/dist/index.js"`}
-              title="mcp · claude code · from source until the npm release"
-            />
-            <Snippet
-              code={`import { wrapFetchWithPayment, x402Client } from "@x402/fetch";\nimport { ExactSvmScheme } from "@x402/svm/exact/client";\n\nconst pay = wrapFetchWithPayment(fetch,\n  new x402Client().register("solana:*", new ExactSvmScheme(signer)));\n\nconst report = await (await pay(\`${apiUrl}/v1/risk/\${wallet}\`)).json();`}
-              title="any x402 client · typescript"
-            />
-          </div>
-        </div>
-      </Section>
+      </section>
     </main>
-  );
-}
-
-function Section({ eyebrow, title, id, children }: { eyebrow: string; title: string; id?: string; children: ReactNode }) {
-  return (
-    <section className="grid scroll-mt-20 gap-8 py-16 md:py-20" id={id}>
-      <div className="grid gap-3">
-        <p className="eyebrow">{eyebrow}</p>
-        <h2 className="max-w-2xl text-2xl font-medium tracking-tight md:text-3xl">{title}</h2>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Snippet({ title, code }: { title: string; code: string }) {
-  return (
-    <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-surface">
-      <p className="border-b border-border px-4 py-2 font-mono text-xs text-subtleForeground">{title}</p>
-      <pre className="overflow-x-auto p-4 font-mono text-xs leading-6">
-        <code>{code}</code>
-      </pre>
-    </div>
   );
 }

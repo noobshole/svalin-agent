@@ -15,12 +15,12 @@ export const NAV: NavItem[] = [
   {
     label: "Products",
     links: [
-      { href: "/#scan", label: "Wallet Scan", description: "A risk grade for any Solana wallet or NEAR account" },
+      { href: "/scan", label: "Wallet Scan", description: "A risk grade for any Solana wallet or NEAR account" },
       { href: "/check", label: "Check Before Paying", description: "Allow, caution or block before you send money" },
       { href: "/ratings", label: "Svalin Index", description: "Every NEAR token graded by the real money behind it" },
-      { href: "/pro", label: "Svalin Pro", description: "Unlimited scans and every next step, $5 a month" },
     ],
   },
+  { label: "Pricing", href: "/pricing" },
   { label: "Docs", href: "/docs" },
   {
     label: "Resources",
@@ -179,5 +179,21 @@ export function MobileMenu() {
         </nav>
       </details>
     </div>
+  );
+}
+
+/** Pages with a main button of their own, where the header's would be a second one. */
+const OWN_BUTTON = new Set(["/", "/scan", "/check", "/pricing"]);
+
+/** The header's one button, left out where the page already has its main button. */
+export function HeaderCta() {
+  if (OWN_BUTTON.has(usePathname().replace(/\/+$/, "") || "/")) return null;
+  return (
+    <Link
+      className="ml-1 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primaryForeground transition-opacity hover:opacity-90"
+      href="/scan"
+    >
+      Scan a wallet
+    </Link>
   );
 }

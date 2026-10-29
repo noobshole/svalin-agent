@@ -15,8 +15,10 @@ import { ChevronDown, Search } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { useProPass } from "@/components/pro-status";
 import { summaryReset } from "@/components/site-nav";
 import { API_BASE_URL } from "@/lib/api";
+import { isRunning } from "@/lib/pro";
 import { cn } from "@/lib/utils/cn";
 import { formatCompactUsd, formatPrice, formatUsd } from "@/lib/utils/formatting";
 
@@ -108,21 +110,22 @@ function Summary({ index }: { index: NearTokenIndex }) {
 
   return (
     <section className="grid gap-4">
-      <div className="flex flex-col gap-1 font-mono text-xs text-mutedForeground sm:flex-row sm:flex-wrap sm:gap-x-4">
+      <div className="flex flex-col gap-1 text-sm text-mutedForeground sm:flex-row sm:flex-wrap sm:gap-x-4">
         <span>
-          Edition {edition} UTC ({ageLabel(index.generatedAt)}) · rebuilt every few hours
+          Edition of {edition} UTC, {ageLabel(index.generatedAt)}. A new one comes every few hours.
         </span>
         {provenance ? (
           <span>
-            Every edition is saved with the data behind it ·{" "}
+            Each edition is saved with the data behind it, so you can{" "}
             <a
               className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
               href="https://github.com/noobshole/svalin-index#dont-trust-it-verify-it"
               rel="noreferrer"
               target="_blank"
             >
-              verify it yourself
+              check it yourself
             </a>
+            .
           </span>
         ) : null}
       </div>
@@ -248,7 +251,7 @@ function TokenTable({ rows }: { rows: RatedTokenRow[] }) {
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
-        <div className={cn("hidden gap-4 border-b border-border px-5 py-2.5 font-mono text-xs text-subtleForeground md:grid", COLUMNS)}>
+        <div className={cn("hidden gap-4 border-b border-border px-5 py-2.5 text-xs font-medium text-mutedForeground md:grid", COLUMNS)}>
           <span>Token</span>
           <span>Grade</span>
           <span className="text-right">Price</span>
@@ -331,7 +334,8 @@ function Cell({ label, value, flagged = false }: { label: string; value: string;
  * quoted price, and what the whole supply could fetch. The same numbers the API returns.
  */
 function ExitPanel({ row }: { row: RatedTokenRow }) {
-  const [contract, , priceUsd, backingUsd, , marketCap] = row;
+  const [, , priceUsd, backingUsd, , marketCap] = row;
+  const pro = isRunning(useProPass().status);
   const backed = backingUsd > 0;
   const wholeSupply = !backed ? 0 : marketCap === null ? null : saleProceeds(backingUsd, marketCap);
   const capacity = [
@@ -355,12 +359,13 @@ function ExitPanel({ row }: { row: RatedTokenRow }) {
               <p className="text-xs text-mutedForeground">Selling {formatCompactUsd(saleUsd)} fetches</p>
               <p className="font-mono text-lg tracking-tight">{backed ? formatUsd(saleProceeds(backingUsd, saleUsd)) : "nothing"}</p>
               <p className="font-mono text-xs text-subtleForeground">
-                {backed ? `−${lossLabel(loss)} · ${formatPrice(priceUsd * (1 - loss))} a token` : "no real money in its pools"}
+                {backed ? `${lossLabel(loss)} below the price, ${formatPrice(priceUsd * (1 - loss))} a token` : "no real money in its pools"}
               </p>
             </div>
           );
         })}
       </div>
+      {pro && backed ? <OwnSaleSize backingUsd={backingUsd} priceUsd={priceUsd} /> : null}
       <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-3">
         {capacity.map((item) => (
           <div className="grid content-start gap-0.5" key={item.label}>
@@ -377,6 +382,37 @@ function ExitPanel({ row }: { row: RatedTokenRow }) {
           Use it in your app
         </Link>
       </p>
+    </div>
+  );
+}
+
+/** Svalin Pro: what a sale of your own size would fetch, by the same formula as the sizes above. */
+function OwnSaleSize({ backingUsd, priceUsd }: { backingUsd: number; priceUsd: number }) {
+  const [value, setValue] = useState("");
+  const saleUsd = Number(value.replace(/[$,s]/g, ""));
+  const valid = Number.isFinite(saleUsd) && saleUsd > 0 && saleUsd <= 1e12;
+  const loss = valid ? saleLoss(backingUsd, saleUsd) : 0;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      <label className="text-xs text-mutedForeground" htmlFor="own-sale">
+        Your sale size (Pro)
+      </label>
+      <input
+        className="w-36 rounded-md border border-border bg-transparent px-3 py-1.5 font-mono text-sm outline-none focus:border-borderStrong"
+        id="own-sale"
+        inputMode="decimal"
+        onChange={(event) => setValue(event.target.value)}
+        placeholder="$25,000"
+        value={value}
+      />
+      {valid ? (
+        <span className="font-mono">
+          fetches {formatUsd(saleProceeds(backingUsd, saleUsd))}{" "}
+          <span className="text-xs text-subtleForeground">
+            {lossLabel(loss)} below the price, {formatPrice(priceUsd * (1 - loss))} a token
+          </span>
+        </span>
+      ) : null}
     </div>
   );
 }

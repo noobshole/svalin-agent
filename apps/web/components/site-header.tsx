@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { Logo } from "@/components/logo";
-import { MobileMenu, NavLinks } from "@/components/site-nav";
+import { HeaderCta, MobileMenu, NavLinks } from "@/components/site-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export function SiteHeader() {
@@ -19,12 +19,7 @@ export function SiteHeader() {
         </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <Link
-            className="ml-1 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primaryForeground transition-opacity hover:opacity-90"
-            href="/#scan"
-          >
-            Scan a wallet
-          </Link>
+          <HeaderCta />
           <MobileMenu />
         </div>
       </div>
