@@ -6,9 +6,11 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./env.js";
 import { createClientIpResolver } from "./lib/client-ip.js";
 import { DurableDemoLimiter, type DemoLimiterNamespace } from "./lib/durable-demo-limiter.js";
+import { DurableKeyStore } from "./lib/durable-key-store.js";
 import { startupSummary } from "./startup-log.js";
 
 export { DemoLimiterObject } from "./lib/durable-demo-limiter.js";
+export { KeyStoreObject } from "./lib/durable-key-store.js";
 
 type Bindings = Record<string, unknown>;
 
@@ -28,6 +30,10 @@ export default {
       if (!namespace) {
         console.error(JSON.stringify({ level: "error", msg: "demo_limiter_binding_missing" }));
       }
+      const keyNamespace = env.KEY_STORE as DemoLimiterNamespace | undefined;
+      if (!keyNamespace) {
+        console.error(JSON.stringify({ level: "error", msg: "key_store_binding_missing" }));
+      }
       app = createApp(config, {
         clientIp: createClientIpResolver({
           trustedProxyHops: 0,
@@ -38,6 +44,8 @@ export default {
         demoLimiter: namespace
           ? new DurableDemoLimiter(namespace, config.demo.perDay, config.demo.perDayGlobal)
           : undefined,
+        // Without the binding, every key route answers 503: keys kept in one isolate's memory would be lost.
+        keyStore: new DurableKeyStore(keyNamespace),
         paymentInitialization: "first-paid-request",
         paymentDiscovery: false,
       });
@@ -48,6 +56,7 @@ export default {
           msg: "svalin_api_started",
           runtime: "cloudflare-workers",
           demoLimiter: namespace ? "durable-object" : "memory",
+          keyStore: keyNamespace ? "durable-object" : "memory",
           ...startupSummary(config),
         }),
       );

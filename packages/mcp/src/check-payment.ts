@@ -87,6 +87,7 @@ export async function checkX402Payment(client: SvalinClient, memory: PayeeMemory
       request,
       option,
       pin: memory.get(service, option.network),
+      repeatedAfterMinutes: memory.noteCheck(service, input.url, option),
       expectedUsd: input.expectedUsd,
       maxUsd: input.maxUsd,
       memoryFile: memory.file,
@@ -128,7 +129,7 @@ async function payeeReasons(client: SvalinClient, option: PaymentOption, payerIn
   if (payer) query.set("payer", payer);
   const usd = amountUsd(option);
   if (usd !== null) query.set("amountUsd", String(usd));
-  const route = client.canPay ? "/v1/check/" : "/v1/demo/check/";
+  const route = client.canPay || client.hasKey ? "/v1/check/" : "/v1/demo/check/";
   const url = `${client.apiUrl.replace(/\/+$/, "")}${route}${encodeURIComponent(option.payTo)}${query.size ? `?${query}` : ""}`;
 
   try {

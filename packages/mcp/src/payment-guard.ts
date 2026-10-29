@@ -55,6 +55,9 @@ const PAYEE_FORMATS: readonly [string, RegExp][] = [
   ["eip155:", /^0x[0-9a-fA-F]{40}$/],
 ];
 
+/** The same request checked again within this many minutes is a possible "payment failed, pay again". */
+export const REPEAT_WINDOW_MINUTES = 15;
+
 /** A price this many times the remembered one gets a caution, and this many times a block. */
 export const PRICE_JUMP_CAUTION = 2n;
 export const PRICE_JUMP_BLOCK = 10n;
@@ -151,9 +154,22 @@ export function judgePayment(input: {
   expectedUsd?: number;
   maxUsd?: number;
   memoryFile?: string;
+  /** Minutes since this same request (service, URL, payee, amount) was last checked; undefined if not recently. */
+  repeatedAfterMinutes?: number;
 }): GuardReason[] {
   const { option, pin } = input;
   const reasons: GuardReason[] = [];
+
+  if (input.repeatedAfterMinutes !== undefined) {
+    const ago = input.repeatedAfterMinutes < 1 ? "under a minute" : `${Math.round(input.repeatedAfterMinutes)} minute${Math.round(input.repeatedAfterMinutes) === 1 ? "" : "s"}`;
+    reasons.push({
+      code: "repeat-request",
+      severity: "caution",
+      message:
+        `This exact payment (same site, payee and amount) was checked ${ago} ago. If the service now says the first payment failed, ` +
+        "confirm on-chain that it really did before paying again: \"payment failed, pay again\" is a common trick.",
+    });
+  }
   const usdc = USDC_BY_NETWORK[option.network];
   const usd = amountUsd(option);
   const price = usd === null ? `${option.amount} units of ${option.asset}` : atomicToUsd(option.amount);
@@ -244,7 +260,23 @@ export const defaultMemoryFile = () => join(homedir(), ".svalin", "payees.json")
  * by deleting the entry.
  */
 export class PayeeMemory {
+  /** When each payment request was last checked in this session, by service, URL, payee and amount. */
+  private readonly checked = new Map<string, number>();
+
   constructor(readonly file: string = defaultMemoryFile()) {}
+
+  /**
+   * Records a check of this request and returns the minutes since the same request was last checked,
+   * if that was within REPEAT_WINDOW_MINUTES. Kept in memory: a repeat matters within a session.
+   */
+  noteCheck(service: string, url: string, option: PaymentOption, now = Date.now()): number | undefined {
+    const key = [service, url, option.network, option.payTo, option.asset, option.amount.toString()].join("|");
+    const last = this.checked.get(key);
+    this.checked.set(key, now);
+    if (this.checked.size > 500) this.checked.delete(this.checked.keys().next().value as string);
+    const minutes = last === undefined ? undefined : (now - last) / 60_000;
+    return minutes !== undefined && minutes <= REPEAT_WINDOW_MINUTES ? minutes : undefined;
+  }
 
   private read(): PinFile {
     let text: string;

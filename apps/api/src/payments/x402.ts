@@ -7,7 +7,7 @@ import { ExactNearScheme } from "@x402/near/exact/server";
 import { ExactSvmScheme } from "@x402/svm/exact/server";
 import type { MiddlewareHandler } from "hono";
 
-import { ADDRESS_PATTERN, paidRoutes, paymentNetworks, type PaidRouteKey } from "../catalog.js";
+import { ADDRESS_PATTERN, KEY_PLAN_IDS, keyRouteDescription, paidRoutes, paymentNetworks, type PaidRouteKey } from "../catalog.js";
 import type { AppConfig } from "../env.js";
 import { ApiError } from "../lib/errors.js";
 import type { PaymentLedger } from "./ledger.js";
@@ -55,7 +55,7 @@ const outputExamples: Record<PaidRouteKey, unknown> = {
  * - The default facilitator (PayAI on mainnet, x402.org on testnet) covers Solana otherwise.
  */
 export function facilitatorClients(config: AppConfig): { name: string; client: FacilitatorClient }[] {
-  const { cdp, environment, facilitatorUrl, payToNear, nearFacilitator } = config.payments;
+  const { cdp, networks, facilitatorUrl, payToNear, nearFacilitator } = config.payments;
   const clients: { name: string; client: FacilitatorClient }[] = [];
 
   if (cdp) {
@@ -68,15 +68,15 @@ export function facilitatorClients(config: AppConfig): { name: string; client: F
     clients.push({
       name: "near",
       client: new HTTPFacilitatorClient({
-        url: nearFacilitator.url ?? defaultNearFacilitatorUrl[environment],
+        url: nearFacilitator.url ?? defaultNearFacilitatorUrl[networks.near],
         ...(auth ? { createAuthHeaders: async () => ({ verify: auth, settle: auth }) } : {}),
       }),
     });
   }
 
   clients.push({
-    name: facilitatorUrl ? "custom" : environment === "mainnet" ? "payai" : "x402.org",
-    client: new HTTPFacilitatorClient({ url: facilitatorUrl ?? defaultFacilitatorUrl[environment] }),
+    name: facilitatorUrl ? "custom" : networks.solana === "mainnet" ? "payai" : "x402.org",
+    client: new HTTPFacilitatorClient({ url: facilitatorUrl ?? defaultFacilitatorUrl[networks.solana] }),
   });
 
   return clients;
@@ -120,6 +120,29 @@ export function createPaymentLayer(config: AppConfig, options: PaymentLayerOptio
     });
   });
 
+  const accepts = (price: string) =>
+    networks.map((network) => ({
+      scheme: "exact",
+      price,
+      network: network.caip2 as `${string}:${string}`,
+      payTo: network.payTo,
+      maxTimeoutSeconds: 120,
+    }));
+
+  // Svalin passes (Pro, Business). The key is made by the handler and only sent once the payment settles.
+  const keyRoutes = Object.fromEntries(
+    KEY_PLAN_IDS.map((plan) => [
+      `POST /v1/keys/${plan}`,
+      {
+        accepts: accepts(config.payments.keyPrices[plan]),
+        description: keyRouteDescription(plan, config.pro.callsPerDay),
+        mimeType: "application/json",
+        serviceName: "Svalin",
+        tags: ["keys", "subscription", "agent"],
+      },
+    ]),
+  );
+
   const routes = Object.fromEntries(
     (Object.keys(paidRoutes) as PaidRouteKey[]).map((key) => {
       const route = paidRoutes[key];
@@ -128,13 +151,7 @@ export function createPaymentLayer(config: AppConfig, options: PaymentLayerOptio
       return [
         pattern,
         {
-          accepts: networks.map((network) => ({
-            scheme: "exact",
-            price: config.payments.prices[key],
-            network: network.caip2 as `${string}:${string}`,
-            payTo: network.payTo,
-            maxTimeoutSeconds: 120,
-          })),
+          accepts: accepts(config.payments.prices[key]),
           description: route.description,
           mimeType: "application/json",
           serviceName: "Svalin",
@@ -161,17 +178,20 @@ export function createPaymentLayer(config: AppConfig, options: PaymentLayerOptio
     }),
   );
 
+  const allRoutes = { ...routes, ...keyRoutes };
   if (options.initialization !== "first-paid-request") {
-    return paymentMiddleware(routes, server);
+    return paymentMiddleware(allRoutes, server);
   }
 
   // Fetch supported kinds inside the paid request that first needs them, so the request that
   // started the I/O is the one awaiting it. A failure is retried on the next paid request.
-  const middleware = paymentMiddleware(routes, server, undefined, undefined, false);
+  const middleware = paymentMiddleware(allRoutes, server, undefined, undefined, false);
   const paidPrefixes = Object.values(paidRoutes).map((route) => route.path.replace("{address}", ""));
+  const keyPaths = new Set(KEY_PLAN_IDS.map((plan) => `/v1/keys/${plan}`));
   let ready: Promise<void> | undefined;
   return async (c, next) => {
-    if (!paidPrefixes.some((prefix) => c.req.path.startsWith(prefix))) return next();
+    const isKeyPurchase = c.req.method === "POST" && keyPaths.has(c.req.path);
+    if (!isKeyPurchase && !paidPrefixes.some((prefix) => c.req.path.startsWith(prefix))) return next();
     try {
       await (ready ??= server.initialize().catch((error: unknown) => {
         ready = undefined;

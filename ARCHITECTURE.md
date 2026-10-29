@@ -24,8 +24,15 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
 1. `secureHeaders`, `cors`, JSON request log.
 2. **Address gate** on `/v1/*`: rejects malformed addresses (400) and chains the active source
    cannot serve (501) *before* the paywall, so nobody is asked to pay for a request that can only
-   fail. In production with no `payTo` configured, paid routes return 503.
-3. **x402 paywall** (`payments/x402.ts`): `@x402/hono` middleware. Each paid route accepts
+   fail. In production with no `payTo` configured, paid routes return 503. A pass purchase
+   (`POST /v1/keys/{pro,business}`) that renews a key is checked here too: an unknown key (401) or
+   one of the other plan (409) is refused before any payment.
+3. **Pass check**: an `Authorization: Bearer` key on a paid route (`lib/key-store.ts`) uses one of
+   the pass's calls instead of an x402 payment, and gives it back if the handler fails. Keys are
+   stored by SHA-256 only. Pro passes run on payments found on-chain (`payments/pro-payments.ts`:
+   a Solana Pay reference, or an exact NEAR amount); only payments on the networks the API takes
+   now count, so a test-network pass ends when its chain moves to mainnet.
+4. **x402 paywall** (`payments/x402.ts`): `@x402/hono` middleware. Each paid route accepts
    exact-scheme USDC on every configured network (Solana via `ExactSvmScheme`, NEAR via
    `ExactNearScheme`, where the payer signs a NEP-366 delegated `ft_transfer` and the facilitator's
    relayer pays the gas). Routes are registered as `GET /v1/<route>/:address` and declare Bazaar
@@ -37,9 +44,9 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
    `PAY_TO_NEAR` is set (FastNEAR reference facilitator, API key in `X-API-Key`), then the default
    Solana facilitator (PayAI on mainnet, x402.org on testnet). A facilitator that fails at startup
    is skipped, so bad keys for one never take the others down.
-4. **Handlers**: `getOverview` (TTL cache + in-flight de-duplication) → `buildRiskReport` →
+5. **Handlers**: `getOverview` (TTL cache + in-flight de-duplication) → `buildRiskReport` →
    optional `Narrator`.
-5. **Ledger** (`payments/ledger.ts`): an `onAfterSettle` hook writes every settled payment as a JSON
+6. **Ledger** (`payments/ledger.ts`): an `onAfterSettle` hook writes every settled payment as a JSON
    log line and, if configured, a row in `public.api_payments`.
 
 ## Boundaries
@@ -125,6 +132,9 @@ Workers with `nodejs_compat`. On Workers:
   `DEMO_LIMITER`), because Workers run many isolates and in-memory counts are never shared. It
   applies the same rule as the in-memory limiter (`decideDemoLimit`), persists counts to its
   storage, and fails closed (the demo pauses) if it cannot be reached.
+- Passes live in a second Durable Object (`lib/durable-key-store.ts`, binding `KEY_STORE`), which
+  runs each request on its own, so two calls never spend the same last call or claim the same
+  payment. Without the binding every pass route answers 503.
 - Payment facilitators load inside the first paid request (`initialization: "first-paid-request"`),
   because I/O started in one request cannot be awaited by another.
 - Bazaar discovery metadata is off: its schema validation generates code at runtime, which

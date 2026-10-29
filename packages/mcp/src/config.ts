@@ -19,6 +19,11 @@ const envSchema = z.object({
     .optional(),
   SVALIN_NEAR_RPC_URL: z.string().url().optional(),
   SVALIN_PREFERRED_NETWORK: z.enum(["solana", "near"]).default("solana"),
+  /** A Svalin key (svk_…) or active Pro code (svp_…): paid tools then use its calls instead of paying each one. */
+  SVALIN_API_KEY: z
+    .string()
+    .regex(/^sv[pk]_[1-9A-HJ-NP-Za-km-z]{32,44}$/, "SVALIN_API_KEY must be a Svalin key (svk_…) or Pro code (svp_…)")
+    .optional(),
   SVALIN_MAX_PRICE_USD: z.coerce.number().positive().default(0.05),
   SVALIN_BUDGET_USD: z.coerce.number().positive().default(1),
   /** Where the payment guard remembers each service's payee and price (default ~/.svalin/payees.json). */

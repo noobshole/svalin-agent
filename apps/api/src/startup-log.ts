@@ -8,7 +8,7 @@ export function startupSummary(config: AppConfig) {
     env: config.nodeEnv,
     portfolioSource: config.portfolio.source,
     payments: config.payments.mode,
-    paymentEnvironment: config.payments.environment,
+    paymentEnvironments: config.payments.networks,
     paymentNetworks: paymentNetworks(config).map((network) => network.label),
     facilitators: config.payments.mode === "x402" ? facilitatorClients(config).map((entry) => entry.name) : [],
     narrator: config.narrator.anthropicApiKey ? `llm:${config.narrator.model}` : "template",

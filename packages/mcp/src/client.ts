@@ -20,11 +20,31 @@ export type SvalinClient = {
   /** Payees and prices first seen per service; see payment-guard.ts. */
   memory: PayeeMemory;
   canPay: boolean;
+  /** A Svalin key is set: paid tools use its calls, and no wallet is needed for them. */
+  hasKey: boolean;
   payers: { solana?: string; near?: string };
   budget: SpendBudget;
 };
 
-export async function createSvalinClient(config: McpConfig, baseFetch: typeof fetch = fetch): Promise<SvalinClient> {
+/**
+ * Sends the Svalin key, if one is set, to the Svalin API and nowhere else: the payment guard's
+ * probes of other x402 services go through a fetch without it.
+ */
+function withSvalinKey(baseFetch: typeof fetch, apiUrl: string, key: string | undefined): typeof fetch {
+  if (!key) return baseFetch;
+  const origin = new URL(apiUrl).origin;
+  return (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (new URL(url).origin !== origin) return baseFetch(input, init);
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    headers.set("Authorization", `Bearer ${key}`);
+    return baseFetch(input, { ...init, headers });
+  };
+}
+
+export async function createSvalinClient(config: McpConfig, probe: typeof fetch = fetch): Promise<SvalinClient> {
+  const baseFetch = withSvalinKey(probe, config.SVALIN_API_URL, config.SVALIN_API_KEY);
+  const hasKey = Boolean(config.SVALIN_API_KEY);
   const budget = new SpendBudget(usdToAtomic(config.SVALIN_MAX_PRICE_USD), usdToAtomic(config.SVALIN_BUDGET_USD));
   const payers: SvalinClient["payers"] = {};
   const memory = new PayeeMemory(config.SVALIN_PAYEE_MEMORY);
@@ -53,7 +73,7 @@ export async function createSvalinClient(config: McpConfig, baseFetch: typeof fe
 
   const canPay = Boolean(payers.solana || payers.near);
   if (!canPay) {
-    return { apiUrl: config.SVALIN_API_URL, fetch: baseFetch, probe: baseFetch, memory, canPay, payers, budget };
+    return { apiUrl: config.SVALIN_API_URL, fetch: baseFetch, probe, memory, canPay, hasKey, payers, budget };
   }
 
   client.setSpendControls({ maxAmountPerPayment: `$${config.SVALIN_MAX_PRICE_USD}` });
@@ -80,9 +100,10 @@ export async function createSvalinClient(config: McpConfig, baseFetch: typeof fe
   return {
     apiUrl: config.SVALIN_API_URL,
     fetch: wrapFetchWithPayment(baseFetch, client),
-    probe: baseFetch,
+    probe,
     memory,
     canPay,
+    hasKey,
     payers,
     budget,
   };

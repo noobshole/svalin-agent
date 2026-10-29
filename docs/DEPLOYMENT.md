@@ -67,6 +67,9 @@ How Workers differ from a container host:
   `TRUSTED_PROXY_HOPS` is not used.
 - The free-scan limits are kept in one Durable Object (binding `DEMO_LIMITER`), so every Worker
   instance shares the same counts. The portfolio cache stays in each instance's memory.
+- Svalin passes (Pro codes and Business keys) live in a second Durable Object (binding `KEY_STORE`), stored by
+  their SHA-256 only. `wrangler deploy` creates it from the `v2` migration in `wrangler.toml`.
+  Without the binding every key route answers 503, so a key is never sold into memory and lost.
 - Payment facilitators are loaded inside the first paid request, and Bazaar discovery metadata
   is off: its schema check generates code at runtime, which Workers forbid.
 - The `"svalin_api_started"` log line appears on the first request after each deploy, in the
@@ -168,11 +171,36 @@ security headers from `apps/web/out/_headers` into the host's header settings.
 - [ ] **(test)** The tool returns a report and `svalin_spend_status` shows $0.004 spent.
 - [ ] **(test)** With Supabase set up, `select * from api_payments;` shows the payment.
 
+### Svalin Pro and Svalin Business on testnet
+
+The passes follow each chain's payment network, so on testnet they take test USDC and cost
+nothing to try. A pass paid on a test network stops working when that chain moves to mainnet.
+
+- [ ] **(test)** `https://<api>/v1/pro` lists the plans and, per chain, where to pay.
+- [ ] **(test)** On the website's Pricing page, pay for Pro with test USDC: Solana devnet by scanning the QR code
+      (Phantom or Solflare in testnet mode), or NEAR testnet by sending the exact amount shown. The
+      page finds the payment within about 10 seconds and shows "Svalin Pro is active".
+- [ ] **(test)** A scan then shows "Svalin Pro: 99 calls left today."
+- [ ] **(test)** `POST https://<api>/v1/keys/business` answers 402 asking for $79 (`/v1/keys/pro`:
+      $5); an x402 client that pays it gets a key, and `GET /v1/keys/me` with that key shows its
+      calls. Paying again with the key in `Authorization` renews it.
+
 ## 5. Switch to mainnet
 
-- [ ] Request a NEAR **mainnet** facilitator key for your mainnet `PAY_TO_NEAR` account (keys are
-      per network), set it as `NEAR_FACILITATOR_API_KEY`, and set `X402_ENV=mainnet`. Redeploy.
+Each chain can switch on its own: `X402_ENV_SOLANA` and `X402_ENV_NEAR` override `X402_ENV` for
+that chain. Solana's mainnet facilitator needs no approval, so Solana can take real USDC while NEAR
+waits for its mainnet key.
+
+- [ ] **Solana:** make sure the `PAY_TO_SOLANA` wallet has a USDC account on mainnet (receive a few
+      cents of USDC once), then set `X402_ENV_SOLANA=mainnet`. Redeploy.
+- [ ] **NEAR:** register your mainnet `PAY_TO_NEAR` account with USDC, request a NEAR **mainnet**
+      facilitator key for it (keys are per network), set it as `NEAR_FACILITATOR_API_KEY`, set
+      `PAY_TO_NEAR` to the mainnet account and `X402_ENV_NEAR=mainnet`. Redeploy.
+- [ ] **(test)** `https://<api>/` lists each network with `"environment": "mainnet"` or `"testnet"`,
+      and the website's Pricing and Docs pages say which chains take real USDC.
 - [ ] Pay for one call with real USDC to confirm settlement end to end.
+- [ ] Buy Svalin Pro once with real USDC on the website, check it activates, then set
+      `LOCK_FREE_NEXT_STEPS=true`: the free scan's next steps then need Pro or a paid call.
 - [ ] Update `SVALIN_PAYEES` in `.github/workflows/monitor.yml` to the mainnet receiving accounts.
       The hourly Monitor workflow fails, and GitHub emails you, if a paid route ever names a payee
       outside that list, the Index goes stale, or the website's security headers or scripts change.

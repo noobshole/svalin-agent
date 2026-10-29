@@ -157,6 +157,19 @@ describe("risk engine", () => {
     expect(templateBrief(report, NOW).headline).toBe("Not rated: no priced holdings. 12 tokens have no market price");
   });
 
+  it("flags tokens named to give their reader orders, without changing the score", () => {
+    const holdings = [
+      { symbol: "USDC", category: "stablecoin" as const, valueUsd: 5_000 },
+      { symbol: "SOL", category: "native" as const, valueUsd: 5_000 },
+    ];
+    const clean = buildRiskReport(overview(holdings), NOW);
+    const targeted = buildRiskReport({ ...overview(holdings), hiddenNameCount: 2 }, NOW);
+    const finding = targeted.findings.find((entry) => entry.kind === "hidden-instructions");
+    expect(finding).toMatchObject({ severity: "medium", value: 2, title: "2 tokens are named to give orders to whoever reads them" });
+    expect(targeted.score).toBe(clean.score);
+    expect(clean.findings.some((entry) => entry.kind === "hidden-instructions")).toBe(false);
+  });
+
   it("is deterministic", async () => {
     const source = new MockPortfolioSource(() => NOW);
     const data = await source.getOverview(SOLANA_WALLET);

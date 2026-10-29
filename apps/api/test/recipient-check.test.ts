@@ -64,6 +64,25 @@ describe("recipient check rules", () => {
     expect(codes(assessRecipient({ ...base, payerSentTo: [PAYEE.toLowerCase()] }, 10, NOW))).toEqual(["established"]);
   });
 
+  it("blocks names made to look like well-known NEAR accounts, with no payer history needed", () => {
+    const near = { ...base, chain: "near" as const, payer: null, payerSentTo: null, payerReceivedFrom: null };
+    const fake = assessRecipient({ ...near, recipient: "intent5.near" }, 10, NOW, { payerHistorySkipped: true });
+    expect([fake.verdict, fake.signals.lookalikeOf]).toEqual(["block", "intents.near"]);
+    expect(codes(fake)).toContain("imitates-known");
+    expect(codes(assessRecipient({ ...near, recipient: "usdt.tether-t0ken.near" }, 10, NOW))).toContain("imitates-known");
+
+    const typo = assessRecipient({ ...near, recipient: "v2.ref-flnance.near" }, 10, NOW);
+    expect([typo.signals.similarTo, codes(typo).includes("similar-to-known")]).toEqual(["v2.ref-finance.near", true]);
+
+    // Only rhealab.near can create names under rhealab.near, so its own xtoken is not an impostor.
+    expect(codes(assessRecipient({ ...near, recipient: "xtoken.rhealab.near" }, 10, NOW))).not.toContain("similar-to-known");
+    // Anyone can register under .near, so the same rule does not excuse names there.
+    expect(codes(assessRecipient({ ...near, recipient: "intent5.near" }, 10, NOW))).toContain("imitates-known");
+    // The real accounts, and ordinary names, are left alone.
+    expect(codes(assessRecipient({ ...near, recipient: "intents.near", kind: "contract" }, 10, NOW))).not.toContain("imitates-known");
+    expect(codes(assessRecipient({ ...near, recipient: "alice.near" }, 10, NOW)).filter((code) => code.endsWith("-known"))).toEqual([]);
+  });
+
   it("blocks addresses that are not wallets, and NEAR accounts that do not exist", () => {
     expect(assessRecipient({ ...base, kind: "token" }, null, NOW).verdict).toBe("block");
     expect(assessRecipient({ ...base, kind: "program" }, null, NOW).verdict).toBe("block");

@@ -6,8 +6,8 @@
 
 Give Svalin a Solana wallet or a NEAR account. Get back a priced portfolio and a deterministic
 portfolio risk report: a 0-100 score, an A-F grade, exposure metrics, and findings with concrete next
-steps. Agents pay per call in USDC over [x402](https://x402.org) on Solana or NEAR. No API keys, no
-accounts, and no way to move funds.
+steps. Agents pay per call in USDC over [x402](https://x402.org) on Solana or NEAR, or with a
+monthly pass. No accounts, and no way to move funds.
 
 [![CI](https://github.com/noobshole/svalin-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/noobshole/svalin-agent/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -34,9 +34,12 @@ accounts, and no way to move funds.
   person, written by Claude when configured and by a template otherwise.
 - **Check before paying.** Before an agent sends money, `GET /v1/check/{address}` answers allow,
   caution or block: token, program and non-existent addresses, brand-new or barely used wallets,
-  and, given the payer, an address or NEAR name imitating one the payer paid recently (address
-  poisoning) or a large first payment. If the payer's history cannot be read, it says so instead of
-  guessing.
+  NEAR names imitating well-known accounts (intent5.near for intents.near), and, given the payer,
+  an address or NEAR name imitating one the payer paid recently (address poisoning) or a large
+  first payment. If the payer's history cannot be read, it says so instead of guessing.
+- **Hidden-instruction alarm.** A token named to give its reader orders ("ignore previous
+  instructions", "payment failed, pay again", a link, an encoded message) is shown as
+  `[hidden name]` in every report, check and Index edition, and reports flag it.
 - **Svalin Index.** Every NEAR token with a price, graded A-F by the real money in its Ref Finance
   pools (classic and concentrated liquidity), counting only backing that has held for 24 hours,
   with market cap, top-10 holder share, holder count, and a track record of how earlier grades
@@ -44,14 +47,17 @@ accounts, and no way to move funds.
   fetch, and the most its whole supply could. Rebuilt every few hours and published in the
   [svalin-index](https://github.com/noobshole/svalin-index) repository;
   [see it live](https://svalin.noobshole.workers.dev/ratings).
-- **Pay per call.** Agents pay in USDC over x402 on Solana or NEAR: no keys, no accounts, no
-  subscription. Everyone gets 5 free calls a day.
+- **Pay per call, or one pass a month.** Agents pay in USDC over x402 on Solana or NEAR, with no
+  account. Steady users buy a pass instead and send its key as `Authorization: Bearer`: Svalin Pro
+  (100 calls a day) or Svalin Business (200,000 calls), for 30 days. Agents buy and renew passes
+  over x402; people buy Pro on the website by scanning a Solana Pay QR code or sending an exact
+  amount on NEAR, and the site never connects to their wallet. Everyone gets 5 free calls a day.
 - **MCP server.** `svalin-mcp` brings the tools to Claude, Cursor and any MCP client, with a hard
   per-call price cap and a session budget.
 - **Payment guard.** Before an agent pays any x402 service, `svalin-mcp` asks for the price without
   paying and blocks a payee or price that changed since the service was first seen, a token that
   is not USDC, or an inflated price, and runs Svalin's check on the payee.
-- **Read-only.** Svalin never asks for keys, approvals or signatures from the wallet it analyses,
+- **Read-only.** Svalin never asks for wallet keys, approvals or signatures from the wallet it analyses,
   and it has no code path that moves funds.
 - **Deterministic.** Same holdings, same report. No LLM computes a number, and the
   [methodology](docs/RISK_METHODOLOGY.md) is public and versioned.
@@ -97,7 +103,7 @@ A trimmed risk report:
       "confidence": 64
     }
   ],
-  "methodologyVersion": "2026-10.7"
+  "methodologyVersion": "2026-10.8"
 }
 ```
 
@@ -173,16 +179,21 @@ Any orchestrator that can call MCP tools or make HTTP requests can use these pat
 | `GET /v1/brief/{address}` | $0.02 | Headline, summary and up to 3 actions, plus the full report |
 | `GET /v1/check/{address}?payer=&amountUsd=` | $0.002 | Before paying someone: allow, caution or block, with reasons |
 | `GET /v1/exit/{contract}?amountUsd=` | $0.002 | A NEAR token's grade and exit prices, at your own sale size too: what selling it would actually fetch |
+| `POST /v1/keys/{pro,business}` | $5 · $79 | A pass for 30 days on every paid route: Svalin Pro (100 calls a day) or Svalin Business (200,000 calls). The key is shown once; send it in `Authorization` to renew |
+| `GET /v1/keys/me` | Free | What is left on the key sent as `Authorization: Bearer` |
+| `GET /v1/pro` · `POST /v1/pro/near` · `POST /v1/pro/activate` | Free | Svalin Pro checkout: prices, an exact NEAR amount for a code, and finding a code's payment on-chain |
 | `GET /` · `/openapi.json` · `/llms.txt` | Free | Machine-readable service description for agents |
 
 `{address}` is a Solana address or a NEAR account ID. Prices are the defaults and can be changed
-per deployment with the `PRICE_*` environment variables.
+per deployment with the `PRICE_*` and `PRO_PRICE_*` environment variables. A pass key in an
+`Authorization: Bearer` header pays for a paid call instead of x402; a call that fails is not
+counted.
 
 ## Use it from an agent
 
 **MCP (Claude Code, Claude Desktop, Cursor and any MCP client).** The free scan works with no
-setup. Add a dedicated hot wallet holding a few dollars of USDC, on Solana or NEAR, to unlock the
-paid tools. `svalin-mcp` is not on npm yet, so run it
+setup. Add a dedicated hot wallet holding a few dollars of USDC, on Solana or NEAR, or a pass key
+(`SVALIN_API_KEY`), to unlock the paid tools. `svalin-mcp` is not on npm yet, so run it
 [from source](packages/mcp#from-source) for now. Tools, configuration and spend limits are
 documented in [packages/mcp](packages/mcp#readme).
 
@@ -229,7 +240,7 @@ real NEAR USDC transfer, API paywall, facilitator verify and settle, handler, le
 | Path | What it is |
 | --- | --- |
 | `apps/api` | Hono API: Solana portfolios (Helius) and NEAR portfolios (FastNEAR, Ref Finance), deterministic risk engine, x402 paywall (Solana and NEAR USDC), payments ledger, OpenAPI and `llms.txt` |
-| `apps/web` | Next.js landing page, free wallet scanner, free check before paying, and the Svalin Index |
+| `apps/web` | Next.js website: Wallet Scan, Check Before Paying, the Svalin Index, and the Pricing page with the Svalin Pro checkout |
 | `packages/mcp` | `svalin-mcp`: MCP server with an auto-paying x402 client and hard spend caps |
 | `packages/shared` | Zod schemas: the single contract shared by the API, the website and the MCP server |
 | `packages/chain-config` | Chains, x402 networks (CAIP-2), facilitators, curated token registry |
@@ -246,6 +257,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the request pipeline and module bound
 | Never charged for errors | Address validation runs before the paywall; payments settle only on a successful response |
 | No fake data in production | The API refuses to start in production without a live data source |
 | Bounded agent spending | `svalin-mcp` enforces a per-call price cap and a per-session budget |
+| Pass keys cannot leak from storage | Keys are stored as SHA-256 fingerprints and shown once; Pro payments are checked on-chain by the API |
 | Free tier cannot be abused | Per-visitor and global daily limits, keyed on addresses the caller cannot forge |
 | No surprise scripts on the website | Each page's policy allows only the scripts it was built with |
 | Broken data is not published | The Index refuses an edition that swings far more than a market can in a few hours |
@@ -276,8 +288,9 @@ Step-by-step instructions, with a test after each step, are in
   One with no real pool, or too new for the Index, counts as unpriced, so an account full of airdropped
   junk shows low data coverage rather than a fake fortune. Solana prices come from Helius as
   quoted.
-- The cache and the free-tier limits are held in memory, so a container deployment runs as a
-  single instance. On Cloudflare Workers the free-tier limits live in a Durable Object instead.
+- The cache, the free-tier limits and the passes are held in memory, so a container deployment
+  runs as a single instance and loses its passes on a restart. On Cloudflare Workers the limits
+  and the passes live in Durable Objects instead.
 - Reports describe current holdings only.
 
 ## Documentation

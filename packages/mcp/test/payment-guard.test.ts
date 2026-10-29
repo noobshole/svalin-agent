@@ -118,6 +118,19 @@ describe("judging a payment", () => {
     expect(verdictOf(judge(option(), { expectedUsd: 0.005 }))).toBe("block");
   });
 
+  it("cautions when the same payment is checked again soon, the 'payment failed, pay again' trick", () => {
+    const memory = new PayeeMemory(join(mkdtempSync(join(tmpdir(), "svalin-guard-")), "payees.json"));
+    const start = Date.parse("2026-10-28T10:00:00Z");
+    expect(memory.noteCheck("https://shop.example", URL_PAID, option(), start)).toBeUndefined();
+    const again = memory.noteCheck("https://shop.example", URL_PAID, option(), start + 3 * 60_000);
+    expect(again).toBe(3);
+    const reasons = judge(option(), { pin: pin(), repeatedAfterMinutes: again });
+    expect([codes(reasons)[0], verdictOf(reasons)]).toEqual(["repeat-request", "caution"]);
+    // A different amount, or the same one long after, is a new request.
+    expect(memory.noteCheck("https://shop.example", URL_PAID, option({ amount: 20_000n }), start + 4 * 60_000)).toBeUndefined();
+    expect(memory.noteCheck("https://shop.example", URL_PAID, option(), start + 60 * 60_000)).toBeUndefined();
+  });
+
   it("cautions when the payment is for a different site than the one called", () => {
     const payment = option();
     const reasons = judgePayment({

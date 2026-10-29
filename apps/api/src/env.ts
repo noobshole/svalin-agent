@@ -40,6 +40,10 @@ const envSchema = z.object({
   PORTFOLIO_CACHE_SECONDS: z.coerce.number().int().nonnegative().default(60),
 
   X402_ENV: z.enum(["mainnet", "testnet"]).optional(),
+  // Per-chain overrides of X402_ENV, so one chain can take real USDC while the other is still on
+  // its test network (a NEAR facilitator key, for one, is issued per network).
+  X402_ENV_SOLANA: z.enum(["mainnet", "testnet"]).optional(),
+  X402_ENV_NEAR: z.enum(["mainnet", "testnet"]).optional(),
   X402_FACILITATOR_URL: optionalString,
   // Coinbase Developer Platform keys. When set, payments settle through the CDP facilitator
   // first, which is what lists the API in Coinbase's x402 Bazaar.
@@ -56,6 +60,17 @@ const envSchema = z.object({
   PRICE_BRIEF_USD: usdPrice.default("$0.02"),
   PRICE_CHECK_USD: usdPrice.default("$0.002"),
   PRICE_EXIT_USD: usdPrice.default("$0.002"),
+
+  // Svalin Business for heavy agent use, bought over x402: 200,000 calls over 30 days (catalog.ts).
+  PRICE_KEY_BUSINESS_USD: usdPrice.default("$79"),
+  // Svalin Pro: people pay by QR code (Solana Pay) or an exact amount on NEAR, agents over x402.
+  PRO_PRICE_MONTH_USD: z.coerce.number().positive().default(5),
+  PRO_PRICE_YEAR_USD: z.coerce.number().positive().default(48),
+  PRO_CALLS_PER_DAY: z.coerce.number().int().positive().default(100),
+  // Where Pro payments are looked up. Defaults: Helius (devnet on testnet) and FastNEAR's
+  // transactions API for the network each chain takes payments on.
+  PRO_SOLANA_RPC_URL: optionalString,
+  PRO_NEAR_TX_API_URL: optionalString,
 
   DEMO_REQUESTS_PER_DAY: z.coerce.number().int().nonnegative().default(5),
   DEMO_REQUESTS_PER_DAY_GLOBAL: z.coerce.number().int().nonnegative().default(2000),
@@ -103,6 +118,15 @@ export function loadConfig(source: Record<string, string | undefined> = process.
   }
 
   const paymentsConfigured = Boolean(env.PAY_TO_SOLANA || env.PAY_TO_NEAR);
+  const defaultPaymentEnvironment = env.X402_ENV ?? (isProduction ? "mainnet" : "testnet");
+  const networks = {
+    solana: env.X402_ENV_SOLANA ?? defaultPaymentEnvironment,
+    near: env.X402_ENV_NEAR ?? defaultPaymentEnvironment,
+  };
+  const heliusRpcUrl =
+    env.HELIUS_RPC_URL ??
+    (env.HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(env.HELIUS_API_KEY)}` : undefined);
+  const fastnearTxApiUrl = env.FASTNEAR_TX_API_URL.replace(/\/+$/, "");
 
   return {
     nodeEnv: env.NODE_ENV,
@@ -115,18 +139,14 @@ export function loadConfig(source: Record<string, string | undefined> = process.
 
     portfolio: {
       source: portfolioSource,
-      heliusRpcUrl:
-        env.HELIUS_RPC_URL ??
-        (env.HELIUS_API_KEY
-          ? `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(env.HELIUS_API_KEY)}`
-          : undefined),
+      heliusRpcUrl,
       fastnearApiUrl: env.FASTNEAR_API_URL.replace(/\/+$/, ""),
       nearRpcUrl: env.NEAR_RPC_URL,
       nearPriceApiUrl: env.NEAR_PRICE_API_URL,
       nearPoolsApiUrl: env.NEAR_POOLS_API_URL,
       nearIndexUrl: env.NEAR_INDEX_URL,
       nearDclDepthUrl: env.NEAR_DCL_DEPTH_URL,
-      fastnearTxApiUrl: env.FASTNEAR_TX_API_URL.replace(/\/+$/, ""),
+      fastnearTxApiUrl,
       cacheSeconds: env.PORTFOLIO_CACHE_SECONDS,
     },
 
@@ -136,7 +156,9 @@ export function loadConfig(source: Record<string, string | undefined> = process.
        * "disabled" → no payTo configured. Paid routes are free in dev, 503 in production.
        */
       mode: paymentsConfigured ? ("x402" as const) : ("disabled" as const),
-      environment: env.X402_ENV ?? (isProduction ? "mainnet" : "testnet"),
+      environment: defaultPaymentEnvironment,
+      /** Which network each chain takes payments on: X402_ENV unless overridden per chain. */
+      networks,
       facilitatorUrl: env.X402_FACILITATOR_URL,
       cdp:
         env.CDP_API_KEY_ID && env.CDP_API_KEY_SECRET
@@ -155,6 +177,27 @@ export function loadConfig(source: Record<string, string | undefined> = process.
         check: env.PRICE_CHECK_USD,
         exit: env.PRICE_EXIT_USD,
       },
+      /** What each pass costs over x402: Pro at its monthly price, and Business. */
+      keyPrices: {
+        pro: `$${env.PRO_PRICE_MONTH_USD}`,
+        business: env.PRICE_KEY_BUSINESS_USD,
+      },
+    },
+
+    pro: {
+      plans: {
+        month: { usd: env.PRO_PRICE_MONTH_USD, days: 30 },
+        year: { usd: env.PRO_PRICE_YEAR_USD, days: 365 },
+      },
+      callsPerDay: env.PRO_CALLS_PER_DAY,
+      solanaRpcUrl:
+        env.PRO_SOLANA_RPC_URL ??
+        (networks.solana === "mainnet"
+          ? (heliusRpcUrl ?? "https://api.mainnet-beta.solana.com")
+          : env.HELIUS_API_KEY
+            ? `https://devnet.helius-rpc.com/?api-key=${encodeURIComponent(env.HELIUS_API_KEY)}`
+            : "https://api.devnet.solana.com"),
+      nearTxApiUrl: (env.PRO_NEAR_TX_API_URL ?? (networks.near === "mainnet" ? fastnearTxApiUrl : "https://tx.test.fastnear.com")).replace(/\/+$/, ""),
     },
 
     demo: {

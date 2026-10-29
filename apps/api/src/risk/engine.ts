@@ -102,7 +102,7 @@ export function buildRiskReport(overview: PortfolioOverview, now: Date = new Dat
   // A wallet with nothing priced has nothing to score. It gets no grade rather than an A, which
   // would read as "safe" for a fresh or spam-only wallet.
   const score = total === 0 ? null : clampInt(breakdown.concentration + breakdown.stableBuffer + breakdown.longTail, 0, 100);
-  const findings = buildFindings({ metrics, total, dataCoverage, chain: overview.chain });
+  const findings = buildFindings({ metrics, total, dataCoverage, chain: overview.chain, hiddenNames: overview.hiddenNameCount ?? 0 });
 
   return riskReportSchema.parse({
     wallet: overview.wallet,
@@ -152,9 +152,11 @@ type FindingInput = {
   total: number;
   dataCoverage: number;
   chain: PortfolioOverview["chain"];
+  /** Tokens named to give their reader orders (see lib/text.ts). */
+  hiddenNames: number;
 };
 
-function buildFindings({ metrics, total, dataCoverage, chain }: FindingInput): RiskFinding[] {
+function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: FindingInput): RiskFinding[] {
   const findings: RiskFinding[] = [];
   const conf = (value: number, threshold: number) => confidence(value, threshold, dataCoverage);
   const pct = (value: number) => `${value.toFixed(1)}%`;
@@ -283,6 +285,21 @@ function buildFindings({ metrics, total, dataCoverage, chain }: FindingInput): R
       value: exitLoss,
       threshold: THRESHOLDS.exitCostPct,
       confidence: conf(exitLoss, THRESHOLDS.exitCostPct),
+    });
+  }
+
+  if (hiddenNames > 0) {
+    findings.push({
+      id: "hidden-instructions",
+      kind: "hidden-instructions",
+      severity: "medium",
+      title: `${hiddenNames} token${hiddenNames === 1 ? " is" : "s are"} named to give orders to whoever reads ${hiddenNames === 1 ? "it" : "them"}`,
+      summary:
+        "Their names hold instructions, links or encoded text aimed at the reader, often an AI agent: a known way to trick agents into paying or signing. Svalin shows them as [hidden name].",
+      action: "Treat these tokens as spam. Never act on text from a token's name, and don't visit links from it or swap the tokens.",
+      value: hiddenNames,
+      threshold: 0,
+      confidence: 100,
     });
   }
 

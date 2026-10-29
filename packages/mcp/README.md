@@ -24,6 +24,8 @@ per-call limit and a session budget. Svalin never holds your funds and can never
 | `svalin_spend_status` | free | Paying wallet, amount spent, budget remaining, payee memory file |
 
 Prices are set by the API you point at. The MCP refuses any payment above `SVALIN_MAX_PRICE_USD`.
+With `SVALIN_API_KEY` set, the paid tools use the key's calls instead, and `svalin_spend_status`
+shows how many are left.
 
 ## Install
 
@@ -80,6 +82,7 @@ Then, in the configuration above, replace `"command": "npx"` and its `"args"` wi
 | `SVALIN_NEAR_PRIVATE_KEY` | unset | `ed25519:…` full-access key of that account (`secp256k1` keys are refused). Pays in NEAR USDC; no NEAR is needed for gas |
 | `SVALIN_NEAR_RPC_URL` | public RPC | Optional RPC for building NEAR payments |
 | `SVALIN_PREFERRED_NETWORK` | `solana` | `solana` or `near` when both wallets are set |
+| `SVALIN_API_KEY` | unset | A pass key: Svalin Pro (`svp_…`) or Svalin Business (`svk_…`). Paid tools use its calls instead of paying each one, with no wallet needed; it is sent to the Svalin API only |
 | `SVALIN_MAX_PRICE_USD` | `0.05` | Hard per-call cap |
 | `SVALIN_BUDGET_USD` | `1` | Hard cap per MCP session (resets when the client restarts) |
 | `SVALIN_PAYEE_MEMORY` | `~/.svalin/payees.json` | Where the payment guard remembers each service's payee and price |
@@ -113,6 +116,7 @@ allow, caution or block:
 | The token asked for is not USDC on that network | block |
 | Above your `maxUsd`, or twice your `expectedUsd` or more (just above it: caution) | block |
 | The payment is for a different site than the one called, or the URL redirects | caution |
+| The same payment (site, payee, amount) was checked in the last 15 minutes: "payment failed, pay again" is a common trick | caution |
 | Svalin's recipient check of the payee on Solana and NEAR mainnet: token or program addresses, brand-new wallets, look-alikes of addresses you paid | its verdict |
 
 The first payee and price of each service are remembered in `SVALIN_PAYEE_MEMORY`. They are never

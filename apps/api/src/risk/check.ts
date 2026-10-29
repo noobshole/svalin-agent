@@ -1,3 +1,4 @@
+import { NEAR_WELL_KNOWN_ACCOUNTS } from "@svalin-agent/chain-config";
 import {
   FEW_TRANSACTIONS,
   FIRST_PAYMENT_CAUTION_USD,
@@ -54,6 +55,25 @@ const LOOKALIKE_PAIRS: [RegExp, string][] = [
   [/5/g, "s"],
 ];
 const IMPLICIT = /^([0-9a-f]{64}|0x[0-9a-f]{40})$/;
+const WELL_KNOWN: ReadonlySet<string> = new Set(NEAR_WELL_KNOWN_ACCOUNTS);
+/** Top-level accounts that let anyone register a name under them. */
+const PUBLIC_REGISTRARS: ReadonlySet<string> = new Set(["near", "testnet", "tg"]);
+
+/**
+ * Only an account can create names under itself, so token.rhealab.near and xtoken.rhealab.near share
+ * one owner: a look-alike under the same private parent is not an impostor.
+ */
+function sameOwner(left: string, right: string): boolean {
+  const parent = (name: string) => (name.includes(".") ? name.slice(name.indexOf(".") + 1) : null);
+  const owner = parent(left);
+  return owner !== null && owner === parent(right) && !PUBLIC_REGISTRARS.has(owner);
+}
+
+/** A well-known account this name is made to resemble, judged by `alike`; never one of the same owner. */
+function knownLookalike(recipient: string, alike: (left: string, right: string) => boolean): string | null {
+  if (WELL_KNOWN.has(recipient)) return null;
+  return NEAR_WELL_KNOWN_ACCOUNTS.find((known) => alike(recipient, known) && !sameOwner(recipient, known)) ?? null;
+}
 /** Below this length, names one letter apart are usually just different names (bob1, bob2). */
 const SIMILAR_NAME_MIN = 8;
 
@@ -174,6 +194,25 @@ export function assessRecipient(
     });
   }
 
+  // Well-known accounts need no history: a name made to look like one is suspect on a first payment.
+  const knownAlike = near && !lookalikeOf && !similarTo ? knownLookalike(signals.recipient, namesLookAlike) : null;
+  const knownSimilar = near && !lookalikeOf && !similarTo && !knownAlike ? knownLookalike(signals.recipient, namesNearlyAlike) : null;
+  if (knownAlike) {
+    reasons.push({
+      code: "imitates-known",
+      severity: "block",
+      message:
+        `This account name imitates ${knownAlike}, a well-known NEAR account: it differs only by characters that look alike, ` +
+        `such as 0 and o, 1 and l, or a dash. If you mean ${knownAlike}, use that name exactly.`,
+    });
+  } else if (knownSimilar) {
+    reasons.push({
+      code: "similar-to-known",
+      severity: "caution",
+      message: `This name is one letter away from ${knownSimilar}, a well-known NEAR account. Check that it is the account you mean.`,
+    });
+  }
+
   const ageDays = signals.createdAt === null ? null : Math.max(0, (now.getTime() - signals.createdAt) / DAY_MS);
   const canHoldFunds = signals.kind === "wallet" || signals.kind === "contract";
   if (canHoldFunds) {
@@ -253,8 +292,8 @@ export function assessRecipient(
       transactions: signals.transactions,
       transactionsAtLeast: signals.transactionsAtLeast,
       paidBefore,
-      lookalikeOf,
-      similarTo,
+      lookalikeOf: lookalikeOf ?? knownAlike,
+      similarTo: similarTo ?? knownSimilar,
       sentToPayer,
     },
     reasons,

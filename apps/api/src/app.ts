@@ -1,18 +1,48 @@
 import { lookupToken } from "@svalin-agent/chain-config";
-import { detectAddressFamily, isNearAccountId, type PortfolioOverview, type RiskReport } from "@svalin-agent/shared";
+import {
+  AGENT_KEY_PREFIX,
+  PRO_CODE_PREFIX,
+  SVALIN_KEY_PATTERN,
+  detectAddressFamily,
+  isNearAccountId,
+  isProCode,
+  keyPlanSchema,
+  newSvalinKey,
+  proPlanSchema,
+  proReference,
+  type NearCheckout,
+  type PortfolioOverview,
+  type ProOffer,
+  type ProPlan,
+  type RiskReport,
+} from "@svalin-agent/shared";
+import { decodePaymentSignatureHeader } from "@x402/core/http";
 import type { FacilitatorClient } from "@x402/core/server";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 
-import { llmsTxt, openApiDocument, paidRoutes, serviceInfo } from "./catalog.js";
+import { keyPlans, llmsTxt, openApiDocument, paidRoutes, paymentNetworks, proOffer, serviceInfo } from "./catalog.js";
 import type { AppConfig } from "./env.js";
 import { createClientIpResolver } from "./lib/client-ip.js";
 import { ApiError } from "./lib/errors.js";
+import {
+  KeyStoreCore,
+  MemoryStorage,
+  NEAR_RESERVATIONS_PER_DAY,
+  keyId,
+  passStatus,
+  type KeyStore,
+  type NearReservation,
+  type PassRecord,
+  type PassRules,
+  type UseResult,
+} from "./lib/key-store.js";
 import { DemoRateLimiter, type DemoLimiter } from "./lib/rate-limit.js";
 import { TtlCache } from "./lib/ttl-cache.js";
 import { AnthropicNarrator, TemplateNarrator, type Narrator } from "./narrate/narrator.js";
 import { LogLedger, SupabaseLedger, type PaymentLedger } from "./payments/ledger.js";
+import { nearPaymentsReceived, solanaPaymentsByReference, usdcAtomic, usdcDecimal, type FoundPayment } from "./payments/pro-payments.js";
 import { createPaymentLayer } from "./payments/x402.js";
 import { tokenExit } from "./ratings/exit-prices.js";
 import { assessRecipient } from "./risk/check.js";
@@ -38,7 +68,25 @@ export type AppDependencies = {
   demoLimiter?: DemoLimiter;
   /** Latest published Svalin Index edition; fetched from NEAR_INDEX_URL by default. */
   indexFeed?: IndexFeed;
+  /** Svalin keys and Pro codes (Cloudflare Workers use a Durable Object); in memory by default. */
+  keyStore?: KeyStore;
+  /** Looks up Pro payments on-chain; tests inject their own. */
+  proPayments?: ProPaymentFinder;
 };
+
+/** Pro payments on each chain: by a code's Solana Pay reference, and Svalin's recent NEAR receipts. */
+export type ProPaymentFinder = {
+  solana(offer: NonNullable<ProOffer["solana"]>, reference: string): Promise<FoundPayment[]>;
+  near(offer: NonNullable<ProOffer["near"]>, since: number): Promise<FoundPayment[]>;
+};
+
+type Variables = { paidByKey?: boolean };
+
+/** Lookups of Pro payments per caller per hour (a checkout polls every 10 s), and for everyone per day. */
+const PRO_LOOKUPS_PER_HOUR = 120;
+const PRO_LOOKUPS_PER_DAY = 5000;
+/** New exact NEAR amounts per caller per hour: a buyer needs one or two. */
+const NEAR_AMOUNTS_PER_HOUR = 10;
 
 const PAID_PREFIXES = Object.values(paidRoutes).map((route) => route.path.replace("{address}", ""));
 const DEMO_PREFIXES = ["/v1/demo/risk/", "/v1/demo/check/", "/v1/demo/exit/"];
@@ -87,7 +135,21 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
 
   const getOverview = (address: string) => cache.getOrCompute(address, () => source.getOverview(address));
 
-  const app = new Hono();
+  const keyStore = deps.keyStore ?? new KeyStoreCore(new MemoryStorage());
+  const proPayments: ProPaymentFinder = deps.proPayments ?? {
+    solana: (offer, reference) =>
+      solanaPaymentsByReference({ rpcUrl: config.pro.solanaRpcUrl, network: offer.network, reference, payTo: offer.payTo, mint: offer.mint }),
+    near: (offer, since) =>
+      nearPaymentsReceived({ txApiUrl: config.pro.nearTxApiUrl, network: offer.network, payTo: offer.payTo, token: offer.token, since }),
+  };
+  /** Only payments on the networks Svalin takes now count, so test-network passes end at the switch. */
+  const passRules = (): PassRules => ({
+    networks: paymentNetworks(config).map((network) => network.caip2),
+    proCallsPerDay: config.pro.callsPerDay,
+  });
+  const proPlanDays = { month: config.pro.plans.month.days, year: config.pro.plans.year.days };
+
+  const app = new Hono<{ Variables: Variables }>();
 
   /* ------------------------------- middleware ------------------------------ */
 
@@ -96,9 +158,9 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     "*",
     cors({
       origin: (origin) => (config.allowedOrigins.includes(origin) ? origin : null),
-      allowMethods: ["GET", "OPTIONS"],
-      allowHeaders: ["Content-Type", "PAYMENT-SIGNATURE", "X-PAYMENT"],
-      exposeHeaders: ["PAYMENT-REQUIRED", "PAYMENT-RESPONSE", "X-PAYMENT-RESPONSE", "X-Free-Remaining"],
+      allowMethods: ["GET", "POST", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization", "PAYMENT-SIGNATURE", "X-PAYMENT"],
+      exposeHeaders: ["PAYMENT-REQUIRED", "PAYMENT-RESPONSE", "X-PAYMENT-RESPONSE", "X-Free-Remaining", "X-Calls-Left"],
       maxAge: 600,
     }),
   );
@@ -142,16 +204,49 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     return next();
   });
 
+  // Before the paywall: no payment for a pass that cannot be sold, or a renewal of a key that does
+  // not exist or is another kind of pass.
+  app.use("/v1/keys/*", async (c, next) => {
+    if (c.req.method !== "POST") return next();
+    if (config.payments.mode !== "x402") {
+      throw new ApiError(503, "payments_not_configured", "Svalin passes are not sold on this instance yet.");
+    }
+    const plan = keyPlanSchema.safeParse(c.req.path.split("/").pop());
+    const authorization = c.req.header("Authorization");
+    if (plan.success && authorization !== undefined) {
+      const id = await keyId(bearerSecret(authorization));
+      const status = await keys(() => keyStore.status(id, Date.now(), passRules()));
+      if (!status) throw keyRefusal({ ok: false, reason: "unknown", until: null }, config.pro.callsPerDay);
+      if (status.plan !== plan.data) {
+        throw new ApiError(409, "other_plan", `This key is Svalin ${status.plan === "pro" ? "Pro" : "Business"}; renew it at POST /v1/keys/${status.plan}.`);
+      }
+    }
+    return next();
+  });
+
+  // A Svalin key or Pro code pays for the call instead of x402. It runs after the gate, so a bad
+  // address never uses a call, and a call that fails gives its call back.
+  app.use("/v1/*", async (c, next) => {
+    const authorization = c.req.header("Authorization");
+    if (authorization === undefined || config.payments.mode !== "x402") return next();
+    if (!PAID_PREFIXES.some((prefix) => c.req.path.startsWith(prefix))) return next();
+    const id = await keyId(bearerSecret(authorization));
+    const result = await keys(() => keyStore.use(id, Date.now(), passRules()));
+    if (!result.ok) throw keyRefusal(result, config.pro.callsPerDay);
+    c.set("paidByKey", true);
+    c.header("X-Calls-Left", String(result.callsLeft));
+    await next();
+    if (c.res.status >= 400) await keys(() => keyStore.refund(id, Date.now())).catch(() => undefined);
+  });
+
   if (config.payments.mode === "x402") {
-    app.use(
-      "/v1/*",
-      createPaymentLayer(config, {
-        facilitator: deps.facilitator,
-        ledger,
-        initialization: deps.paymentInitialization,
-        discovery: deps.paymentDiscovery,
-      }),
-    );
+    const paywall = createPaymentLayer(config, {
+      facilitator: deps.facilitator,
+      ledger,
+      initialization: deps.paymentInitialization,
+      discovery: deps.paymentDiscovery,
+    });
+    app.use("/v1/*", (c, next) => (c.get("paidByKey") ? next() : paywall(c, next)));
   }
 
   /* --------------------------------- free ---------------------------------- */
@@ -202,6 +297,147 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     const { index, row } = await gradedToken(c.req.param("address"));
     return c.json(tokenExit(row, index, exitSaleQuery(c, true)));
   });
+
+  /* ------------------------------ Svalin keys ------------------------------ */
+
+  app.get("/v1/keys/me", async (c) => {
+    const authorization = c.req.header("Authorization");
+    if (authorization === undefined) {
+      throw new ApiError(401, "missing_key", "Send your Svalin key as Authorization: Bearer <key>.");
+    }
+    const id = await keyId(bearerSecret(authorization));
+    const status = await keys(() => keyStore.status(id, Date.now(), passRules()));
+    if (!status) throw keyRefusal({ ok: false, reason: "unknown", until: null }, config.pro.callsPerDay);
+    return c.json(status);
+  });
+
+  // Paid over x402. A new key reaches the buyer only once the payment settles: if settling fails,
+  // the paywall replaces this response, and the key is never seen by anyone. With a key in the
+  // Authorization header (checked before the paywall), the payment renews that key instead.
+  app.post("/v1/keys/:plan", async (c) => {
+    const plan = keyPlanSchema.safeParse(c.req.param("plan"));
+    if (!plan.success) {
+      throw new ApiError(404, "unknown_plan", "There is no such Svalin pass.", "Passes: pro and business. GET / lists their prices.");
+    }
+    const now = Date.now();
+    const { calls, days } = keyPlans[plan.data];
+    const price = Number(config.payments.keyPrices[plan.data].replace(/^\$/, ""));
+    const payment = { tx: `x402-${crypto.randomUUID()}`, network: paidNetwork(c) ?? "unknown", atomic: usdcAtomic(price), at: now, days };
+
+    const authorization = c.req.header("Authorization");
+    if (authorization !== undefined) {
+      const key = bearerSecret(authorization);
+      const id = await keyId(key);
+      if (!(await keys(() => keyStore.extend(id, plan.data, payment, calls)))) {
+        throw new ApiError(503, "keys_unavailable", "The key could not be renewed. Try again; you are not charged.");
+      }
+      const status = await keys(() => keyStore.status(id, now, passRules()));
+      console.log(JSON.stringify({ level: "info", msg: "pass_renewed", plan: plan.data, network: payment.network }));
+      return c.json({ key, status, note: "Renewed: the new days start where the current ones end." });
+    }
+
+    const record: PassRecord =
+      plan.data === "pro"
+        ? { kind: "pro", plan: "pro", payments: [payment], used: 0, usedSince: 0 }
+        : { kind: "key", plan: plan.data, payments: [payment], calls, used: 0, usedSince: now };
+    const key = newSvalinKey(plan.data === "pro" ? PRO_CODE_PREFIX : AGENT_KEY_PREFIX);
+    const id = await keyId(key);
+    if (!(await keys(() => keyStore.issue(id, record)))) {
+      throw new ApiError(503, "keys_unavailable", "The key could not be made. Try again; you are not charged.");
+    }
+    console.log(JSON.stringify({ level: "info", msg: "pass_sold", plan: plan.data, network: payment.network }));
+    return c.json({
+      key,
+      status: passStatus(record, now, passRules()),
+      note: "Store this key now: Svalin keeps only a fingerprint of it and cannot show it again. Send it as Authorization: Bearer <key>.",
+    });
+  });
+
+  /* ------------------------------ Svalin Pro ------------------------------- */
+
+  app.get("/v1/pro", (c) => c.json(proOffer(config)));
+
+  // NEAR wallets cannot attach a reference to a payment, so each checkout gets its own exact
+  // amount, and the payment is matched by it.
+  app.post("/v1/pro/near", async (c) => {
+    const { code, plan } = await proRequest(c, true);
+    const offer = proOffer(config).near;
+    if (!offer) throw new ApiError(404, "near_not_accepted", "This instance takes no NEAR payments.", "Pay with Solana Pay instead.");
+    await throttle(c, "near-amount", NEAR_AMOUNTS_PER_HOUR, NEAR_RESERVATIONS_PER_DAY);
+    const id = await keyId(code);
+    const price = usdcAtomic(config.pro.plans[plan].usd);
+    const reservation = await keys(() => keyStore.reserveNear(id, plan, offer.network, price, Date.now()));
+    if (!reservation) throw new ApiError(503, "checkout_busy", "No exact amount is free right now. Try again in a minute.");
+    return c.json(nearCheckout(reservation, offer));
+  });
+
+  app.post("/v1/pro/activate", async (c) => {
+    const { code } = await proRequest(c, false);
+    await throttle(c, "lookup", PRO_LOOKUPS_PER_HOUR, PRO_LOOKUPS_PER_DAY);
+    const id = await keyId(code);
+    const offer = proOffer(config);
+    let found = 0;
+    let failure: unknown;
+
+    if (offer.solana) {
+      try {
+        const payments = (await proPayments.solana(offer.solana, await proReference(code))).flatMap((payment) => {
+          const days = proDaysFor(payment.atomic);
+          return days > 0 ? [{ ...payment, days }] : [];
+        });
+        if (payments.length > 0) found += await keys(() => keyStore.claim(id, payments));
+      } catch (error) {
+        failure = error;
+      }
+    }
+
+    const near = offer.near;
+    const waiting = near ? (await keys(() => keyStore.pending(id, Date.now()))).filter((entry) => entry.network === near.network) : [];
+    if (near && waiting.length > 0) {
+      try {
+        const since = Math.min(...waiting.map((entry) => entry.createdAt));
+        const payments = (await proPayments.near(near, since)).filter((payment) => proDaysFor(payment.atomic) > 0);
+        if (payments.length > 0) {
+          const credited = await keys(() => keyStore.claimNear(payments, proPlanDays));
+          found += credited.filter((owner) => owner === id).length;
+        }
+      } catch (error) {
+        failure ??= error;
+      }
+    }
+
+    const status = await keys(() => keyStore.status(id, Date.now(), passRules()));
+    const pending = near ? (await keys(() => keyStore.pending(id, Date.now()))).filter((entry) => entry.network === near.network) : [];
+    // A chain that could not be read only matters when nothing else is known about the code.
+    if (!status && pending.length === 0 && failure) throw failure;
+    if (found > 0) console.log(JSON.stringify({ level: "info", msg: "pro_payment_found", found }));
+    return c.json({ status, found, pending: pending.map((entry) => nearCheckout(entry, near!)) });
+  });
+
+  /** A store that does not answer is a 503, never a free call. */
+  async function keys<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      console.error(JSON.stringify({ level: "error", msg: "key_store_unavailable", error: String(error) }));
+      throw new ApiError(503, "keys_unavailable", "Svalin keys cannot be checked right now. Try again in a minute.");
+    }
+  }
+
+  /** Lookups read the chain and NEAR amounts are scarce, so each caller gets a few an hour, and everyone a daily total. */
+  async function throttle(c: Context, bucket: "lookup" | "near-amount", perHour: number, perDay: number) {
+    const allowed = await keys(() => keyStore.throttle(bucket, clientIp(c), Date.now(), perHour, perDay));
+    if (!allowed) throw new ApiError(429, "too_many_requests", "Too many checkout requests right now. Try again in an hour.");
+  }
+
+  /** Days a Pro payment of this size buys: the yearly price buys a year, the monthly price a month. */
+  function proDaysFor(atomic: string): number {
+    const paid = BigInt(atomic);
+    if (paid >= BigInt(usdcAtomic(config.pro.plans.year.usd))) return config.pro.plans.year.days;
+    if (paid >= BigInt(usdcAtomic(config.pro.plans.month.usd))) return config.pro.plans.month.days;
+    return 0;
+  }
 
   /**
    * Counts one of the visitor's free calls for today, shared by every free route, and says how many
@@ -291,6 +527,117 @@ export function lockNextSteps(report: RiskReport): RiskReport {
       nextSteps: true,
       unlock: "Next steps are in the paid report: GET /v1/risk/{address} via x402, or Svalin Pro on the Svalin website.",
     },
+  };
+}
+
+/** The Svalin key in an `Authorization: Bearer` header; anything else is a 401, so a typo is never paid for. */
+function bearerSecret(authorization: string): string {
+  const secret = /^Bearer\s+(\S+)\s*$/i.exec(authorization)?.[1];
+  if (!secret || !SVALIN_KEY_PATTERN.test(secret)) {
+    throw new ApiError(
+      401,
+      "invalid_key",
+      "The Authorization header does not hold a Svalin key.",
+      "Send Authorization: Bearer svk_… (or an active Pro code, svp_…), or leave the header out and pay per call over x402.",
+    );
+  }
+  return secret;
+}
+
+function keyRefusal(result: Extract<UseResult, { ok: false }>, proCallsPerDay: number): ApiError {
+  switch (result.reason) {
+    case "unknown":
+      return new ApiError(
+        401,
+        "unknown_key",
+        "This Svalin key is not known.",
+        "A Pro code works once its payment is found (POST /v1/pro/activate). Passes are sold at POST /v1/keys/pro and /v1/keys/business.",
+      );
+    case "expired":
+      return new ApiError(
+        401,
+        "key_ended",
+        result.until === null
+          ? "This Svalin key was not paid on the networks Svalin takes payments on now."
+          : `This Svalin key ended on ${new Date(result.until).toISOString().slice(0, 10)}.`,
+        "Renew Svalin Pro on the Svalin website, or buy a new key at POST /v1/keys/{plan}.",
+      );
+    case "used_up":
+      return new ApiError(
+        429,
+        "key_used_up",
+        "This Svalin key has used all its calls.",
+        "Buy a new key at POST /v1/keys/{plan}, or leave the Authorization header out and pay per call over x402.",
+      );
+    case "daily_limit":
+      return new ApiError(429, "pro_daily_limit", `This Pro code has made today's ${proCallsPerDay} calls. They come back at 00:00 UTC.`);
+  }
+}
+
+/** The network a key purchase was paid on, from the payment the paywall has already verified. */
+function paidNetwork(c: Context): string | null {
+  const header = c.req.header("PAYMENT-SIGNATURE") ?? c.req.header("X-PAYMENT");
+  if (!header) return null;
+  try {
+    return decodePaymentSignatureHeader(header).accepted.network;
+  } catch {
+    return null;
+  }
+}
+
+/** The JSON body of a Pro request: a Pro code, and a plan where one is needed. Small, and checked before any lookup. */
+async function proRequest(c: Context, withPlan: true): Promise<{ code: string; plan: ProPlan }>;
+async function proRequest(c: Context, withPlan: false): Promise<{ code: string }>;
+async function proRequest(c: Context, withPlan: boolean): Promise<{ code: string; plan?: ProPlan }> {
+  const text = await smallBody(c.req.raw, 1024);
+  let body: { code?: unknown; plan?: unknown } = {};
+  try {
+    if (text !== null) body = JSON.parse(text) as typeof body;
+  } catch {
+    // Reported below as a missing code.
+  }
+  if (typeof body.code !== "string" || !isProCode(body.code)) {
+    throw new ApiError(400, "invalid_code", 'Send a JSON body with "code": the Pro code made on the Svalin website (svp_…).');
+  }
+  if (!withPlan) return { code: body.code };
+  const plan = proPlanSchema.safeParse(body.plan);
+  if (!plan.success) throw new ApiError(400, "invalid_plan", 'Send "plan": "month" or "year".');
+  return { code: body.code, plan: plan.data };
+}
+
+/** The request body as text, or null once it passes `max` bytes: a large body is never read into memory. */
+async function smallBody(request: Request, max: number): Promise<string | null> {
+  if (Number(request.headers.get("Content-Length") ?? 0) > max || !request.body) return request.body ? null : "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function nearCheckout(reservation: NearReservation, offer: NonNullable<ProOffer["near"]>): NearCheckout {
+  return {
+    plan: reservation.plan,
+    network: reservation.network,
+    payTo: offer.payTo,
+    token: offer.token,
+    amount: usdcDecimal(reservation.atomic),
+    expiresAt: new Date(reservation.expiresAt).toISOString(),
   };
 }
 

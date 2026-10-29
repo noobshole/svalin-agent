@@ -45,6 +45,8 @@ export const portfolioOverviewSchema = z.object({
   assets: z.array(portfolioAssetSchema),
   /** Tokens held with no price (often airdropped spam). Excluded from totals. */
   unpricedAssetCount: z.number().int().nonnegative(),
+  /** Tokens whose name or symbol was written to give its reader orders; Svalin shows "[hidden name]". */
+  hiddenNameCount: z.number().int().nonnegative().optional(),
   dataSource: dataSourceSchema,
   refreshedAt: z.string().datetime(),
 });

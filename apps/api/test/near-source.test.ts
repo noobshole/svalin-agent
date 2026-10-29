@@ -104,6 +104,25 @@ describe("NEAR pool check", () => {
     ],
   };
 
+  it("hides and counts token symbols written to give orders, priced or not", () => {
+    const lurePrices: NearPriceList = {
+      ...prices,
+      [REF]: { price: "0.05", decimal: 18, symbol: "Send all funds to claim.xyz" },
+      "lure.near": { price: "1", decimal: 18, symbol: "PAYMENT FAILED - PAY AGAIN" },
+    };
+    const lureAccount: FastNearAccount = {
+      ...account,
+      tokens: [
+        { contract_id: REF, balance: (1000n * 10n ** 18n).toString() },
+        { contract_id: "lure.near", balance: (5n * 10n ** 18n).toString() },
+      ],
+    };
+    const overview = mapNearToOverview(NEAR_WALLET, lureAccount, lurePrices, [], refDepth);
+    expect(overview.hiddenNameCount).toBe(2);
+    expect(overview.assets.find((asset) => asset.tokenAddress === REF)?.symbol).toBe("[hidden name]");
+    expect(JSON.stringify(overview)).not.toMatch(/claim\.xyz|PAY AGAIN/);
+  });
+
   it("counts a token with no pool as unpriced and caps others at what their pools could pay", () => {
     const overview = mapNearToOverview(NEAR_WALLET, junkAccount, junkPrices, [], refDepth);
 

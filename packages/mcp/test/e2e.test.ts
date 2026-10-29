@@ -22,6 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../../../apps/api/src/app.js";
 import { loadConfig } from "../../../apps/api/src/env.js";
 import { ApiError } from "../../../apps/api/src/lib/errors.js";
+import { KeyStoreCore, MemoryStorage, keyId } from "../../../apps/api/src/lib/key-store.js";
 import type { PaymentRecord } from "../../../apps/api/src/payments/ledger.js";
 import { MockPortfolioSource } from "../../../apps/api/src/sources/mock-source.js";
 import { createSvalinClient } from "../src/client.js";
@@ -67,6 +68,7 @@ type NearPayload = { payload?: { signedDelegateAction?: string } };
 
 function harness() {
   const settled: PaymentRecord[] = [];
+  const keyStore = new KeyStoreCore(new MemoryStorage());
   const facilitator = {
     verifyCalls: 0,
     /** Every signed delegate the paywall asked to verify, base64 Borsh. */
@@ -96,6 +98,7 @@ function harness() {
 
   const api = createApp(loadConfig({ NODE_ENV: "test", PORTFOLIO_SOURCE: "mock", PAY_TO_NEAR, X402_ENV: "testnet" }), {
     facilitator,
+    keyStore,
     portfolioSource: new SampleSource(),
     ledger: { record: async (entry) => void settled.push(entry) },
     indexFeed: {
@@ -110,7 +113,22 @@ function harness() {
   });
   const apiFetch = ((input: RequestInfo | URL, init?: RequestInit) => api.fetch(new Request(input, init))) as typeof fetch;
 
-  return { apiFetch, facilitator, settled };
+  return { apiFetch, facilitator, settled, keyStore };
+}
+
+/** A Svalin Business key with calls left, as POST /v1/keys/business would sell it. */
+async function issueKey(keyStore: KeyStoreCore, calls = 10) {
+  const key = `svk_${"7".repeat(43)}`;
+  const now = Date.now();
+  await keyStore.issue(await keyId(key), {
+    kind: "key",
+    plan: "business",
+    payments: [{ tx: "x402", network: "near:testnet", atomic: "79000000", at: now, days: 30 }],
+    calls,
+    used: 0,
+    usedSince: now,
+  });
+  return key;
 }
 
 /** A fresh payee memory file per connection, so tests never touch ~/.svalin. */
@@ -201,6 +219,29 @@ describe("svalin-mcp end to end", () => {
     const paid = await client.callTool({ name: "svalin_risk_report", arguments: { address: WALLET } });
     expect(paid.isError).toBe(true);
     expect(textOf(paid)).toMatch(/SVALIN_NEAR_PRIVATE_KEY/);
+  });
+
+  it("uses a Svalin key instead of paying, and never sends it to another service", async () => {
+    const { apiFetch, facilitator, keyStore } = harness();
+    const key = await issueKey(keyStore);
+    const seen: { url: string; authorization: string | null }[] = [];
+    const recording = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      seen.push({ url: request.url, authorization: request.headers.get("Authorization") });
+      return new URL(request.url).hostname === "svalin.test" ? apiFetch(request) : Promise.resolve(new Response("no", { status: 404 }));
+    }) as typeof fetch;
+    const { client } = await connect(recording, { SVALIN_API_KEY: key });
+
+    const report = await client.callTool({ name: "svalin_risk_report", arguments: { address: WALLET } });
+    expect(report.isError).toBeFalsy();
+    expect(JSON.parse(textOf(report)).grade).toMatch(/[A-F]/);
+    expect(facilitator.verifyCalls).toBe(0);
+    const status = JSON.parse(textOf(await client.callTool({ name: "svalin_spend_status", arguments: {} })));
+    expect(status.svalinKey).toMatchObject({ kind: "key", plan: "business", callsLeft: 9 });
+
+    await client.callTool({ name: "svalin_check_x402_payment", arguments: { url: "https://other.test/paid" } });
+    expect(seen.find((entry) => entry.url.startsWith("https://other.test"))?.authorization).toBeNull();
+    expect(seen.filter((entry) => entry.url.startsWith("http://svalin.test")).every((entry) => entry.authorization === `Bearer ${key}`)).toBe(true);
   });
 
   it("pays $0.02 in USDC on NEAR for a brief and the API records the payment", async () => {

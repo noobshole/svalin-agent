@@ -13,7 +13,7 @@ import {
 import { ApiError, tokenAddressError } from "../lib/errors.js";
 import type { RecipientSignals } from "../risk/check.js";
 import { callFetch } from "../lib/fetch.js";
-import { onChainLabel } from "../lib/text.js";
+import { HIDDEN_NAME, onChainLabel } from "../lib/text.js";
 import { finaliseAssets, formatUnits, round, type PortfolioSource } from "./portfolio-source.js";
 
 /** The subset of FastNEAR's `GET /v1/account/{id}/full` response Svalin relies on. */
@@ -404,6 +404,7 @@ export function mapNearToOverview(
 ): PortfolioOverview {
   const drafts: Parameters<typeof finaliseAssets>[0] = [];
   let unpricedAssetCount = 0;
+  let hiddenNameCount = 0;
   const nearPrice = priceOf(prices, WNEAR_TOKEN);
 
   const nativeYocto = toBigInt(account.state?.balance);
@@ -443,6 +444,7 @@ export function mapNearToOverview(
     if (raw <= 0n || !isNearAccountId(token.contract_id)) continue;
 
     const entry = prices[token.contract_id];
+    if (entry && onChainLabel(entry.symbol) === HIDDEN_NAME) hiddenNameCount += 1;
     const price = priceOf(prices, token.contract_id);
     if (!entry || price === null || !Number.isInteger(entry.decimal)) {
       unpricedAssetCount += 1;
@@ -487,6 +489,7 @@ export function mapNearToOverview(
     totalValueUsd,
     assets,
     unpricedAssetCount,
+    hiddenNameCount,
     dataSource: "fastnear",
     refreshedAt: now.toISOString(),
   });

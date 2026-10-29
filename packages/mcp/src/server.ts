@@ -41,7 +41,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
       return text(
         client.canPay
           ? "Payment was required but not completed (check the wallet has USDC on the selected network)."
-          : "This tool is paid per call over x402. Set SVALIN_SOLANA_PRIVATE_KEY, or SVALIN_NEAR_ACCOUNT_ID and SVALIN_NEAR_PRIVATE_KEY (a dedicated wallet holding a few USDC), to enable it, or use svalin_risk_scan for the free demo.",
+          : "This tool is paid per call over x402. Set SVALIN_API_KEY (a Svalin key), or SVALIN_SOLANA_PRIVATE_KEY, or SVALIN_NEAR_ACCOUNT_ID and SVALIN_NEAR_PRIVATE_KEY (a dedicated wallet holding a few USDC), to enable it, or use svalin_risk_scan for the free demo.",
         true,
       );
     }
@@ -67,7 +67,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
     {
       title: "Risk report (paid)",
       description:
-        "PAID per call in USDC via x402. Same report as svalin_risk_scan without rate limits. Use for repeated or automated checks. The API sets the price (a fraction of a cent to a few cents) and this server refuses any price above SVALIN_MAX_PRICE_USD. Read-only.",
+        "PAID per call in USDC via x402, or from a Svalin key (SVALIN_API_KEY). Same report as svalin_risk_scan without rate limits. Use for repeated or automated checks. The API sets the price (a fraction of a cent to a few cents) and this server refuses any price above SVALIN_MAX_PRICE_USD. Read-only.",
       inputSchema: addressInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -79,7 +79,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
     {
       title: "Priced holdings (paid)",
       description:
-        "PAID per call in USDC via x402. Live priced holdings of a Solana wallet or NEAR account: balances, USD value, allocation and risk category per token. The API sets the price (a fraction of a cent to a few cents) and this server refuses any price above SVALIN_MAX_PRICE_USD. Read-only.",
+        "PAID per call in USDC via x402, or from a Svalin key (SVALIN_API_KEY). Live priced holdings of a Solana wallet or NEAR account: balances, USD value, allocation and risk category per token. The API sets the price (a fraction of a cent to a few cents) and this server refuses any price above SVALIN_MAX_PRICE_USD. Read-only.",
       inputSchema: addressInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -91,7 +91,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
     {
       title: "Portfolio brief (paid)",
       description:
-        "PAID per call in USDC via x402. Headline, 2-4 sentence summary and up to 3 actions for a Solana wallet or NEAR account, plus the full risk report. Best single call for an agent that must explain a wallet to a user. The API sets the price (a fraction of a cent to a few cents) and this server refuses any price above SVALIN_MAX_PRICE_USD. Read-only.",
+        "PAID per call in USDC via x402, or from a Svalin key (SVALIN_API_KEY). Headline, 2-4 sentence summary and up to 3 actions for a Solana wallet or NEAR account, plus the full risk report. Best single call for an agent that must explain a wallet to a user. The API sets the price (a fraction of a cent to a few cents) and this server refuses any price above SVALIN_MAX_PRICE_USD. Read-only.",
       inputSchema: addressInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -119,7 +119,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
     {
       title: "Check before paying (paid)",
       description:
-        "PAID per call in USDC via x402. Call before sending money: is it safe to pay this Solana address or NEAR account? Returns allow, caution or block with reasons (token or program addresses, accounts that do not exist, brand-new wallets, and with payer an address imitating one the payer paid recently, which is address poisoning). Read-only; Svalin never moves funds.",
+        "PAID per call in USDC via x402, or from a Svalin key (SVALIN_API_KEY). Call before sending money: is it safe to pay this Solana address or NEAR account? Returns allow, caution or block with reasons (token or program addresses, accounts that do not exist, brand-new wallets, and with payer an address imitating one the payer paid recently, which is address poisoning). Read-only; Svalin never moves funds.",
       inputSchema: checkInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -148,7 +148,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
     {
       title: "Token exit prices (paid)",
       description:
-        "PAID per call in USDC via x402. Before accepting a NEAR token as payment or collateral, or buying it: its Svalin Index grade and exit prices, meaning what selling $1K, $10K, $100K or your own amountUsd would actually fetch from the real money in its pools, the largest sale that loses under 1% or 5%, and the most its whole supply could fetch. Read-only.",
+        "PAID per call in USDC via x402, or from a Svalin key (SVALIN_API_KEY). Before accepting a NEAR token as payment or collateral, or buying it: its Svalin Index grade and exit prices, meaning what selling $1K, $10K, $100K or your own amountUsd would actually fetch from the real money in its pools, the largest sale that loses under 1% or 5%, and the most its whole supply could fetch. Read-only.",
       inputSchema: {
         contract: contractInput,
         amountUsd: z.number().positive().optional().describe("Your own sale size in USD, quoted beside the standard ones"),
@@ -207,7 +207,8 @@ export function createSvalinMcpServer(client: SvalinClient) {
     "svalin_spend_status",
     {
       title: "Spend status",
-      description: "Shows which wallet pays for Svalin calls and how much of the session budget has been used. Free.",
+      description:
+        "Shows which wallet pays for Svalin calls, how much of the session budget has been used, and the calls left on a Svalin key if one is set. Free.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -216,7 +217,8 @@ export function createSvalinMcpServer(client: SvalinClient) {
         JSON.stringify(
           {
             apiUrl: client.apiUrl,
-            payments: client.canPay ? "enabled" : "disabled (free demo only)",
+            payments: client.canPay ? "enabled" : client.hasKey ? "Svalin key only" : "disabled (free demo only)",
+            svalinKey: client.hasKey ? await keyStatus() : "not set",
             payers: client.payers,
             ...client.budget.status(),
             payeeMemory: client.memory.file,
@@ -226,6 +228,16 @@ export function createSvalinMcpServer(client: SvalinClient) {
         ),
       ),
   );
+
+  /** What is left on the Svalin key; GET /v1/keys/me uses no call. */
+  async function keyStatus(): Promise<unknown> {
+    try {
+      const response = await client.fetch(`${client.apiUrl.replace(/\/+$/, "")}/v1/keys/me`, { headers: { accept: "application/json" } });
+      return await response.json();
+    } catch (error) {
+      return `unknown (${error instanceof Error ? error.message : String(error)})`;
+    }
+  }
 
   return server;
 }

@@ -4,7 +4,7 @@ import { chainFamilySchema, supportedChainKeySchema } from "./address.js";
 import { tokenGradeSchema } from "./token-index.js";
 
 export const endpointSchema = z.object({
-  method: z.literal("GET"),
+  method: z.enum(["GET", "POST"]),
   path: z.string(),
   description: z.string(),
   /** USD price per call, e.g. "$0.01". null = free. */
@@ -18,6 +18,8 @@ export const paymentNetworkSchema = z.object({
   label: z.string(),
   asset: z.literal("USDC"),
   payTo: z.string(),
+  /** "mainnet" takes real USDC; "testnet" takes free test USDC. Each chain is set on its own. */
+  environment: z.enum(["mainnet", "testnet"]).optional(),
 });
 
 export const chainSupportSchema = z.object({

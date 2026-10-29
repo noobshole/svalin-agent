@@ -2,7 +2,7 @@ import type { ChainFamily } from "@svalin-agent/shared";
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/app.js";
-import { MAX_ROUTE_DESCRIPTION_LENGTH, paidRoutes, type PaidRouteKey } from "../src/catalog.js";
+import { MAX_ROUTE_DESCRIPTION_LENGTH, paidRoutes, paymentNetworks, type PaidRouteKey } from "../src/catalog.js";
 import { loadConfig } from "../src/env.js";
 import { createClientIpResolver, visitorKey } from "../src/lib/client-ip.js";
 import { tokenAddressError } from "../src/lib/errors.js";
@@ -265,6 +265,24 @@ describe("facilitators", () => {
   it("adds the NEAR facilitator when a NEAR payTo is set", () => {
     const config = testConfig({ PAY_TO_SOLANA, PAY_TO_NEAR, X402_ENV: "testnet" });
     expect(facilitatorClients(config).map((entry) => entry.name)).toEqual(["near", "x402.org"]);
+  });
+
+  it("sets each chain's network on its own: Solana on mainnet while NEAR stays on testnet", async () => {
+    const config = testConfig({ PAY_TO_SOLANA, PAY_TO_NEAR, X402_ENV: "testnet", X402_ENV_SOLANA: "mainnet" });
+    expect(config.payments.networks).toEqual({ solana: "mainnet", near: "testnet" });
+    expect(paymentNetworks(config).map((network) => `${network.caip2} ${network.environment}`)).toEqual([
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp mainnet",
+      "near:testnet testnet",
+    ]);
+    // Solana settles through the mainnet facilitator; NEAR keeps its testnet facilitator.
+    expect(facilitatorClients(config).map((entry) => entry.name)).toEqual(["near", "payai"]);
+    // As on Workers: payment kinds are read on the first paid request, so reading the manifest needs none.
+    const app = createApp(config, { facilitator: fakeFacilitator(), paymentInitialization: "first-paid-request", paymentDiscovery: false });
+    const manifest = await (await app.request("/")).json();
+    expect(manifest.payments.networks.map((network: { label: string; environment: string }) => `${network.label} ${network.environment}`)).toEqual([
+      "Solana mainnet",
+      "NEAR Testnet testnet",
+    ]);
   });
 
   it("puts CDP first when keys are set, so Bazaar-eligible settlements go through it", () => {

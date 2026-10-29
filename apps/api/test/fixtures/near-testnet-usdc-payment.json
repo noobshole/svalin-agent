@@ -1,0 +1,70 @@
+{
+  "transaction": {
+    "hash": "7USoPGh4w221dS8FMoSvK78VHJz6Nn7tTBUDZouZkQ5y",
+    "signer_id": "x402-relayer.mike.testnet",
+    "receiver_id": "88428151f7b0d14c944710f2536a5bb5473c3b792a4c0e7a40f4fa5d3e00e039"
+  },
+  "execution_outcome": {
+    "id": "7USoPGh4w221dS8FMoSvK78VHJz6Nn7tTBUDZouZkQ5y"
+  },
+  "receipts": [
+    {
+      "receipt": {
+        "predecessor_id": "x402-relayer.mike.testnet",
+        "receiver_id": "88428151f7b0d14c944710f2536a5bb5473c3b792a4c0e7a40f4fa5d3e00e039"
+      },
+      "execution_outcome": {
+        "outcome": {
+          "logs": [],
+          "status": {
+            "SuccessValue": ""
+          }
+        }
+      }
+    },
+    {
+      "receipt": {
+        "predecessor_id": "88428151f7b0d14c944710f2536a5bb5473c3b792a4c0e7a40f4fa5d3e00e039",
+        "receiver_id": "3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af"
+      },
+      "execution_outcome": {
+        "outcome": {
+          "logs": [
+            "EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"88428151f7b0d14c944710f2536a5bb5473c3b792a4c0e7a40f4fa5d3e00e039\",\"new_owner_id\":\"svalin-agent.testnet\",\"amount\":\"4000\"}]}"
+          ],
+          "status": {
+            "SuccessValue": ""
+          }
+        }
+      }
+    },
+    {
+      "receipt": {
+        "predecessor_id": "system",
+        "receiver_id": "x402-relayer.mike.testnet"
+      },
+      "execution_outcome": {
+        "outcome": {
+          "logs": [],
+          "status": {
+            "SuccessValue": ""
+          }
+        }
+      }
+    },
+    {
+      "receipt": {
+        "predecessor_id": "system",
+        "receiver_id": "x402-relayer.mike.testnet"
+      },
+      "execution_outcome": {
+        "outcome": {
+          "logs": [],
+          "status": {
+            "SuccessValue": ""
+          }
+        }
+      }
+    }
+  ]
+}

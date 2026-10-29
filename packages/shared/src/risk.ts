@@ -3,7 +3,7 @@ import { z } from "zod";
 import { supportedChainKeySchema, walletAddressSchema } from "./address.js";
 import { dataSourceSchema } from "./portfolio.js";
 
-export const RISK_METHODOLOGY_VERSION = "2026-10.7";
+export const RISK_METHODOLOGY_VERSION = "2026-10.8";
 
 export const riskSeveritySchema = z.enum(["info", "low", "medium", "high"]);
 export const riskLevelSchema = z.enum(["low", "moderate", "elevated", "high"]);
@@ -19,6 +19,7 @@ export const riskFindingKindSchema = z.enum([
   "unpriced-holdings",
   "small-portfolio",
   "exit-cost",
+  "hidden-instructions",
 ]);
 
 export const riskFindingSchema = z.object({

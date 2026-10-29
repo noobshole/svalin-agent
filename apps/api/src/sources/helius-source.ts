@@ -3,7 +3,7 @@ import { portfolioOverviewSchema, type ChainFamily, type PortfolioOverview, type
 
 import { ApiError, tokenAddressError } from "../lib/errors.js";
 import { callFetch } from "../lib/fetch.js";
-import { onChainLabel } from "../lib/text.js";
+import { HIDDEN_NAME, onChainLabel } from "../lib/text.js";
 import type { RecipientSignals } from "../risk/check.js";
 import { finaliseAssets, formatUnits, type PortfolioSource } from "./portfolio-source.js";
 
@@ -331,6 +331,7 @@ export function mapHeliusToOverview(
 ): PortfolioOverview {
   const drafts: Parameters<typeof finaliseAssets>[0] = [];
   let unpricedAssetCount = 0;
+  let hiddenNameCount = 0;
 
   const native = pages[0]?.result?.nativeBalance;
   if (native?.lamports && native.lamports > 0) {
@@ -367,6 +368,7 @@ export function mapHeliusToOverview(
       const symbol =
         known?.symbol ?? onChainLabel(info.symbol) ?? onChainLabel(item.content?.metadata?.symbol) ?? `${item.id.slice(0, 4)}…`;
       const name = onChainLabel(item.content?.metadata?.name) ?? symbol;
+      if (symbol === HIDDEN_NAME || name === HIDDEN_NAME) hiddenNameCount += 1;
 
       if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
         unpricedAssetCount += 1;
@@ -395,6 +397,7 @@ export function mapHeliusToOverview(
     totalValueUsd,
     assets,
     unpricedAssetCount,
+    hiddenNameCount,
     dataSource: "helius",
     refreshedAt: now.toISOString(),
   });

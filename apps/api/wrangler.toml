@@ -21,6 +21,15 @@ enabled = true
 name = "DEMO_LIMITER"
 class_name = "DemoLimiterObject"
 
+# Another holds Svalin keys and Pro codes, by fingerprint only (src/lib/durable-key-store.ts).
+[[durable_objects.bindings]]
+name = "KEY_STORE"
+class_name = "KeyStoreObject"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DemoLimiterObject"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["KeyStoreObject"]

@@ -1,6 +1,7 @@
 import { NEAR_BURN_ACCOUNTS, NEAR_SHARED_CUSTODY_ACCOUNTS, lookupToken } from "@svalin-agent/chain-config";
 import { BACKING_HOLD_MS, tokenGradeFor, type NearTokenIndex, type RatedTokenRow } from "@svalin-agent/shared";
 
+import { onChainLabel } from "../lib/text.js";
 import type { NearPriceList } from "../sources/near-source.js";
 
 /** v1 counts Ref's concentrated-liquidity pools and grades only backing that has held for 24 hours. */
@@ -65,7 +66,8 @@ export function rateNearTokens(
     const priceUsd = Number(entry.price);
     if (lookupToken("near", contract) || !Number.isFinite(priceUsd) || priceUsd <= 0) continue;
     const backingUsd = Math.round(depth.get(contract) ?? 0);
-    const symbol = entry.symbol?.trim().slice(0, 24) || `${contract.slice(0, 10)}…`;
+    // Agents read the Index too: a symbol written as instructions is shown as [hidden name].
+    const symbol = onChainLabel(entry.symbol, 24) ?? `${contract.slice(0, 10)}…`;
     const extra = stats.get(contract);
     rows.push([
       contract,

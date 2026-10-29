@@ -2,7 +2,7 @@ import type { ApiError as ApiErrorBody, TokenNotice } from "@svalin-agent/shared
 
 export class ApiError extends Error {
   constructor(
-    readonly status: 400 | 404 | 422 | 429 | 501 | 502 | 503,
+    readonly status: 400 | 401 | 404 | 409 | 422 | 429 | 501 | 502 | 503,
     readonly code: string,
     message: string,
     readonly hint?: string,

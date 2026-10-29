@@ -36,16 +36,18 @@ export type X402NetworkConfig = {
   /** CAIP-2 network id used by x402 v2. */
   caip2: string;
   label: string;
+  /** Native USDC there (Solana mint or NEAR token contract): what x402 calls and Svalin Pro are paid in. */
+  usdc: string;
 };
 
 export const x402Networks: Record<PaymentEnvironment, X402NetworkConfig[]> = {
   mainnet: [
-    { family: "solana", caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", label: "Solana" },
-    { family: "near", caip2: "near:mainnet", label: "NEAR" },
+    { family: "solana", caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", label: "Solana", usdc: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
+    { family: "near", caip2: "near:mainnet", label: "NEAR", usdc: "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1" },
   ],
   testnet: [
-    { family: "solana", caip2: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", label: "Solana Devnet" },
-    { family: "near", caip2: "near:testnet", label: "NEAR Testnet" },
+    { family: "solana", caip2: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", label: "Solana Devnet", usdc: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" },
+    { family: "near", caip2: "near:testnet", label: "NEAR Testnet", usdc: "3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af" },
   ],
 };
 
@@ -153,6 +155,42 @@ export const NEAR_SHARED_CUSTODY_ACCOUNTS: ReadonlySet<string> = new Set([
   "contract.main.burrow.near",
   "meme-cooking.near",
 ]);
+
+/**
+ * Well-known NEAR accounts that people and agents pay or use: the named tokens of the registry
+ * above, plus protocol, bridge and DAO contracts. Each was checked on 28 Oct 2026 to exist on
+ * mainnet and run a contract. Names whose owner could not be confirmed (an exchange-sounding name
+ * with no contract, say) are left out, so a squatter's name is never protected. The recipient check
+ * blocks names made to look like these, even on a first payment.
+ */
+const NEAR_PROTOCOL_ACCOUNTS = [
+  "intents.near",
+  "v2.ref-finance.near",
+  "token.v2.ref-finance.near",
+  "dclv2.ref-labs.near",
+  "contract.main.burrow.near",
+  "token.burrow.near",
+  "token.rhealab.near",
+  "factory.bridge.near",
+  "omft.near",
+  "poolv1.near",
+  "lockup.near",
+  "social.near",
+  "game.hot.tg",
+  "token.sweat",
+  "sputnik-dao.near",
+  "astro.sputnik-dao.near",
+  "v1.signer",
+] as const;
+
+export const NEAR_WELL_KNOWN_ACCOUNTS: readonly string[] = [
+  ...new Set([
+    ...knownTokens
+      .filter((token) => token.chain === "near" && token.address !== NEAR_NATIVE_TOKEN && !/^[0-9a-f]{64}$/.test(token.address))
+      .map((token) => token.address),
+    ...NEAR_PROTOCOL_ACCOUNTS,
+  ]),
+];
 
 // Solana base58 and NEAR account IDs are both case-sensitive exact strings.
 const tokenIndex = new Map(knownTokens.map((token) => [`${token.chain}:${token.address}`, token]));
