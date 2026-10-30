@@ -7,12 +7,10 @@ import { useEffect, useState } from "react";
 
 import { FreeCallsLeft, FreeLimitReached } from "@/components/free-calls";
 import { ProReminder } from "@/components/pro-status";
-import { ReportPreview } from "@/components/report-preview";
 import { RiskReportView } from "@/components/risk-report";
 import { ScanForm } from "@/components/scan-form";
 import { gradeTone } from "@/components/token-index";
 import { getDemoRisk, type DemoResult } from "@/lib/api";
-import { exampleReport } from "@/lib/example-report";
 import { cn } from "@/lib/utils/cn";
 import { formatUsd } from "@/lib/utils/formatting";
 
@@ -78,28 +76,38 @@ export function ScanResult() {
 const linkClass = "text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground";
 
 /** The Wallet Scan page before an address is entered: what a scan answers, and an example. */
+const scanGives = [
+  { title: "A grade", body: "A to F, from how the money is spread: too much in one token, too little in stablecoins, too much that is hard to sell." },
+  { title: "What is wrong", body: "Each problem in plain words, with a next step." },
+  { title: "What it would fetch", body: "On NEAR, what everything would really sell for today, not just what the prices say." },
+];
+
+/** Before a scan: the form is the page, with what a scan gives underneath. */
 function ScanIntro() {
   return (
-    <main className="mx-auto grid w-full max-w-6xl items-start gap-12 px-4 pb-20 pt-14 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:px-8 md:pt-20">
-      <div className="grid gap-6">
-        <h1 className="text-3xl font-medium leading-tight tracking-tight md:text-4xl">How risky is the money in this wallet?</h1>
-        <p className="max-w-lg text-base leading-7 text-mutedForeground">
-          Wallet Scan grades any Solana wallet or NEAR account from A to F by how its money is spread: too much in one token, too little in
-          stablecoins, too much in tokens that are hard to sell. It lists what is wrong, and on NEAR, what everything would really fetch if sold
-          today.
-        </p>
-        <div className="max-w-lg">
-          <ScanForm showExamples />
-        </div>
-        <p className="max-w-lg text-sm leading-6 text-mutedForeground">
-          A scan judges the holdings, not the owner. To find out whether an address is safe to send money to, use{" "}
-          <Link className={linkClass} href="/check">
-            Check Before Paying
-          </Link>
-          .
-        </p>
+    <main className="mx-auto grid w-full max-w-3xl gap-10 px-4 pb-24 pt-16 md:px-8 md:pt-24">
+      <div className="grid gap-4">
+        <h1 className="text-4xl font-medium leading-tight tracking-tight md:text-5xl" style={{ textWrap: "balance" }}>
+          How risky is the money in this wallet?
+        </h1>
+        <p className="max-w-2xl text-lg leading-8 text-mutedForeground">Paste a Solana wallet or a NEAR account. The scan is free and read-only.</p>
       </div>
-      <ReportPreview report={exampleReport} />
+      <ScanForm showExamples />
+      <dl className="grid gap-8 border-t border-border pt-10 sm:grid-cols-3">
+        {scanGives.map((entry) => (
+          <div className="grid content-start gap-2" key={entry.title}>
+            <dt className="font-medium text-foreground">{entry.title}</dt>
+            <dd className="text-[15px] leading-7 text-mutedForeground">{entry.body}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-sm leading-6 text-mutedForeground">
+        A scan judges the holdings, not the owner. To find out whether an address is safe to send money to, use{" "}
+        <Link className={linkClass} href="/check">
+          Check Before Paying
+        </Link>
+        .
+      </p>
     </main>
   );
 }

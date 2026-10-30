@@ -318,4 +318,17 @@ describe("chain router", () => {
     expect((await router.getOverview(SOLANA_WALLET)).chain).toBe("solana");
     expect(() => router.getOverview(NEAR_WALLET)).toThrow(ApiError);
   });
+
+  it("answers an upstream answer that cannot be read with a retryable 502, not a 500", async () => {
+    const solana = new MockPortfolioSource();
+    solana.getOverview = async () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    };
+    const router = new ChainRouterSource({ solana });
+    await expect(router.getOverview(SOLANA_WALLET)).rejects.toMatchObject({ status: 502, code: "upstream_error" });
+    solana.getOverview = async () => {
+      throw new ApiError(404, "account_not_found", "Missing.");
+    };
+    await expect(router.getOverview(SOLANA_WALLET)).rejects.toMatchObject({ status: 404 });
+  });
 });

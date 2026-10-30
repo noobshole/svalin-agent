@@ -189,7 +189,8 @@ export default async function DocsPage() {
           <a href="https://github.com/noobshole/svalin-index">Svalin Index editions</a>: every edition, with its inputs, ready to verify.
         </li>
         <li>
-          <a href={REPO}>Source code</a> on GitHub.
+          <a href={REPO}>Source code</a> on GitHub. Its README is for developers who want to read the code or run their own copy; this page is
+          for using the hosted API.
         </li>
       </ul>
     </DocPage>

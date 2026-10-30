@@ -15,7 +15,7 @@
   --surface-2: 48 14% 92%;
   --foreground: 240 4% 10%;
   --muted-foreground: 45 2% 41%;
-  --subtle-foreground: 45 3% 53%;
+  --subtle-foreground: 45 3% 47%;
   --border: 45 11% 85%;
   --border-strong: 45 7% 75%;
   --primary: 240 4% 10%;
@@ -37,8 +37,8 @@
     --surface: 220 7% 9%;
     --surface-2: 225 6% 12%;
     --foreground: 45 9% 92%;
-    --muted-foreground: 48 2% 54%;
-    --subtle-foreground: 48 2% 42%;
+    --muted-foreground: 48 2% 61%;
+    --subtle-foreground: 48 2% 48%;
     --border: 225 5% 16%;
     --border-strong: 225 4% 24%;
     --primary: 45 9% 92%;
@@ -46,7 +46,7 @@
     --risk-low: 112 15% 60%;
     --risk-medium: 38 50% 57%;
     --risk-high: 8 46% 56%;
-    --risk-info: 48 2% 54%;
+    --risk-info: 48 2% 61%;
     --exposure-1: 45 9% 92%;
     --exposure-2: 45 4% 68%;
     --exposure-3: 48 2% 46%;
@@ -61,8 +61,8 @@
   --surface: 220 7% 9%;
   --surface-2: 225 6% 12%;
   --foreground: 45 9% 92%;
-  --muted-foreground: 48 2% 54%;
-  --subtle-foreground: 48 2% 42%;
+  --muted-foreground: 48 2% 61%;
+  --subtle-foreground: 48 2% 48%;
   --border: 225 5% 16%;
   --border-strong: 225 4% 24%;
   --primary: 45 9% 92%;
@@ -70,7 +70,7 @@
   --risk-low: 112 15% 60%;
   --risk-medium: 38 50% 57%;
   --risk-high: 8 46% 56%;
-  --risk-info: 48 2% 54%;
+  --risk-info: 48 2% 61%;
   --exposure-1: 45 9% 92%;
   --exposure-2: 45 4% 68%;
   --exposure-3: 48 2% 46%;

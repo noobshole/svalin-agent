@@ -157,7 +157,7 @@ export function MobileMenu() {
           <Menu aria-hidden="true" className="h-4 w-4 group-open:hidden" />
           <X aria-hidden="true" className="hidden h-4 w-4 group-open:block" />
         </summary>
-        <nav aria-label="Menu" className="absolute inset-x-0 top-14 max-h-[calc(100vh-3.5rem)] overflow-y-auto border-b border-border bg-background px-4 pb-4 pt-2">
+        <nav aria-label="Menu" className="absolute inset-x-0 top-16 max-h-[calc(100vh-4rem)] overflow-y-auto border-b border-border bg-background px-4 pb-4 pt-2">
           <div className="grid gap-3">
             {NAV.map((item) =>
               "href" in item ? (

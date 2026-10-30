@@ -295,8 +295,12 @@ Step-by-step instructions, with a test after each step, are in
 
 ## Documentation
 
+This README covers the code and running your own copy. To call the hosted API, start with the
+[website docs](https://svalin.noobshole.workers.dev/docs).
+
 | Document | For |
 | --- | --- |
+| [Website docs](https://svalin.noobshole.workers.dev/docs) | Calling the hosted API from code or an agent: routes, prices, passes, MCP |
 | [Risk methodology](docs/RISK_METHODOLOGY.md) | How scores, grades and findings are computed |
 | [Architecture](ARCHITECTURE.md) | Request pipeline, boundaries and configuration guards |
 | [Deployment](docs/DEPLOYMENT.md) | Running your own API, website and MCP server |

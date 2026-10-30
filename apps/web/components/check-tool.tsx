@@ -64,31 +64,21 @@ export function CheckTool() {
     document.title = address ? `Check ${address} — Svalin` : "Check Before Paying — Svalin";
   }, [address]);
 
+  if (!address) return <CheckIntro payer={payer} pro={pro} />;
+
   return (
     <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 pb-20 pt-10 md:px-8">
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] md:items-end">
         <div className="grid min-w-0 gap-2">
           <p className="eyebrow">Check Before Paying</p>
-          <h1 className="break-all text-2xl font-medium tracking-tight md:text-3xl">
-            {address ? <span className="font-mono text-xl md:text-2xl">{address}</span> : "Is it safe to pay this address?"}
-          </h1>
-          {!address ? (
-            <p className="max-w-lg text-sm leading-6 text-mutedForeground">
-              Paste the address you are about to send money to, on NEAR or Solana. Svalin answers allow, caution or block, and says why. It
-              only reads public data. To grade what a wallet holds instead, use{" "}
-              <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/scan">
-                Wallet Scan
-              </Link>
-              .
-            </p>
-          ) : null}
+          <h1 className="break-all font-mono text-xl tracking-tight md:text-2xl">{address}</h1>
         </div>
         <CheckForm initialPayer={payer} initialValue={address} key={address + payer} pro={pro} />
       </div>
 
       <ProReminder />
 
-      {!address ? null : result === null ? (
+      {result === null ? (
         <div aria-busy="true" aria-label="Checking address" className="h-48 animate-pulse rounded-lg border border-border bg-surface" />
       ) : result.ok ? (
         <div className="grid gap-3">
@@ -104,21 +94,66 @@ export function CheckTool() {
         </div>
       )}
 
-      <div className="grid gap-2 border-t border-border pt-6 text-sm leading-6 text-mutedForeground">
-        <p>
-          Every check looks at the address itself: what kind of account it is, how old it is, how much it has been used, and whether its name
-          imitates a well-known NEAR account. With{" "}
-          <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/pricing">
-            Svalin Pro
-          </Link>{" "}
-          or the paid API, it also compares it with your own wallet&apos;s recent payments, to catch a look-alike address planted in your
-          history (address poisoning). Agents can{" "}
-          <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/docs">
-            call it before every payment
-          </Link>
-          .
+      <p className="border-t border-border pt-6 text-sm leading-6 text-mutedForeground">
+        With{" "}
+        <Link className={linkClass} href="/pricing">
+          Svalin Pro
+        </Link>{" "}
+        or the paid API, a check also compares the address with your own wallet&apos;s recent payments, to catch a look-alike planted in your
+        history. Agents can{" "}
+        <Link className={linkClass} href="/docs">
+          call it before every payment
+        </Link>
+        .
+      </p>
+    </main>
+  );
+}
+
+const linkClass = "text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground";
+
+const checkLooksAt = [
+  { title: "The address itself", body: "What kind of account it is, how old it is, and how much it has been used. A token or a program is never a payee." },
+  { title: "Look-alike names", body: "A NEAR name made to look like a well-known account, such as intent5.near for intents.near." },
+  {
+    title: "Your own history",
+    body: "With Svalin Pro or the paid API, it compares the address with your wallet's recent payments, to catch a planted look-alike.",
+  },
+];
+
+/** Before a check: the form is the page, with what a check looks at underneath. */
+function CheckIntro({ payer, pro }: { payer: string; pro: boolean }) {
+  return (
+    <main className="mx-auto grid w-full max-w-3xl gap-10 px-4 pb-24 pt-16 md:px-8 md:pt-24">
+      <div className="grid gap-4">
+        <h1 className="text-4xl font-medium leading-tight tracking-tight md:text-5xl" style={{ textWrap: "balance" }}>
+          Is it safe to pay this address?
+        </h1>
+        <p className="max-w-2xl text-lg leading-8 text-mutedForeground">
+          Paste the address you are about to send money to, on NEAR or Solana. You get allow, caution or block, and the reasons.
         </p>
       </div>
+      <ProReminder />
+      <CheckForm initialPayer={payer} initialValue="" pro={pro} />
+      <dl className="grid gap-8 border-t border-border pt-10 sm:grid-cols-3">
+        {checkLooksAt.map((entry) => (
+          <div className="grid content-start gap-2" key={entry.title}>
+            <dt className="font-medium text-foreground">{entry.title}</dt>
+            <dd className="text-[15px] leading-7 text-mutedForeground">{entry.body}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-sm leading-6 text-mutedForeground">
+        A check judges whether to pay an address. To grade what a wallet holds instead, use{" "}
+        <Link className={linkClass} href="/scan">
+          Wallet Scan
+        </Link>
+        . Agents can{" "}
+        <Link className={linkClass} href="/docs">
+          call it before every payment
+        </Link>
+        .
+      </p>
     </main>
   );
 }
