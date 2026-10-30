@@ -82,6 +82,10 @@ export interface KeyStore {
    * returns the id credited for each payment that was new.
    */
   claimNear(payments: Omit<PassPayment, "days">[], planDays: Record<ProPlan, number>): Promise<string[]>;
+  /** The transactions no lookup has read yet, so each one is fetched from the chain only once. */
+  unread(network: string, txs: string[]): Promise<string[]>;
+  /** Records transactions a lookup has read, whether or not they paid for anything. */
+  markRead(network: string, txs: string[]): Promise<void>;
   /**
    * In-memory throttle, per bucket (chain lookups, NEAR amounts): false when this caller is over its
    * hourly allowance or everyone together is over the bucket's daily one.
@@ -116,6 +120,7 @@ const passKey = (id: string) => `pass:${id}`;
 const claimKey = (network: string, tx: string) => `tx:${network}:${tx}`;
 const pendingKey = (id: string) => `near-pending:${id}`;
 const slotKey = (network: string, atomic: string) => `near-amount:${network}:${atomic}`;
+const readKey = (network: string, tx: string) => `read:${network}:${tx}`;
 
 type Slot = { id: string; heldUntil: number };
 
@@ -232,6 +237,16 @@ export class KeyStoreCore implements KeyStore {
       credited.push(slot.id);
     }
     return credited;
+  }
+
+  async unread(network: string, txs: string[]): Promise<string[]> {
+    const fresh: string[] = [];
+    for (const tx of txs) if (!(await this.storage.get(readKey(network, tx)))) fresh.push(tx);
+    return fresh;
+  }
+
+  async markRead(network: string, txs: string[]): Promise<void> {
+    for (const tx of txs) await this.storage.put(readKey(network, tx), 1);
   }
 
   async throttle(bucket: string, caller: string, now: number, perHour: number, perDayGlobal: number): Promise<boolean> {

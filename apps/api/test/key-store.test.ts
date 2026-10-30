@@ -114,6 +114,16 @@ describe("exact NEAR amounts", () => {
   });
 });
 
+describe("transactions read", () => {
+  it("remembers what lookups have read, per network", async () => {
+    const store = new KeyStoreCore(new MemoryStorage());
+    expect(await store.unread(DEVNET, ["a", "b"])).toEqual(["a", "b"]);
+    await store.markRead(DEVNET, ["a"]);
+    expect(await store.unread(DEVNET, ["a", "b"])).toEqual(["b"]);
+    expect(await store.unread(MAINNET, ["a"])).toEqual(["a"]);
+  });
+});
+
 describe("throttle", () => {
   it("limits each caller per hour and everyone per day, per bucket", async () => {
     const store = new KeyStoreCore(new MemoryStorage());

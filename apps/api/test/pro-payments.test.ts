@@ -37,6 +37,39 @@ describe("Solana Pay payments", () => {
     expect(calls).toEqual(["getSignaturesForAddress", "getTransaction"]);
   });
 
+  it("fetches only the transactions not read before, and returns those that paid nothing too", async () => {
+    const fetched: string[] = [];
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      const { method, params } = JSON.parse(String(init.body)) as { method: string; params: unknown[] };
+      if (method === "getSignaturesForAddress") {
+        return Response.json({ result: ["old", "junk", "late", "partial", "good"].map((signature) => ({ signature, err: null })) });
+      }
+      const signature = params[0] as string;
+      fetched.push(signature);
+      if (signature === "late") return Response.json({ result: null });
+      if (signature === "partial") return Response.json({ result: { ...solanaPayment, meta: { ...solanaPayment.meta, postTokenBalances: undefined } } });
+      if (signature === "junk") return Response.json({ result: { ...solanaPayment, meta: { ...solanaPayment.meta, err: { InstructionError: [0, "Custom"] } } } });
+      return Response.json({ result: solanaPayment });
+    }) as typeof fetch;
+
+    const found = await solanaPaymentsByReference({
+      rpcUrl: "https://rpc",
+      network: DEVNET,
+      reference: "ref",
+      payTo: SVALIN_SOLANA,
+      mint: DEVNET_USDC,
+      unread: async (signatures) => signatures.filter((signature) => signature !== "old"),
+      fetchImpl,
+    });
+    expect(fetched).toEqual(["junk", "late", "partial", "good"]);
+    // "late" is not on the RPC yet and "partial" came without balances, so both are left for the
+    // next lookup; a failed one paid nothing.
+    expect(found.map((payment) => [payment.tx, payment.atomic])).toEqual([
+      ["junk", "0"],
+      ["good", "4000"],
+    ]);
+  });
+
   it("reports an unreadable chain as a 502, so the buyer can retry", async () => {
     const fetchImpl = (async () => Response.json({ error: { code: -32005, message: "busy" } })) as unknown as typeof fetch;
     await expect(
@@ -96,6 +129,50 @@ describe("NEAR payments", () => {
       fetchImpl,
     });
     expect(found).toEqual([{ tx: "7USoPGh4w221dS8FMoSvK78VHJz6Nn7tTBUDZouZkQ5y", network: "near:testnet", atomic: "4000", at }]);
+  });
+
+  it("reads back page by page to the checkout, fetches only unread transactions, and leaves the newest for later", async () => {
+    const now = 1_800_000_000_000;
+    const since = now - 2 * 86_400_000;
+    const ns = (ms: number) => String(ms * 1e6);
+    // Newest first: one too fresh to trust yet, then 49 more on the first page, then a second page that reaches past the checkout.
+    const first = [
+      { transaction_hash: "fresh", tx_block_timestamp: ns(now - 5_000) },
+      ...Array.from({ length: 49 }, (_, index) => ({ transaction_hash: `p1-${index}`, tx_block_timestamp: ns(now - 60_000 * (index + 1)) })),
+    ];
+    const second = [
+      { transaction_hash: "p2-in", tx_block_timestamp: ns(since + 2_000) },
+      { transaction_hash: "p2-no-receipts", tx_block_timestamp: ns(since + 1_000) },
+      { transaction_hash: "p2-before", tx_block_timestamp: ns(since - 1_000) },
+    ];
+    const pages: unknown[] = [];
+    let asked: string[] = [];
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { resume_token?: string; tx_hashes?: string[] };
+      if (url.endsWith("/v0/account")) {
+        pages.push(body.resume_token ?? null);
+        return Response.json(body.resume_token ? { account_txs: second, resume_token: "next-2" } : { account_txs: first, resume_token: "next-1" });
+      }
+      asked = [...asked, ...(body.tx_hashes ?? [])];
+      return Response.json({
+        transactions: (body.tx_hashes ?? []).map((hash) => ({ ...nearPayment, execution_outcome: { id: hash }, ...(hash === "p2-no-receipts" ? { receipts: [] } : {}) })),
+      });
+    }) as typeof fetch;
+
+    const found = await nearPaymentsReceived({
+      txApiUrl: "https://tx",
+      network: "near:testnet",
+      payTo: "svalin-agent.testnet",
+      token: TESTNET_USDC,
+      since,
+      now,
+      unread: async (hashes) => hashes.filter((hash) => !hash.startsWith("p1-")),
+      fetchImpl,
+    });
+    expect(pages).toEqual([null, "next-1"]);
+    expect(asked).toEqual(["p2-in", "p2-no-receipts"]);
+    // A record without its receipts is not read in full, so it waits for the next lookup.
+    expect(found.map((payment) => payment.tx)).toEqual(["p2-in"]);
   });
 });
 

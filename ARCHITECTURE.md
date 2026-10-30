@@ -30,7 +30,9 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
 3. **Pass check**: an `Authorization: Bearer` key on a paid route (`lib/key-store.ts`) uses one of
    the pass's calls instead of an x402 payment, and gives it back if the handler fails. Keys are
    stored by SHA-256 only. Pro passes run on payments found on-chain (`payments/pro-payments.ts`:
-   a Solana Pay reference, or an exact NEAR amount); only payments on the networks the API takes
+   a Solana Pay reference, or an exact NEAR amount found in Svalin's history back to when the
+   checkout began). Each transaction is fetched from the chain once, so a lookup costs one call
+   however many transactions a reference collects. Only payments on the networks the API takes
    now count, so a test-network pass ends when its chain moves to mainnet.
 4. **x402 paywall** (`payments/x402.ts`): `@x402/hono` middleware. Each paid route accepts
    exact-scheme USDC on every configured network (Solana via `ExactSvmScheme`, NEAR via
@@ -135,6 +137,10 @@ Workers with `nodejs_compat`. On Workers:
 - Passes live in a second Durable Object (`lib/durable-key-store.ts`, binding `KEY_STORE`), which
   runs each request on its own, so two calls never spend the same last call or claim the same
   payment. Without the binding every pass route answers 503.
+- Each isolate remembers the refusals it has seen until they lift: a visitor out of free calls, a
+  caller over a checkout limit, a caller whose keys keep being refused. A caller who keeps asking
+  is answered there, so they cannot use up the Durable Objects' daily requests (100,000 on Workers
+  Free), and a refused free call writes nothing.
 - Payment facilitators load inside the first paid request (`initialization: "first-paid-request"`),
   because I/O started in one request cannot be awaited by another.
 - Bazaar discovery metadata is off: its schema validation generates code at runtime, which

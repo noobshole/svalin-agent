@@ -70,6 +70,10 @@ How Workers differ from a container host:
 - Svalin passes (Pro codes and Business keys) live in a second Durable Object (binding `KEY_STORE`), stored by
   their SHA-256 only. `wrangler deploy` creates it from the `v2` migration in `wrangler.toml`.
   Without the binding every key route answers 503, so a key is never sold into memory and lost.
+- Workers Free allows 100,000 Durable Object requests a day, shared by free scans, pass calls and
+  checkouts; past it they fail until 00:00 UTC. Refusals are remembered in each Worker instance, so
+  a caller who keeps asking does not use them up. Move to Workers Paid before pass calls near that
+  number.
 - Payment facilitators are loaded inside the first paid request, and Bazaar discovery metadata
   is off: its schema check generates code at runtime, which Workers forbid.
 - The `"svalin_api_started"` log line appears on the first request after each deploy, in the
@@ -179,7 +183,7 @@ nothing to try. A pass paid on a test network stops working when that chain move
 - [ ] **(test)** `https://<api>/v1/pro` lists the plans and, per chain, where to pay.
 - [ ] **(test)** On the website's Pricing page, pay for Pro with test USDC: Solana devnet by scanning the QR code
       (Phantom or Solflare in testnet mode), or NEAR testnet by sending the exact amount shown. The
-      page finds the payment within about 10 seconds and shows "Svalin Pro is active".
+      page finds the payment within about 10 seconds (NEAR: about 30) and shows "Svalin Pro is active".
 - [ ] **(test)** A scan then shows "Svalin Pro: 99 calls left today."
 - [ ] **(test)** `POST https://<api>/v1/keys/business` answers 402 asking for $79 (`/v1/keys/pro`:
       $5); an x402 client that pays it gets a key, and `GET /v1/keys/me` with that key shows its

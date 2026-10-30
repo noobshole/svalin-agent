@@ -6,7 +6,20 @@ import { KeyStoreCore, type KeyStore, type KvStorage } from "./key-store.js";
 import type { DemoLimiterNamespace } from "./durable-demo-limiter.js";
 
 type Method = keyof KeyStore;
-const METHODS = new Set<Method>(["use", "refund", "status", "issue", "extend", "claim", "reserveNear", "pending", "claimNear", "throttle"]);
+const METHODS = new Set<Method>([
+  "use",
+  "refund",
+  "status",
+  "issue",
+  "extend",
+  "claim",
+  "reserveNear",
+  "pending",
+  "claimNear",
+  "unread",
+  "markRead",
+  "throttle",
+]);
 
 /** Durable Object class (binding KEY_STORE in wrangler.toml). */
 export class KeyStoreObject {
@@ -46,5 +59,7 @@ export class DurableKeyStore implements KeyStore {
   reserveNear: KeyStore["reserveNear"] = (...args) => this.call("reserveNear", args);
   pending: KeyStore["pending"] = (...args) => this.call("pending", args);
   claimNear: KeyStore["claimNear"] = (...args) => this.call("claimNear", args);
+  unread: KeyStore["unread"] = (...args) => this.call("unread", args);
+  markRead: KeyStore["markRead"] = (...args) => this.call("markRead", args);
   throttle: KeyStore["throttle"] = (...args) => this.call("throttle", args);
 }

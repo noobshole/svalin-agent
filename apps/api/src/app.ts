@@ -38,11 +38,18 @@ import {
   type PassRules,
   type UseResult,
 } from "./lib/key-store.js";
-import { DemoRateLimiter, type DemoLimiter } from "./lib/rate-limit.js";
+import { DemoRateLimiter, HourlyCounter, type DemoLimiter } from "./lib/rate-limit.js";
 import { TtlCache } from "./lib/ttl-cache.js";
 import { AnthropicNarrator, TemplateNarrator, type Narrator } from "./narrate/narrator.js";
 import { LogLedger, SupabaseLedger, type PaymentLedger } from "./payments/ledger.js";
-import { nearPaymentsReceived, solanaPaymentsByReference, usdcAtomic, usdcDecimal, type FoundPayment } from "./payments/pro-payments.js";
+import {
+  nearPaymentsReceived,
+  solanaPaymentsByReference,
+  usdcAtomic,
+  usdcDecimal,
+  type FoundPayment,
+  type UnreadFilter,
+} from "./payments/pro-payments.js";
 import { createPaymentLayer } from "./payments/x402.js";
 import { tokenExit } from "./ratings/exit-prices.js";
 import { assessRecipient } from "./risk/check.js";
@@ -74,10 +81,14 @@ export type AppDependencies = {
   proPayments?: ProPaymentFinder;
 };
 
-/** Pro payments on each chain: by a code's Solana Pay reference, and Svalin's recent NEAR receipts. */
+/**
+ * Pro payments on each chain: the transactions made with a code's Solana Pay reference, and
+ * Svalin's NEAR transactions since a checkout began. Each returns the transactions it read, with
+ * what they paid, and skips those `unread` drops.
+ */
 export type ProPaymentFinder = {
-  solana(offer: NonNullable<ProOffer["solana"]>, reference: string): Promise<FoundPayment[]>;
-  near(offer: NonNullable<ProOffer["near"]>, since: number): Promise<FoundPayment[]>;
+  solana(offer: NonNullable<ProOffer["solana"]>, reference: string, unread: UnreadFilter): Promise<FoundPayment[]>;
+  near(offer: NonNullable<ProOffer["near"]>, since: number, unread: UnreadFilter): Promise<FoundPayment[]>;
 };
 
 type Variables = { paidByKey?: boolean };
@@ -87,6 +98,11 @@ const PRO_LOOKUPS_PER_HOUR = 120;
 const PRO_LOOKUPS_PER_DAY = 5000;
 /** New exact NEAR amounts per caller per hour: a buyer needs one or two. */
 const NEAR_AMOUNTS_PER_HOUR = 10;
+/**
+ * Refused keys (unknown, ended or out of calls) per caller per hour before the API stops asking the
+ * key store, whose Durable Object the free plan allows 100,000 requests a day.
+ */
+const REFUSED_KEYS_PER_HOUR = 30;
 
 const PAID_PREFIXES = Object.values(paidRoutes).map((route) => route.path.replace("{address}", ""));
 const DEMO_PREFIXES = ["/v1/demo/risk/", "/v1/demo/check/", "/v1/demo/exit/"];
@@ -136,11 +152,14 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   const getOverview = (address: string) => cache.getOrCompute(address, () => source.getOverview(address));
 
   const keyStore = deps.keyStore ?? new KeyStoreCore(new MemoryStorage());
+  // This isolate's memory of refusals, so a caller who keeps asking does not keep reaching the store.
+  const throttled = new HourlyCounter();
+  const refusedKeys = new HourlyCounter();
   const proPayments: ProPaymentFinder = deps.proPayments ?? {
-    solana: (offer, reference) =>
-      solanaPaymentsByReference({ rpcUrl: config.pro.solanaRpcUrl, network: offer.network, reference, payTo: offer.payTo, mint: offer.mint }),
-    near: (offer, since) =>
-      nearPaymentsReceived({ txApiUrl: config.pro.nearTxApiUrl, network: offer.network, payTo: offer.payTo, token: offer.token, since }),
+    solana: (offer, reference, unread) =>
+      solanaPaymentsByReference({ rpcUrl: config.pro.solanaRpcUrl, network: offer.network, reference, payTo: offer.payTo, mint: offer.mint, unread }),
+    near: (offer, since, unread) =>
+      nearPaymentsReceived({ txApiUrl: config.pro.nearTxApiUrl, network: offer.network, payTo: offer.payTo, token: offer.token, since, unread }),
   };
   /** Only payments on the networks Svalin takes now count, so test-network passes end at the switch. */
   const passRules = (): PassRules => ({
@@ -214,9 +233,10 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     const plan = keyPlanSchema.safeParse(c.req.path.split("/").pop());
     const authorization = c.req.header("Authorization");
     if (plan.success && authorization !== undefined) {
+      guardKeys(c);
       const id = await keyId(bearerSecret(authorization));
       const status = await keys(() => keyStore.status(id, Date.now(), passRules()));
-      if (!status) throw keyRefusal({ ok: false, reason: "unknown", until: null }, config.pro.callsPerDay);
+      if (!status) throw refuseKey(c, keyRefusal({ ok: false, reason: "unknown", until: null }, config.pro.callsPerDay));
       if (status.plan !== plan.data) {
         throw new ApiError(409, "other_plan", `This key is Svalin ${status.plan === "pro" ? "Pro" : "Business"}; renew it at POST /v1/keys/${status.plan}.`);
       }
@@ -230,9 +250,10 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     const authorization = c.req.header("Authorization");
     if (authorization === undefined || config.payments.mode !== "x402") return next();
     if (!PAID_PREFIXES.some((prefix) => c.req.path.startsWith(prefix))) return next();
+    guardKeys(c);
     const id = await keyId(bearerSecret(authorization));
     const result = await keys(() => keyStore.use(id, Date.now(), passRules()));
-    if (!result.ok) throw keyRefusal(result, config.pro.callsPerDay);
+    if (!result.ok) throw refuseKey(c, keyRefusal(result, config.pro.callsPerDay));
     c.set("paidByKey", true);
     c.header("X-Calls-Left", String(result.callsLeft));
     await next();
@@ -305,9 +326,10 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     if (authorization === undefined) {
       throw new ApiError(401, "missing_key", "Send your Svalin key as Authorization: Bearer <key>.");
     }
+    guardKeys(c);
     const id = await keyId(bearerSecret(authorization));
     const status = await keys(() => keyStore.status(id, Date.now(), passRules()));
-    if (!status) throw keyRefusal({ ok: false, reason: "unknown", until: null }, config.pro.callsPerDay);
+    if (!status) throw refuseKey(c, keyRefusal({ ok: false, reason: "unknown", until: null }, config.pro.callsPerDay));
     return c.json(status);
   });
 
@@ -380,34 +402,41 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     let failure: unknown;
 
     if (offer.solana) {
+      const network = offer.solana.network;
       try {
-        const payments = (await proPayments.solana(offer.solana, await proReference(code))).flatMap((payment) => {
+        const read = await proPayments.solana(offer.solana, await proReference(code), unreadOn(network));
+        const payments = read.flatMap((payment) => {
           const days = proDaysFor(payment.atomic);
           return days > 0 ? [{ ...payment, days }] : [];
         });
         if (payments.length > 0) found += await keys(() => keyStore.claim(id, payments));
+        await markRead(network, read);
       } catch (error) {
         failure = error;
       }
     }
 
     const near = offer.near;
-    const waiting = near ? (await keys(() => keyStore.pending(id, Date.now()))).filter((entry) => entry.network === near.network) : [];
-    if (near && waiting.length > 0) {
+    const nearPending = async () => (near ? (await keys(() => keyStore.pending(id, Date.now()))).filter((entry) => entry.network === near.network) : []);
+    let pending = await nearPending();
+    if (near && pending.length > 0) {
       try {
-        const since = Math.min(...waiting.map((entry) => entry.createdAt));
-        const payments = (await proPayments.near(near, since)).filter((payment) => proDaysFor(payment.atomic) > 0);
+        const since = Math.min(...pending.map((entry) => entry.createdAt));
+        const read = await proPayments.near(near, since, unreadOn(near.network));
+        const payments = read.filter((payment) => proDaysFor(payment.atomic) > 0);
         if (payments.length > 0) {
-          const credited = await keys(() => keyStore.claimNear(payments, proPlanDays));
-          found += credited.filter((owner) => owner === id).length;
+          const mine = (await keys(() => keyStore.claimNear(payments, proPlanDays))).filter((owner) => owner === id).length;
+          found += mine;
+          if (mine > 0) pending = await nearPending();
         }
+        // Read once, whatever they were: a transaction no checkout matched now never matches later.
+        await markRead(near.network, read);
       } catch (error) {
         failure ??= error;
       }
     }
 
     const status = await keys(() => keyStore.status(id, Date.now(), passRules()));
-    const pending = near ? (await keys(() => keyStore.pending(id, Date.now()))).filter((entry) => entry.network === near.network) : [];
     // A chain that could not be read only matters when nothing else is known about the code.
     if (!status && pending.length === 0 && failure) throw failure;
     if (found > 0) console.log(JSON.stringify({ level: "info", msg: "pro_payment_found", found }));
@@ -425,10 +454,40 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     }
   }
 
-  /** Lookups read the chain and NEAR amounts are scarce, so each caller gets a few an hour, and everyone a daily total. */
+  const unreadOn =
+    (network: string): UnreadFilter =>
+    (txs) =>
+      keys(() => keyStore.unread(network, txs));
+
+  async function markRead(network: string, read: FoundPayment[]) {
+    if (read.length > 0) await keys(() => keyStore.markRead(network, read.map((payment) => payment.tx)));
+  }
+
+  /**
+   * Lookups read the chain and NEAR amounts are scarce, so each caller gets a few an hour, and
+   * everyone a daily total. Once the store has refused a caller, this isolate refuses them for the
+   * rest of the hour without asking it again.
+   */
   async function throttle(c: Context, bucket: "lookup" | "near-amount", perHour: number, perDay: number) {
-    const allowed = await keys(() => keyStore.throttle(bucket, clientIp(c), Date.now(), perHour, perDay));
-    if (!allowed) throw new ApiError(429, "too_many_requests", "Too many checkout requests right now. Try again in an hour.");
+    const caller = clientIp(c);
+    const local = `${bucket}:${caller}`;
+    const allowed = throttled.count(local, Date.now()) === 0 && (await keys(() => keyStore.throttle(bucket, caller, Date.now(), perHour, perDay)));
+    if (!allowed) {
+      throttled.add(local, Date.now());
+      throw new ApiError(429, "too_many_requests", "Too many checkout requests right now. Try again in an hour.");
+    }
+  }
+
+  /** A caller whose keys were refused too often this hour is answered here, before the key store. */
+  function guardKeys(c: Context) {
+    if (refusedKeys.count(clientIp(c), Date.now()) >= REFUSED_KEYS_PER_HOUR) {
+      throw new ApiError(429, "too_many_refused_keys", "Too many refused Svalin keys from this address. Try again in an hour.");
+    }
+  }
+
+  function refuseKey(c: Context, error: ApiError): ApiError {
+    refusedKeys.add(clientIp(c), Date.now());
+    return error;
   }
 
   /** Days a Pro payment of this size buys: the yearly price buys a year, the monthly price a month. */

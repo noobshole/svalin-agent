@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createApp, type ProPaymentFinder } from "../src/app.js";
 import { MAX_ROUTE_DESCRIPTION_LENGTH, keyRouteDescription, KEY_PLAN_IDS } from "../src/catalog.js";
 import { ApiError } from "../src/lib/errors.js";
+import { KeyStoreCore, MemoryStorage } from "../src/lib/key-store.js";
 import type { FoundPayment } from "../src/payments/pro-payments.js";
 import { MockPortfolioSource } from "../src/sources/mock-source.js";
 import { PAY_TO_NEAR, PAY_TO_SOLANA, SOLANA_WALLET, decodeHeader, fakeFacilitator, testConfig } from "./helpers.js";
@@ -142,6 +143,26 @@ describe("Svalin passes over x402", () => {
     expect((await app.request("/v1/keys/me")).status).toBe(401);
   });
 
+  it("stops asking the key store about a caller whose keys keep being refused", async () => {
+    const keyStore = new KeyStoreCore(new MemoryStorage());
+    let storeCalls = 0;
+    const use = keyStore.use.bind(keyStore);
+    keyStore.use = async (...args) => (storeCalls++, use(...args));
+    const app = createApp(config, { facilitator: acceptingFacilitator(), keyStore, clientIp: (c) => c.req.header("X-Test-Ip") ?? "1.1.1.1" });
+
+    const statuses: number[] = [];
+    for (let call = 0; call < 31; call += 1) {
+      statuses.push((await app.request(`/v1/risk/${SOLANA_WALLET}`, { headers: bearer(newSvalinKey("svk_")) })).status);
+    }
+    expect(statuses.slice(0, 30).every((status) => status === 401)).toBe(true);
+    expect(statuses[30]).toBe(429);
+    expect(storeCalls).toBe(30);
+    expect((await app.request("/v1/keys/me", { headers: bearer(newSvalinKey("svk_")) })).status).toBe(429);
+    // Another caller is still asked about.
+    expect((await app.request(`/v1/risk/${SOLANA_WALLET}`, { headers: { ...bearer(newSvalinKey("svk_")), "X-Test-Ip": "2.2.2.2" } })).status).toBe(401);
+    expect(storeCalls).toBe(31);
+  });
+
   it("answers an unknown plan with 404 before any payment", async () => {
     const app = createApp(config, { facilitator: acceptingFacilitator() });
     const response = await app.request("/v1/keys/platinum", { method: "POST" });
@@ -262,11 +283,61 @@ describe("Svalin Pro", () => {
     expect(statuses[10]).toBe(429);
   });
 
-  it("stops a caller who looks too often", async () => {
+  it("stops a caller who looks too often, then stops asking the store about them", async () => {
     const code = newSvalinKey("svp_");
-    const app = createApp(config, { facilitator: fakeFacilitator(), proPayments: finder(code) });
+    const keyStore = new KeyStoreCore(new MemoryStorage());
+    let throttleCalls = 0;
+    const throttle = keyStore.throttle.bind(keyStore);
+    keyStore.throttle = async (...args) => (throttleCalls++, throttle(...args));
+    const app = createApp(config, { facilitator: fakeFacilitator(), proPayments: finder(code), keyStore });
     let last = 0;
     for (let call = 0; call <= 120; call += 1) last = (await activate(app, code)).status;
     expect(last).toBe(429);
+    for (let call = 0; call < 10; call += 1) expect((await activate(app, code)).status).toBe(429);
+    expect(throttleCalls).toBe(121);
+  });
+
+  it("reads each Solana transaction from the chain once, whether it paid or not", async () => {
+    const code = newSvalinKey("svp_");
+    const chain: FoundPayment[] = [
+      { tx: "pay", network: DEVNET, atomic: "5000000", at: Date.now() - 2000 },
+      { tx: "dust", network: DEVNET, atomic: "1", at: Date.now() - 1000 },
+    ];
+    const fetched: string[] = [];
+    const proPayments: ProPaymentFinder = {
+      solana: async (_offer, reference, unread) => {
+        if (reference !== (await proReference(code))) return [];
+        const fresh = await unread(chain.map((entry) => entry.tx));
+        fetched.push(...fresh);
+        return chain.filter((entry) => fresh.includes(entry.tx));
+      },
+      near: async () => [],
+    };
+    const app = createApp(config, { facilitator: fakeFacilitator(), proPayments });
+
+    expect((await (await activate(app, code)).json()).found).toBe(1);
+    expect(await (await activate(app, code)).json()).toMatchObject({ found: 0, status: { active: true } });
+    expect(fetched).toEqual(["pay", "dust"]);
+  });
+
+  it("reads each NEAR transaction once, and still credits a checkout paid after them", async () => {
+    const code = newSvalinKey("svp_");
+    const history: FoundPayment[] = [{ tx: "per-call", network: "near:testnet", atomic: "2000", at: Date.now() }];
+    const fetched: string[] = [];
+    const proPayments: ProPaymentFinder = {
+      solana: async () => [],
+      near: async (_offer, _since, unread) => {
+        const fresh = await unread(history.map((entry) => entry.tx));
+        fetched.push(...fresh);
+        return history.filter((entry) => fresh.includes(entry.tx));
+      },
+    };
+    const app = createApp(config, { facilitator: fakeFacilitator(), proPayments });
+    const reserved = await (await app.request("/v1/pro/near", { method: "POST", body: JSON.stringify({ code, plan: "month" }) })).json();
+
+    expect((await (await activate(app, code)).json()).found).toBe(0);
+    history.push({ tx: "pro", network: "near:testnet", atomic: reserved.amount.replace(".", "").replace(/^0+/, ""), at: Date.now() });
+    expect(await (await activate(app, code)).json()).toMatchObject({ found: 1, pending: [], status: { active: true } });
+    expect(fetched).toEqual(["per-call", "pro"]);
   });
 });

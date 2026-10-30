@@ -8,14 +8,27 @@ import { callFetch } from "../lib/fetch.js";
 
 type FetchLike = typeof fetch;
 
-/** A payment to Svalin: the transaction, its network, the USDC it brought (atomic units), and when. */
+/**
+ * A transaction a lookup read: its network, the USDC it brought Svalin (atomic units, "0" when it
+ * paid nothing), and when.
+ */
 export type FoundPayment = { tx: string; network: string; atomic: string; at: number };
+
+/**
+ * Drops the transactions read before, so each is fetched from the chain once: repeated lookups
+ * then cost one call, however many transactions a code's reference has collected.
+ */
+export type UnreadFilter = (txs: string[]) => Promise<string[]>;
 
 /** Transactions read per lookup: enough for years of monthly renewals with one code. */
 const SOLANA_SIGNATURES = 20;
-/** Svalin's newest NEAR transactions read per lookup; a Pro payment is found while its buyer waits. */
-const NEAR_RECENT = 50;
+/** Svalin's NEAR history is read a page at a time, back to the oldest waiting checkout. */
+const NEAR_PAGE = 50;
+/** At most this many pages a lookup: 500 transactions, two days of a busy account. */
+const NEAR_PAGES = 10;
 const NEAR_BATCH = 20;
+/** A NEAR transfer's refund, if it has one, lands a few blocks later, so newer transactions wait for the next lookup. */
+const NEAR_SETTLE_MS = 15_000;
 
 type TokenBalance = { mint?: string; owner?: string; uiTokenAmount?: { amount?: string } };
 type SolanaTransaction = {
@@ -24,9 +37,10 @@ type SolanaTransaction = {
 };
 
 /**
- * Payments made with a Solana Pay reference. Each counts by how much USDC Svalin's own token
- * accounts gained in it, read from the balances before and after, so it does not matter how the
- * wallet built the transfer.
+ * Transactions made with a Solana Pay reference, each with what it paid. A payment counts by how
+ * much USDC Svalin's own token accounts gained in it, read from the balances before and after, so
+ * it does not matter how the wallet built the transfer. A transaction the RPC cannot return yet is
+ * left out, to be read on the next lookup.
  */
 export async function solanaPaymentsByReference(options: {
   rpcUrl: string;
@@ -34,6 +48,7 @@ export async function solanaPaymentsByReference(options: {
   reference: string;
   payTo: string;
   mint: string;
+  unread?: UnreadFilter;
   fetchImpl?: FetchLike;
 }): Promise<FoundPayment[]> {
   const rpc = solanaRpc(options.rpcUrl, options.fetchImpl ?? callFetch);
@@ -41,22 +56,19 @@ export async function solanaPaymentsByReference(options: {
     options.reference,
     { limit: SOLANA_SIGNATURES, commitment: "confirmed" },
   ]);
-  const succeeded = (signatures ?? []).filter((entry) => entry.err === null && typeof entry.signature === "string");
+  const succeeded = (signatures ?? []).filter((entry) => entry.err === null && typeof entry.signature === "string").map((entry) => entry.signature);
+  const fresh = succeeded.length > 0 && options.unread ? await options.unread(succeeded) : succeeded;
   const transactions = await Promise.all(
-    succeeded.map((entry) =>
-      rpc<SolanaTransaction | null>("getTransaction", [
-        entry.signature,
-        { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 },
-      ]),
+    fresh.map((signature) =>
+      rpc<SolanaTransaction | null>("getTransaction", [signature, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }]),
     ),
   );
-  return succeeded.flatMap((entry, index) => {
+  return fresh.flatMap((signature, index) => {
     const transaction = transactions[index];
-    if (!transaction?.meta || transaction.meta.err !== null || !transaction.blockTime) return [];
-    const received = usdcReceived(transaction.meta, options.payTo, options.mint);
-    return received > 0n
-      ? [{ tx: entry.signature, network: options.network, atomic: received.toString(), at: transaction.blockTime * 1000 }]
-      : [];
+    // Read once means read in full: without its balances, a transaction waits for the next lookup.
+    if (!transaction?.meta || !transaction.blockTime || !Array.isArray(transaction.meta.postTokenBalances)) return [];
+    const received = transaction.meta.err === null ? usdcReceived(transaction.meta, options.payTo, options.mint) : 0n;
+    return [{ tx: signature, network: options.network, atomic: (received > 0n ? received : 0n).toString(), at: transaction.blockTime * 1000 }];
   });
 }
 
@@ -94,7 +106,7 @@ function solanaRpc(url: string, fetchImpl: FetchLike) {
   };
 }
 
-type TxAccountPage = { account_txs?: { transaction_hash?: string; tx_block_timestamp?: string }[] };
+type TxAccountPage = { account_txs?: { transaction_hash?: string; tx_block_timestamp?: string }[]; resume_token?: string };
 type NearReceiptRecord = {
   receipt?: { receiver_id?: string };
   execution_outcome?: { outcome?: { logs?: string[]; status?: Record<string, unknown> } };
@@ -102,9 +114,10 @@ type NearReceiptRecord = {
 type NearTxRecord = { transaction?: { hash?: string }; execution_outcome?: { id?: string }; receipts?: NearReceiptRecord[] };
 
 /**
- * USDC payments Svalin's NEAR account received recently, read from the FastNEAR transactions API.
- * Each counts by the token's own transfer events (NEP-141), net of any refund in the same
- * transaction, so a plain transfer, a transfer with a call and a relayed one all count the same.
+ * Svalin's NEAR transactions since a time, each with the USDC it brought, read from the FastNEAR
+ * transactions API newest first. A payment counts by the token's own transfer events (NEP-141),
+ * net of any refund in the same transaction, so a plain transfer, a transfer with a call and a
+ * relayed one all count the same.
  */
 export async function nearPaymentsReceived(options: {
   txApiUrl: string;
@@ -113,6 +126,8 @@ export async function nearPaymentsReceived(options: {
   token: string;
   /** Payments before this time (ms) are skipped. */
   since: number;
+  unread?: UnreadFilter;
+  now?: number;
   fetchImpl?: FetchLike;
 }): Promise<FoundPayment[]> {
   const fetchImpl = options.fetchImpl ?? callFetch;
@@ -136,13 +151,29 @@ export async function nearPaymentsReceived(options: {
     return (await response.json()) as T;
   };
 
-  const page = await post<TxAccountPage>("/v0/account", { account_id: options.payTo, is_event_log: true, is_success: true, limit: NEAR_RECENT });
+  const settled = (options.now ?? Date.now()) - NEAR_SETTLE_MS;
   const times = new Map<string, number>();
-  for (const entry of page.account_txs ?? []) {
-    const at = Math.floor(Number(entry.tx_block_timestamp) / 1e6);
-    if (entry.transaction_hash && Number.isFinite(at) && at >= options.since) times.set(entry.transaction_hash, at);
+  let resume: string | undefined;
+  for (let page = 0; page < NEAR_PAGES; page += 1) {
+    const result = await post<TxAccountPage>("/v0/account", {
+      account_id: options.payTo,
+      is_event_log: true,
+      is_success: true,
+      limit: NEAR_PAGE,
+      ...(resume ? { resume_token: resume } : {}),
+    });
+    const entries = result.account_txs ?? [];
+    let reachedSince = false;
+    for (const entry of entries) {
+      const at = Math.floor(Number(entry.tx_block_timestamp) / 1e6);
+      if (!entry.transaction_hash || !Number.isFinite(at)) continue;
+      if (at < options.since) reachedSince = true;
+      else if (at <= settled) times.set(entry.transaction_hash, at);
+    }
+    resume = result.resume_token;
+    if (reachedSince || !resume || entries.length < NEAR_PAGE) break;
   }
-  const hashes = [...times.keys()];
+  const hashes = times.size > 0 && options.unread ? await options.unread([...times.keys()]) : [...times.keys()];
   const batches: string[][] = [];
   for (let start = 0; start < hashes.length; start += NEAR_BATCH) batches.push(hashes.slice(start, start + NEAR_BATCH));
   const records = (await Promise.all(batches.map((batch) => post<{ transactions?: NearTxRecord[] }>("/v0/transactions", { tx_hashes: batch }))))
@@ -151,9 +182,9 @@ export async function nearPaymentsReceived(options: {
   return records.flatMap((record) => {
     const tx = record.execution_outcome?.id ?? record.transaction?.hash;
     const at = tx ? times.get(tx) : undefined;
-    if (!tx || at === undefined) return [];
+    if (!tx || at === undefined || !record.receipts?.length) return [];
     const received = nearUsdcReceived(record.receipts ?? [], options.payTo, options.token);
-    return received > 0n ? [{ tx, network: options.network, atomic: received.toString(), at }] : [];
+    return [{ tx, network: options.network, atomic: (received > 0n ? received : 0n).toString(), at }];
   });
 }
 

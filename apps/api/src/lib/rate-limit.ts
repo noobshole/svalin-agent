@@ -17,7 +17,8 @@ export type DemoLimitDecision = {
   newDay: boolean;
 };
 
-const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 
 /** The limit rule, shared by the in-memory limiter and the Cloudflare Durable Object. */
 export function decideDemoLimit(
@@ -72,5 +73,35 @@ export class DemoRateLimiter implements DemoLimiter {
     if (decision.newDay) this.perKey.clear();
     if (decision.retryAfter === null && decision.entry) this.perKey.set(key, decision.entry);
     return { retryAfter: decision.retryAfter, remaining: decision.remaining };
+  }
+}
+
+/**
+ * Counts per caller for the current hour, in this process's memory only. On Workers each isolate
+ * keeps its own counts, so this is a first line against a caller who keeps asking, never the limit
+ * itself.
+ */
+export class HourlyCounter {
+  private hour = -1;
+  private readonly counts = new Map<string, number>();
+
+  constructor(private readonly maxCallers = 10_000) {}
+
+  count(key: string, now: number): number {
+    this.roll(now);
+    return this.counts.get(key) ?? 0;
+  }
+
+  add(key: string, now: number): void {
+    this.roll(now);
+    if (this.counts.size >= this.maxCallers && !this.counts.has(key)) this.counts.clear();
+    this.counts.set(key, (this.counts.get(key) ?? 0) + 1);
+  }
+
+  private roll(now: number) {
+    const hour = Math.floor(now / HOUR);
+    if (hour === this.hour) return;
+    this.hour = hour;
+    this.counts.clear();
   }
 }
