@@ -4,9 +4,13 @@ import { ZodError } from "zod";
 
 import { createSvalinClient } from "./client.js";
 import { loadMcpConfig } from "./config.js";
+import { unsafeNodeVersion } from "./node-version.js";
 import { createSvalinMcpServer } from "./server.js";
 
 async function main() {
+  // Refuse before the wallet key is loaded or any service is called.
+  const unsafe = unsafeNodeVersion(process.version);
+  if (unsafe) throw new Error(unsafe);
   const config = loadMcpConfig();
   const client = await createSvalinClient(config);
   const server = createSvalinMcpServer(client);

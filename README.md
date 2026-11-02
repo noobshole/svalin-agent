@@ -11,7 +11,7 @@ monthly pass. No accounts, and no way to move funds.
 
 [![CI](https://github.com/noobshole/svalin-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/noobshole/svalin-agent/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-![Node 20.18+](https://img.shields.io/badge/node-20.18%2B-339933)
+![Node 22.23.4+](https://img.shields.io/badge/node-22.23.4%2B-339933)
 ![x402 v2](https://img.shields.io/badge/payments-x402%20v2-0052FF)
 ![MCP](https://img.shields.io/badge/MCP-server-6E56CF)
 
@@ -209,7 +209,7 @@ const report = await (await pay(`https://YOUR-SVALIN-API/v1/risk/${wallet}`)).js
 
 ## Run locally
 
-Requires Node 20.18+ and pnpm 10.
+Requires Node.js 22.23.4+ or 24.22.1+ (the October 2026 security releases) and pnpm 10.
 
 ```bash
 pnpm install

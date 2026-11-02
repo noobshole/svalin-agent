@@ -59,7 +59,9 @@ claude mcp add svalin -e SVALIN_API_URL=https://YOUR-SVALIN-API -- npx -y svalin
 
 ### From source
 
-With Node.js 20.18 or later and pnpm:
+With Node.js 22.23.4+ or 24.22.1+ and pnpm. svalin-mcp refuses to start on older Node.js releases: they have a
+flaw (CVE-2026-111497) a malicious paid service could use to run code on your computer, where the
+wallet key is.
 
 ```bash
 git clone https://github.com/noobshole/svalin-agent
