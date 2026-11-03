@@ -54,7 +54,7 @@ const questions: { question: string; answer: ReactNode }[] = [
     question: "What does it cost?",
     answer: (
       <>
-        5 checks a day are free, with no account. Agents pay per call in USDC, from $0.002, and Svalin Pro is $5 a month for 100 checks a day.
+        10 checks a day are free, with no account. Agents pay per call in USDC, from $0.002, and Svalin Pro is $5 a month for 100 checks a day.
         See{" "}
         <Link className={linkClass} href="/pricing">
           pricing
@@ -101,7 +101,7 @@ export default function HomePage() {
             >
               Scan a wallet free
             </Link>
-            <p className="text-sm text-subtleForeground">5 free scans a day. No account, and no wallet to connect.</p>
+            <p className="text-sm text-subtleForeground">10 free scans a day. No account, and no wallet to connect.</p>
           </div>
         </div>
         <ReportPreview report={exampleReport} />

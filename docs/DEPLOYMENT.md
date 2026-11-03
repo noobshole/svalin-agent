@@ -114,7 +114,7 @@ Settings → Instance Type).
 
   Prices default to $0.002 (portfolio, check and exit prices), $0.004 (risk) and $0.02 (brief).
   Override them with `PRICE_PORTFOLIO_USD`, `PRICE_RISK_USD`, `PRICE_BRIEF_USD`, `PRICE_CHECK_USD`
-  and `PRICE_EXIT_USD`. Each visitor gets `DEMO_REQUESTS_PER_DAY` free calls (default 5), and
+  and `PRICE_EXIT_USD`. Each visitor gets `DEMO_REQUESTS_PER_DAY` free calls (default 10), and
   `LOCK_FREE_NEXT_STEPS=true` leaves next steps out of the free risk report.
 
 **Then, on any host:**
@@ -130,8 +130,8 @@ Settings → Instance Type).
       `"dataSource": "helius"`, and `https://<api>/v1/demo/risk/<any NEAR account>` one with
       `"dataSource": "fastnear"`.
 - [ ] **(test)** `https://<api>/v1/risk/<address>` returns HTTP 402.
-- [ ] **(test)** The free-scan limit cannot be dodged. Run this 6 times, changing the number each
-      time; the 6th call must return `429` (with the default 5 a day):
+- [ ] **(test)** The free-scan limit cannot be dodged. Run this 11 times, changing the number each
+      time; the 11th call must return `429` (with the default 10 a day):
 
   ```bash
   curl -s -o /dev/null -w "%{http_code}\n" -H "X-Forwarded-For: 10.0.0.1" https://<api>/v1/demo/risk/<address>

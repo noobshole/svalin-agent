@@ -33,7 +33,7 @@ export default async function PricingPage() {
 
       <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-2 lg:grid-cols-4">
         <Plan link={{ href: "/scan", label: "Scan a wallet" }} name="Free" price="$0">
-          <li>5 scans or checks a day</li>
+          <li>10 scans or checks a day</li>
           <li>Every safety warning, always</li>
           <li>The Svalin Index</li>
         </Plan>

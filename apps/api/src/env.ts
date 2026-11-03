@@ -72,7 +72,7 @@ const envSchema = z.object({
   PRO_SOLANA_RPC_URL: optionalString,
   PRO_NEAR_TX_API_URL: optionalString,
 
-  DEMO_REQUESTS_PER_DAY: z.coerce.number().int().nonnegative().default(5),
+  DEMO_REQUESTS_PER_DAY: z.coerce.number().int().nonnegative().default(10),
   DEMO_REQUESTS_PER_DAY_GLOBAL: z.coerce.number().int().nonnegative().default(2000),
   // "true" leaves each finding's next step out of the free risk report; the paid report keeps it.
   LOCK_FREE_NEXT_STEPS: z.enum(["true", "false"]).default("false"),

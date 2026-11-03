@@ -45,7 +45,7 @@ export type DemoResult =
 
 /**
  * Runs in the browser, so the API applies the free limit to the visitor's own address. With a
- * running Pro code it asks the full route instead: every next step, and no daily limit of 5.
+ * running Pro code it asks the full route instead: every next step, and no daily limit of 10.
  */
 export async function getDemoRisk(address: string, signal?: AbortSignal): Promise<DemoResult> {
   const path = encodeURIComponent(address);

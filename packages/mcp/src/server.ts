@@ -55,7 +55,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
     {
       title: "Free wallet risk scan",
       description:
-        "FREE, 5 calls a day shared with the other free tools. Portfolio risk report for a Solana wallet or NEAR account (how its holdings are spread, not whether its owner is trustworthy): 0-100 score, grade A-F (none for a wallet with nothing priced), concentration/stablecoin/meme/long-tail exposure and findings. When the report says next steps are locked, svalin_risk_report has them. Read-only.",
+        "FREE, 10 calls a day shared with the other free tools. Portfolio risk report for a Solana wallet or NEAR account (how its holdings are spread, not whether its owner is trustworthy): 0-100 score, grade A-F (none for a wallet with nothing priced), concentration/stablecoin/meme/long-tail exposure and findings. When the report says next steps are locked, svalin_risk_report has them. Read-only.",
       inputSchema: addressInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -131,7 +131,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
     {
       title: "Check before paying (free trial)",
       description:
-        "FREE trial of svalin_check_recipient, 5 calls a day shared with the other free tools: allow, caution or block for a payment recipient, with reasons. It does not read the payer's history, so it does not catch addresses imitating ones the payer paid; the paid tool does. Read-only.",
+        "FREE trial of svalin_check_recipient, 10 calls a day shared with the other free tools: allow, caution or block for a payment recipient, with reasons. It does not read the payer's history, so it does not catch addresses imitating ones the payer paid; the paid tool does. Read-only.",
       inputSchema: checkInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -164,7 +164,7 @@ export function createSvalinMcpServer(client: SvalinClient) {
     {
       title: "Token exit prices (free trial)",
       description:
-        "FREE trial of svalin_token_exit, 5 calls a day shared with the other free tools: a NEAR token's grade and what selling $1K, $10K and $100K of it would actually fetch. Your own sale size needs the paid tool. Read-only.",
+        "FREE trial of svalin_token_exit, 10 calls a day shared with the other free tools: a NEAR token's grade and what selling $1K, $10K and $100K of it would actually fetch. Your own sale size needs the paid tool. Read-only.",
       inputSchema: { contract: contractInput },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },

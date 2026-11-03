@@ -51,7 +51,7 @@ monthly pass. No accounts, and no way to move funds.
   account. Steady users buy a pass instead and send its key as `Authorization: Bearer`: Svalin Pro
   (100 calls a day) or Svalin Business (200,000 calls), for 30 days. Agents buy and renew passes
   over x402; people buy Pro on the website by scanning a Solana Pay QR code or sending an exact
-  amount on NEAR, and the site never connects to their wallet. Everyone gets 5 free calls a day.
+  amount on NEAR, and the site never connects to their wallet. Everyone gets 10 free calls a day.
 - **MCP server.** `svalin-mcp` brings the tools to Claude, Cursor and any MCP client, with a hard
   per-call price cap and a session budget.
 - **Payment guard.** Before an agent pays any x402 service, `svalin-mcp` asks for the price without
@@ -162,7 +162,7 @@ flowchart LR
 | Scheduled treasury check | `risk` for each wallet on each run | $0.004 per run |
 | Wallet explainer in chat | `brief` | $0.02 |
 | Batch research | `portfolio` or `risk` for each wallet | $0.002 to $0.004 |
-| Trying it out | free scan | Free, 5 calls a day |
+| Trying it out | free scan | Free, 10 calls a day |
 
 Any orchestrator that can call MCP tools or make HTTP requests can use these patterns.
 
@@ -170,10 +170,10 @@ Any orchestrator that can call MCP tools or make HTTP requests can use these pat
 
 | Endpoint | Price | Returns |
 | --- | --- | --- |
-| `GET /v1/demo/risk/{address}` | Free, 5 calls a day per visitor (back at 00:00 UTC) | Risk report; its next steps can be switched to paid-only |
-| `GET /v1/demo/check/{address}` | Free, shares the 5 a day | Recipient check, without the payer's history (no look-alike check) |
+| `GET /v1/demo/risk/{address}` | Free, 10 calls a day per visitor (back at 00:00 UTC) | Risk report; its next steps can be switched to paid-only |
+| `GET /v1/demo/check/{address}` | Free, shares the 10 a day | Recipient check, without the payer's history (no look-alike check) |
 | `GET /v1/index/near-tokens` | Free | The Svalin Index: every NEAR token graded A-F by the real money behind its price |
-| `GET /v1/demo/exit/{contract}` | Free, shares the 5 a day | Exit prices at $1K, $10K and $100K |
+| `GET /v1/demo/exit/{contract}` | Free, shares the 10 a day | Exit prices at $1K, $10K and $100K |
 | `GET /v1/portfolio/{address}` | $0.002 | Priced holdings, allocation and a risk category per token |
 | `GET /v1/risk/{address}` | $0.004 | Score, grade, exposure metrics and findings with actions |
 | `GET /v1/brief/{address}` | $0.02 | Headline, summary and up to 3 actions, plus the full report |

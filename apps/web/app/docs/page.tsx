@@ -57,7 +57,7 @@ export default async function DocsPage() {
               <td>
                 <code>GET /v1/demo/risk/{"{address}"}</code>
               </td>
-              <td>A full risk report; 5 free calls a day per visitor, shared by the free routes</td>
+              <td>A full risk report; 10 free calls a day per visitor, shared by the free routes</td>
             </tr>
             <tr>
               <td>
