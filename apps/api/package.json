@@ -13,6 +13,7 @@
     "dev:worker": "npx --yes wrangler@4.146.0 dev",
     "index:near": "tsx scripts/near-index.ts",
     "index:verify": "tsx scripts/verify-index.ts",
+    "index:register": "tsx scripts/register-root.ts",
     "deploy:worker": "npx --yes wrangler@4.146.0 deploy"
   },
   "dependencies": {
@@ -30,6 +31,11 @@
     "zod": "^3.24.4"
   },
   "devDependencies": {
+    "@near-js/crypto": "2.5.1",
+    "@near-js/providers": "2.5.1",
+    "@near-js/signers": "2.5.1",
+    "@near-js/transactions": "2.5.1",
+    "@near-js/utils": "2.5.1",
     "@types/node": "^22.15.3",
     "tsx": "^4.23.15",
     "typescript": "^5.8.3",

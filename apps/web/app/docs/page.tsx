@@ -15,13 +15,14 @@ const REPO = "https://github.com/noobshole/svalin-agent";
 const paidRoutes = [
   { path: "/v1/check/{address}", fallback: "$0.002", returns: "Allow, caution or block before paying, including look-alike addresses" },
   { path: "/v1/portfolio/{address}", fallback: "$0.002", returns: "Priced holdings with a risk category per token" },
-  { path: "/v1/risk/{address}", fallback: "$0.004", returns: "Risk score, grade, exposure metrics and findings" },
+  { path: "/v1/risk/{address}", fallback: "$0.002", returns: "Risk score, grade, exposure metrics and findings" },
   { path: "/v1/brief/{address}", fallback: "$0.02", returns: "A short written brief with up to three actions, plus the report" },
   { path: "/v1/exit/{address}", fallback: "$0.002", returns: "A NEAR token's exit prices: what selling it would fetch, at your own sale size too (?amountUsd=)" },
+  { path: "/v1/proof/{address}", fallback: "$0.002", returns: "A NEAR token's liquidity grade with a Merkle proof any NEAR contract can check" },
 ];
 
 const KEY_PLANS = [
-  { path: "/v1/keys/pro", name: "Svalin Pro", fallback: "$5", calls: "100 calls a day" },
+  { path: "/v1/keys/pro", name: "Svalin Pro", fallback: "$9", calls: "100 calls a day" },
   { path: "/v1/keys/business", name: "Svalin Business", fallback: "$79", calls: "200,000 calls" },
 ];
 

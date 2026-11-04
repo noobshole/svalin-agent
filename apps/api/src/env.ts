@@ -30,6 +30,11 @@ const envSchema = z.object({
     .string()
     .url()
     .default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-token-index.json"),
+  // The Svalin Ratings registry on NEAR that grade proofs are made against, and where its RPC and
+  // the sealed editions are.
+  NEAR_RATINGS_REGISTRY: z.string().default("svalin-ratings-v1.testnet"),
+  NEAR_RATINGS_RPC_URL: z.string().url().default("https://rpc.testnet.fastnear.com"),
+  NEAR_INDEX_SEALED_URL: z.string().url().default("https://raw.githubusercontent.com/noobshole/svalin-index/main/editions"),
   // Depth from Ref's concentrated-liquidity pools, published with each edition.
   NEAR_DCL_DEPTH_URL: z
     .string()
@@ -56,16 +61,17 @@ const envSchema = z.object({
   NEAR_FACILITATOR_URL: optionalString,
   NEAR_FACILITATOR_API_KEY: optionalString,
   PRICE_PORTFOLIO_USD: usdPrice.default("$0.002"),
-  PRICE_RISK_USD: usdPrice.default("$0.004"),
+  PRICE_RISK_USD: usdPrice.default("$0.002"),
   PRICE_BRIEF_USD: usdPrice.default("$0.02"),
   PRICE_CHECK_USD: usdPrice.default("$0.002"),
   PRICE_EXIT_USD: usdPrice.default("$0.002"),
+  PRICE_PROOF_USD: usdPrice.default("$0.002"),
 
   // Svalin Business for heavy agent use, bought over x402: 200,000 calls over 30 days (catalog.ts).
   PRICE_KEY_BUSINESS_USD: usdPrice.default("$79"),
   // Svalin Pro: people pay by QR code (Solana Pay) or an exact amount on NEAR, agents over x402.
-  PRO_PRICE_MONTH_USD: z.coerce.number().positive().default(5),
-  PRO_PRICE_YEAR_USD: z.coerce.number().positive().default(48),
+  PRO_PRICE_MONTH_USD: z.coerce.number().positive().default(9),
+  PRO_PRICE_YEAR_USD: z.coerce.number().positive().default(90),
   PRO_CALLS_PER_DAY: z.coerce.number().int().positive().default(100),
   // Where Pro payments are looked up. Defaults: Helius (devnet on testnet) and FastNEAR's
   // transactions API for the network each chain takes payments on.
@@ -146,6 +152,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       nearPoolsApiUrl: env.NEAR_POOLS_API_URL,
       nearIndexUrl: env.NEAR_INDEX_URL,
       nearDclDepthUrl: env.NEAR_DCL_DEPTH_URL,
+      ratings: { registry: env.NEAR_RATINGS_REGISTRY, rpcUrl: env.NEAR_RATINGS_RPC_URL, sealedUrl: env.NEAR_INDEX_SEALED_URL.replace(/\/+$/, "") },
       fastnearTxApiUrl,
       cacheSeconds: env.PORTFOLIO_CACHE_SECONDS,
     },
@@ -176,6 +183,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
         brief: env.PRICE_BRIEF_USD,
         check: env.PRICE_CHECK_USD,
         exit: env.PRICE_EXIT_USD,
+        proof: env.PRICE_PROOF_USD,
       },
       /** What each pass costs over x402: Pro at its monthly price, and Business. */
       keyPrices: {

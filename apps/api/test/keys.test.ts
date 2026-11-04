@@ -62,7 +62,7 @@ describe("Svalin passes over x402", () => {
   it("sells agents the same Svalin Pro that people buy, at the monthly price", async () => {
     const app = createApp(config, { facilitator: acceptingFacilitator() });
     const unpaid = await app.request("/v1/keys/pro", { method: "POST" });
-    expect(decodeHeader(unpaid.headers.get("PAYMENT-REQUIRED")).accepts[0].amount).toBe("5000000");
+    expect(decodeHeader(unpaid.headers.get("PAYMENT-REQUIRED")).accepts[0].amount).toBe("9000000");
     const { key, status } = await (await buyKey(app, "pro")).json();
     expect(key).toMatch(/^svp_/);
     expect(status).toMatchObject({ kind: "pro", plan: "pro", active: true, callsLeft: 100, callsPer: "day" });
@@ -175,7 +175,7 @@ describe("Svalin passes over x402", () => {
     const manifest = await (await app.request("/")).json();
     const keys = manifest.endpoints.filter((endpoint: { path: string }) => endpoint.path.startsWith("/v1/keys/"));
     expect(keys.map((endpoint: { method: string; path: string; price: string | null }) => [endpoint.method, endpoint.path, endpoint.price])).toEqual([
-      ["POST", "/v1/keys/pro", "$5"],
+      ["POST", "/v1/keys/pro", "$9"],
       ["POST", "/v1/keys/business", "$79"],
       ["GET", "/v1/keys/me", null],
     ]);
@@ -204,8 +204,8 @@ describe("Svalin Pro", () => {
     const app = createApp(config, { facilitator: fakeFacilitator() });
     expect(await (await app.request("/v1/pro")).json()).toEqual({
       plans: [
-        { id: "month", usd: 5, days: 30 },
-        { id: "year", usd: 48, days: 365 },
+        { id: "month", usd: 9, days: 30 },
+        { id: "year", usd: 90, days: 365 },
       ],
       callsPerDay: 100,
       solana: { network: DEVNET, environment: "testnet", payTo: PAY_TO_SOLANA, mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" },
@@ -215,7 +215,7 @@ describe("Svalin Pro", () => {
 
   it("finds a Solana Pay payment by the code's reference; the code then works as a key", async () => {
     const code = newSvalinKey("svp_");
-    const paid = { tx: "sig1", network: DEVNET, atomic: "5000000", at: Date.now() - 1000 };
+    const paid = { tx: "sig1", network: DEVNET, atomic: "9000000", at: Date.now() - 1000 };
     const app = createApp(config, { facilitator: fakeFacilitator(), proPayments: finder(code, [paid]) });
 
     const first = await (await activate(app, code)).json();
@@ -245,8 +245,8 @@ describe("Svalin Pro", () => {
     expect(checkout.status).toBe(200);
     const reserved = await checkout.json();
     expect(reserved).toMatchObject({ plan: "year", network: "near:testnet", payTo: PAY_TO_NEAR });
-    expect(reserved.amount).toMatch(/^48\.00\d{4}$/);
-    expect(reserved.amount).not.toBe("48.000000");
+    expect(reserved.amount).toMatch(/^90\.00\d{4}$/);
+    expect(reserved.amount).not.toBe("90.000000");
 
     expect((await (await activate(app, code)).json()).pending).toEqual([reserved]);
     near.push({ tx: "hash1", network: "near:testnet", atomic: reserved.amount.replace(".", "").replace(/^0+/, ""), at: Date.now() });
@@ -300,7 +300,7 @@ describe("Svalin Pro", () => {
   it("reads each Solana transaction from the chain once, whether it paid or not", async () => {
     const code = newSvalinKey("svp_");
     const chain: FoundPayment[] = [
-      { tx: "pay", network: DEVNET, atomic: "5000000", at: Date.now() - 2000 },
+      { tx: "pay", network: DEVNET, atomic: "9000000", at: Date.now() - 2000 },
       { tx: "dust", network: DEVNET, atomic: "1", at: Date.now() - 1000 },
     ];
     const fetched: string[] = [];

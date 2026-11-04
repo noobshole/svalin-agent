@@ -192,7 +192,30 @@ export const tokenExitSchema = z.object({
   note: z.string(),
 });
 
+/**
+ * A token's grade in an edition published on NEAR, with its Merkle proof. `grade` is exactly what a
+ * Svalin Guard vault's `request_buy` takes, and with `token` what the registry's `verify` takes.
+ */
+export const tokenProofSchema = z.object({
+  token: z.string(),
+  grade: z.object({
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    grade: tokenGradeSchema,
+    backing_usd: z.number().int().nonnegative(),
+    proof: z.array(z.object({ hash: sha256Schema, left: z.boolean() })),
+  }),
+  /** The leaf the proof is for: svalin-index/1|day|token|grade|backing_usd. */
+  leaf: z.string(),
+  /** The edition's root as the registry records it. */
+  root: sha256Schema,
+  /** The Svalin Ratings registry contract to verify against. */
+  registry: z.string(),
+  methodology: z.string(),
+  note: z.string(),
+});
+
 export type TokenGrade = z.infer<typeof tokenGradeSchema>;
+export type TokenProof = z.infer<typeof tokenProofSchema>;
 export type ExitQuote = z.infer<typeof exitQuoteSchema>;
 export type TokenExit = z.infer<typeof tokenExitSchema>;
 export type RatedTokenRow = z.infer<typeof ratedTokenSchema>;

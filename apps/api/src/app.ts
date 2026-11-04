@@ -57,6 +57,7 @@ import { buildRiskReport } from "./risk/engine.js";
 import { ChainRouterSource } from "./sources/chain-router-source.js";
 import { HeliusPortfolioSource } from "./sources/helius-source.js";
 import { RemoteIndexFeed, indexedToken, type IndexFeed } from "./sources/index-feed.js";
+import { RatingsRegistry } from "./sources/ratings-registry.js";
 import { MockPortfolioSource } from "./sources/mock-source.js";
 import { NearPortfolioSource } from "./sources/near-source.js";
 import type { PortfolioSource } from "./sources/portfolio-source.js";
@@ -75,6 +76,8 @@ export type AppDependencies = {
   demoLimiter?: DemoLimiter;
   /** Latest published Svalin Index edition; fetched from NEAR_INDEX_URL by default. */
   indexFeed?: IndexFeed;
+  /** Grade proofs against the Svalin Ratings registry on NEAR. */
+  ratingsRegistry?: RatingsRegistry;
   /** Svalin keys and Pro codes (Cloudflare Workers use a Durable Object); in memory by default. */
   keyStore?: KeyStore;
   /** Looks up Pro payments on-chain; tests inject their own. */
@@ -105,12 +108,14 @@ const NEAR_AMOUNTS_PER_HOUR = 10;
 const REFUSED_KEYS_PER_HOUR = 30;
 
 const PAID_PREFIXES = Object.values(paidRoutes).map((route) => route.path.replace("{address}", ""));
-const DEMO_PREFIXES = ["/v1/demo/risk/", "/v1/demo/check/", "/v1/demo/exit/"];
+const DEMO_PREFIXES = ["/v1/demo/risk/", "/v1/demo/check/", "/v1/demo/exit/", "/v1/demo/proof/"];
 const CHECK_PREFIXES = ["/v1/check/", "/v1/demo/check/"];
 const EXIT_PREFIXES = ["/v1/exit/", "/v1/demo/exit/"];
+const PROOF_PREFIXES = ["/v1/proof/", "/v1/demo/proof/"];
 
 export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   const indexFeed = deps.indexFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexUrl);
+  const ratingsRegistry = deps.ratingsRegistry ?? new RatingsRegistry(config.portfolio.ratings);
   const source =
     deps.portfolioSource ??
     (config.portfolio.source === "live" && config.portfolio.heliusRpcUrl
@@ -212,6 +217,9 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
       // Exit prices need the token in the Index; a token that is not there is never charged for.
       await gradedToken(address);
       exitSaleQuery(c, isPaid);
+    } else if (PROOF_PREFIXES.some((prefix) => c.req.path.startsWith(prefix))) {
+      // A proof needs the token in the newest edition on NEAR; one that is not there is never charged for.
+      await gradeProof(address);
     } else {
       assertServableAddress(address, source);
       if (CHECK_PREFIXES.some((prefix) => c.req.path.startsWith(prefix))) checkQuery(c, address);
@@ -301,6 +309,11 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     return c.json(tokenExit(row, index, undefined, note));
   });
 
+  app.get("/v1/demo/proof/:address", async (c) => {
+    await useFreeCall(c, "/v1/proof/{address}");
+    return c.json(await gradeProof(c.req.param("address")));
+  });
+
   /* --------------------------------- paid ---------------------------------- */
 
   app.get("/v1/portfolio/:address", async (c) => c.json(await getOverview(c.req.param("address"))));
@@ -318,6 +331,8 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     const { index, row, note } = await gradedToken(c.req.param("address"));
     return c.json(tokenExit(row, index, exitSaleQuery(c, true), note));
   });
+
+  app.get("/v1/proof/:address", async (c) => c.json(await gradeProof(c.req.param("address"))));
 
   /* ------------------------------ Svalin keys ------------------------------ */
 
@@ -514,6 +529,18 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
         `Use the paid endpoint GET ${paidPath} via x402 for unlimited access.`,
       );
     }
+  }
+
+  /** A NEAR token's grade proof against the newest edition on NEAR; checked before the paywall too. */
+  async function gradeProof(raw: string) {
+    const contract = raw.trim().toLowerCase();
+    if (!isNearAccountId(contract)) {
+      throw new ApiError(400, "invalid_contract", "Not a NEAR token contract.", "Grade proofs cover NEAR tokens, for example token.rhealab.near.");
+    }
+    if (lookupToken("near", contract)) {
+      throw new ApiError(404, "trusted_token", "This is one of the trusted tokens Svalin values others against, so it has no grade.");
+    }
+    return ratingsRegistry.proof(contract);
   }
 
   /** A NEAR token in the latest Index edition, or the 4xx (or 503) that says why there is none. */

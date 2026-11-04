@@ -19,6 +19,7 @@ import { nearTokenIndexSchema, tokenGradeFor, trackRecordSchema, type RatedToken
 
 import { editionAnomaly } from "../src/ratings/edition-guard.js";
 import { sealEdition, sha256Hex } from "../src/ratings/edition.js";
+import { editionTree, treeBytes, treeRoot } from "../src/ratings/merkle.js";
 import {
   heldDepth,
   holdersFromTop,
@@ -286,6 +287,12 @@ writeFileSync(resolve(DATA_DIR, "inputs/dcl-pools.json.gz"), gzipSync(dclText));
 writeFileSync(HISTORY_FILE, gzipSync(historyText));
 writeFileSync(resolve(DATA_DIR, "near-token-index.json"), indexText);
 
+// The edition's Merkle tree, as the Svalin Ratings registry on NEAR reads it: the API serves proofs
+// from this file, and its root goes on-chain when the day's edition is sealed (register-root.ts).
+const day = index.generatedAt.slice(0, 10);
+const tree = editionTree(day, index.rows);
+writeFileSync(resolve(DATA_DIR, "near-token-tree.bin"), treeBytes(tree));
+
 // What the live API adds to the classic pools when valuing tokens: it cannot page the DCL contract
 // inside a request, so it reads each token's DCL depth from here.
 const dclDepth = Object.fromEntries(
@@ -306,6 +313,16 @@ const edition = sealEdition({
   },
 });
 writeFileSync(resolve(DATA_DIR, "edition.json"), `${JSON.stringify(edition, null, 2)}\n`);
+// The registry's `publish` arguments for this edition.
+const rootArgs = {
+  day,
+  root: treeRoot(tree),
+  fingerprint: edition.fingerprint,
+  index_sha256: sha256Hex(indexText),
+  methodology: index.methodology,
+  tokens: index.rows.length,
+};
+writeFileSync(resolve(DATA_DIR, "near-token-root.json"), `${JSON.stringify(rootArgs, null, 2)}\n`);
 writeFileSync(STATS_FILE, JSON.stringify(Object.fromEntries(cache)));
 
 // The track record: how grades moved since the editions sealed 1, 7 and 30 days ago. Only editions
@@ -337,6 +354,7 @@ console.log(
     withHolders: index.rows.filter((row) => row[7] !== null).length,
     selfDeclaredTests: Object.values(index.notes ?? {}).filter((note) => note.selfDeclaredTest).length,
     fingerprint: edition.fingerprint,
+    root: rootArgs.root,
     trackRecordWindows: windows.map((window) => window.days),
     seconds: Math.round((Date.now() - now) / 1000),
     failures: Object.fromEntries(failures),

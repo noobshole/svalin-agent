@@ -112,10 +112,15 @@ Settings → Instance Type).
   CDP_API_KEY_SECRET=...        # optional
   ```
 
-  Prices default to $0.002 (portfolio, check and exit prices), $0.004 (risk) and $0.02 (brief).
-  Override them with `PRICE_PORTFOLIO_USD`, `PRICE_RISK_USD`, `PRICE_BRIEF_USD`, `PRICE_CHECK_USD`
-  and `PRICE_EXIT_USD`. Each visitor gets `DEMO_REQUESTS_PER_DAY` free calls (default 10), and
-  `LOCK_FREE_NEXT_STEPS=true` leaves next steps out of the free risk report.
+  Prices default to $0.002 for every call except the brief, $0.02.
+  Override them with `PRICE_PORTFOLIO_USD`, `PRICE_RISK_USD`, `PRICE_BRIEF_USD`, `PRICE_CHECK_USD`,
+  `PRICE_EXIT_USD` and `PRICE_PROOF_USD`. Each visitor gets `DEMO_REQUESTS_PER_DAY` free calls
+  (default 10), and `LOCK_FREE_NEXT_STEPS=true` leaves next steps out of the free risk report.
+
+  Grade proofs (`/v1/proof`) are made against the Svalin Ratings registry
+  `NEAR_RATINGS_REGISTRY` (default `svalin-ratings-v1.testnet`), read through
+  `NEAR_RATINGS_RPC_URL` (default FastNEAR testnet), from the sealed editions at
+  `NEAR_INDEX_SEALED_URL` (default the svalin-index repository's `editions` folder).
 
 **Then, on any host:**
 
@@ -172,7 +177,7 @@ security headers from `apps/web/out/_headers` into the host's header settings.
 - [ ] Run the MCP server locally with that wallet (`SVALIN_SOLANA_PRIVATE_KEY`, or
       `SVALIN_NEAR_ACCOUNT_ID` and `SVALIN_NEAR_PRIVATE_KEY`) and `SVALIN_API_URL=https://<api>`,
       then call `svalin_risk_report` from Claude Desktop or Claude Code.
-- [ ] **(test)** The tool returns a report and `svalin_spend_status` shows $0.004 spent.
+- [ ] **(test)** The tool returns a report and `svalin_spend_status` shows $0.002 spent.
 - [ ] **(test)** With Supabase set up, `select * from api_payments;` shows the payment.
 
 ### Svalin Pro and Svalin Business on testnet
@@ -186,7 +191,7 @@ nothing to try. A pass paid on a test network stops working when that chain move
       page finds the payment within about 10 seconds (NEAR: about 30) and shows "Svalin Pro is active".
 - [ ] **(test)** A scan then shows "Svalin Pro: 99 calls left today."
 - [ ] **(test)** `POST https://<api>/v1/keys/business` answers 402 asking for $79 (`/v1/keys/pro`:
-      $5); an x402 client that pays it gets a key, and `GET /v1/keys/me` with that key shows its
+      $9); an x402 client that pays it gets a key, and `GET /v1/keys/me` with that key shows its
       calls. Paying again with the key in `Authorization` renews it.
 
 ## 5. Switch to mainnet

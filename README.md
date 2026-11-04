@@ -66,7 +66,7 @@ monthly pass. No accounts, and no way to move funds.
 
 ```text
 agent ── GET /v1/risk/{wallet} ──────────────▶ Svalin API
-agent ◀── 402 Payment Required: $0.004 USDC on Solana or NEAR
+agent ◀── 402 Payment Required: $0.002 USDC on Solana or NEAR
 agent ── retry with PAYMENT-SIGNATURE ───────▶ paywall ── verify / settle ──▶ facilitator
 agent ◀── 200 risk report ───────────────────── engine ◀── Helius (Solana) · FastNEAR + Ref Finance (NEAR)
 ```
@@ -155,7 +155,7 @@ thresholds.
 
 ```mermaid
 flowchart LR
-    O["Orchestrator agent<br/>(on a request or a schedule)"] -->|"svalin_risk_report<br/>$0.004"| G{"Grade?"}
+    O["Orchestrator agent<br/>(on a request or a schedule)"] -->|"svalin_risk_report<br/>$0.002"| G{"Grade?"}
     G -->|"A or B"| X["Executor agent<br/>(your own wallet tools)"]
     G -->|"C to F"| B["svalin_brief · $0.02<br/>headline and up to 3 actions"]
     B --> H{"Human<br/>approves?"}
@@ -166,10 +166,10 @@ flowchart LR
 
 | Pattern | Svalin calls | Cost per wallet (default prices) |
 | --- | --- | --- |
-| Risk gate before an action | `risk`, then `brief` when the grade is poor | $0.004 to $0.024 |
-| Scheduled treasury check | `risk` for each wallet on each run | $0.004 per run |
+| Risk gate before an action | `risk`, then `brief` when the grade is poor | $0.002 to $0.022 |
+| Scheduled treasury check | `risk` for each wallet on each run | $0.002 per run |
 | Wallet explainer in chat | `brief` | $0.02 |
-| Batch research | `portfolio` or `risk` for each wallet | $0.002 to $0.004 |
+| Batch research | `portfolio` or `risk` for each wallet | $0.002 each |
 | Trying it out | free scan | Free, 10 calls a day |
 
 Any orchestrator that can call MCP tools or make HTTP requests can use these patterns.
@@ -183,11 +183,13 @@ Any orchestrator that can call MCP tools or make HTTP requests can use these pat
 | `GET /v1/index/near-tokens` | Free | The Svalin Index: every NEAR token graded A-F by the real money behind its price |
 | `GET /v1/demo/exit/{contract}` | Free, shares the 10 a day | Exit prices at $1K, $10K and $100K |
 | `GET /v1/portfolio/{address}` | $0.002 | Priced holdings, allocation and a risk category per token |
-| `GET /v1/risk/{address}` | $0.004 | Score, grade, exposure metrics and findings with actions |
+| `GET /v1/risk/{address}` | $0.002 | Score, grade, exposure metrics and findings with actions |
 | `GET /v1/brief/{address}` | $0.02 | Headline, summary and up to 3 actions, plus the full report |
 | `GET /v1/check/{address}?payer=&amountUsd=` | $0.002 | Before paying someone: allow, caution or block, with reasons |
 | `GET /v1/exit/{contract}?amountUsd=` | $0.002 | A NEAR token's grade and exit prices, at your own sale size too: what selling it would actually fetch |
-| `POST /v1/keys/{pro,business}` | $5 · $79 | A pass for 30 days on every paid route: Svalin Pro (100 calls a day) or Svalin Business (200,000 calls). The key is shown once; send it in `Authorization` to renew |
+| `GET /v1/proof/{contract}` | $0.002 | A NEAR token's liquidity grade with a Merkle proof against the newest edition sealed on NEAR (Svalin Ratings registry): the `grade` object goes straight into a Svalin Guard vault, or into the registry's free `verify` |
+| `GET /v1/demo/proof/{contract}` | Free, shares the 10 a day | The same proof as a free trial |
+| `POST /v1/keys/{pro,business}` | $9 · $79 | A pass for 30 days on every paid route: Svalin Pro (100 calls a day) or Svalin Business (200,000 calls). The key is shown once; send it in `Authorization` to renew |
 | `GET /v1/keys/me` | Free | What is left on the key sent as `Authorization: Bearer` |
 | `GET /v1/pro` · `POST /v1/pro/near` · `POST /v1/pro/activate` | Free | Svalin Pro checkout: prices, an exact NEAR amount for a code, and finding a code's payment on-chain |
 | `GET /` · `/openapi.json` · `/llms.txt` | Free | Machine-readable service description for agents |

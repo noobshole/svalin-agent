@@ -54,7 +54,7 @@ const questions: { question: string; answer: ReactNode }[] = [
     question: "What does it cost?",
     answer: (
       <>
-        10 checks a day are free, with no account. Agents pay per call in USDC, from $0.002, and Svalin Pro is $5 a month for 100 checks a day.
+        10 checks a day are free, with no account. Svalin Pro is $9 a month for 100 a day, and agents pay $0.002 a call in USDC.
         See{" "}
         <Link className={linkClass} href="/pricing">
           pricing

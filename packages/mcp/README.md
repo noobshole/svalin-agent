@@ -13,13 +13,15 @@ per-call limit and a session budget. Svalin never holds your funds and can never
 | Tool | Default cost | What it returns |
 | --- | --- | --- |
 | `svalin_risk_scan` | free, 10 a day (shared by the free tools) | Risk score 0-100, grade A-F, exposure metrics, findings (next steps may be locked; the paid report has them) |
-| `svalin_risk_report` | $0.004 | Same report, no rate limit |
+| `svalin_risk_report` | $0.002 | Same report, no rate limit |
 | `svalin_portfolio` | $0.002 | Priced holdings with allocation and risk category per token |
 | `svalin_brief` | $0.02 | Headline, summary and up to 3 actions, plus the full report |
 | `svalin_check_recipient` | $0.002 | Before paying someone: allow, caution or block, with reasons (address poisoning, brand-new wallets, tokens and programs) |
 | `svalin_check_recipient_free` | free, 10 a day (shared) | The same check as a free trial, without the payer's history (no look-alike check) |
 | `svalin_token_exit` | $0.002 | A NEAR token's grade and exit prices: what selling $1K, $10K, $100K or your own amount would actually fetch |
 | `svalin_token_exit_free` | free, 10 a day (shared) | The same at $1K, $10K and $100K as a free trial |
+| `svalin_token_proof` | $0.002 | A NEAR token's liquidity grade with a Merkle proof against the newest edition sealed on NEAR, ready for a Svalin Guard vault or the registry's `verify` |
+| `svalin_token_proof_free` | free, 10 a day (shared) | The same as a free trial |
 | `svalin_check_x402_payment` | free, or one check ($0.002) with a wallet | Before paying **any** x402 service: allow, caution or block (see [Payment guard](#payment-guard)) |
 | `svalin_spend_status` | free | Paying wallet, amount spent, budget remaining, payee memory file |
 

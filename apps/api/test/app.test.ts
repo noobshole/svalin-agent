@@ -43,7 +43,7 @@ describe("free surface", () => {
     expect(spec.info["x-guidance"]).toContain("/v1/risk/{address}");
     const risk = spec.paths["/v1/risk/{address}"].get;
     expect(risk["x-payment-info"]).toEqual({
-      price: { mode: "fixed", currency: "USD", amount: "0.004000" },
+      price: { mode: "fixed", currency: "USD", amount: "0.002000" },
       protocols: [{ x402: {} }],
     });
     expect(risk.responses["402"]).toBeDefined();
@@ -356,8 +356,8 @@ describe("x402 paywall", () => {
     ]);
     expect(offers).toEqual(
       expect.arrayContaining([
-        ["solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", PAY_TO_SOLANA, "4000"],
-        ["near:testnet", PAY_TO_NEAR, "4000"],
+        ["solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", PAY_TO_SOLANA, "2000"],
+        ["near:testnet", PAY_TO_NEAR, "2000"],
       ]),
     );
     expect(required.extensions?.bazaar).toBeDefined();
@@ -369,7 +369,7 @@ describe("x402 paywall", () => {
       const response = await app.request(`/v1/${route}/${SOLANA_WALLET}`);
       amounts[route] = decodeHeader(response.headers.get("PAYMENT-REQUIRED")).accepts[0].amount;
     }
-    expect(amounts).toEqual({ portfolio: "2000", risk: "4000", brief: "20000" });
+    expect(amounts).toEqual({ portfolio: "2000", risk: "2000", brief: "20000" });
   });
 
   it("describes paid routes for Bazaar discovery within the facilitator's limits", async () => {

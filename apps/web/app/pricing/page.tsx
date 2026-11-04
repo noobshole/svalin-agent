@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils/cn";
 
 export const metadata: Metadata = {
   title: "Pricing — Svalin",
-  description: "Free to try. Agents pay per call in USDC; Svalin Pro is $5 a month and Svalin Business $79 a month, for people and agents alike.",
+  description: "Free to try. Svalin Pro is $9 a month. Agents pay $0.002 a call in USDC, or $79 a month for 200,000 calls.",
 };
 
 const linkClass = "text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground";
@@ -17,43 +17,35 @@ const linkClass = "text-foreground underline decoration-border underline-offset-
 export default async function PricingPage() {
   const info = await getServiceInfo();
   const price = (path: string, fallback: string) => info?.endpoints.find((endpoint) => endpoint.path === path)?.price ?? fallback;
-  const checkPrice = price("/v1/check/{address}", "$0.002");
-  const riskPrice = price("/v1/risk/{address}", "$0.004");
-  const proPrice = price("/v1/keys/pro", "$5");
+  const callPrice = price("/v1/check/{address}", "$0.002");
+  const briefPrice = price("/v1/brief/{address}", "$0.02");
+  const proPrice = price("/v1/keys/pro", "$9");
   const businessPrice = price("/v1/keys/business", "$79");
 
   return (
     <main className="mx-auto grid w-full max-w-6xl gap-14 px-4 pb-24 pt-14 md:px-8 md:pt-20">
       <header className="grid max-w-2xl gap-4">
         <h1 className="text-4xl font-medium leading-tight tracking-tight md:text-5xl">Pricing</h1>
-        <p className="text-lg leading-8 text-mutedForeground">
-          Start free. When you need more, agents can pay per call, and one pass covers people and agents alike.
-        </p>
+        <p className="text-lg leading-8 text-mutedForeground">Free to try. One pass for people, one price per call for agents.</p>
       </header>
 
-      <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
         <Plan link={{ href: "/scan", label: "Scan a wallet" }} name="Free" price="$0">
           <li>10 scans or checks a day</li>
           <li>Every safety warning, always</li>
           <li>The Svalin Index</li>
         </Plan>
-        <Plan link={{ href: "/docs", label: "Read the docs" }} name="Pay per call" price={`From ${checkPrice}`} note="for agents">
+        <Plan highlight link={{ href: "#checkout", label: "Get Pro" }} name="Svalin Pro" note="or $90 a year" price={`${proPrice} a month`}>
+          <li>100 calls a day, on the website and in your agent</li>
+          <li>Every next step, and exit prices at any sale size</li>
+          <li>The look-alike check against your own wallet</li>
+        </Plan>
+        <Plan link={{ href: "/docs", label: "Read the docs" }} name="For agents" note={`or ${businessPrice} a month for 200,000 calls`} price={`${callPrice} a call`}>
           <li>
-            {checkPrice} a check, {riskPrice} a risk report
+            Every call {callPrice}; the written brief {briefPrice}
           </li>
           <li>Paid in USDC over x402, no account</li>
           <li>A call that fails is never charged</li>
-        </Plan>
-        <Plan highlight link={{ href: "#checkout", label: "Get Pro" }} name="Svalin Pro" note="or $48 a year" price={`${proPrice} a month`}>
-          <li>100 calls a day, on the website and in your agent</li>
-          <li>Every next step in your reports</li>
-          <li>The look-alike check against your own wallet</li>
-          <li>Exit prices at any sale size</li>
-        </Plan>
-        <Plan link={{ href: "/docs#keys", label: "How agents buy it" }} name="Svalin Business" price={`${businessPrice} a month`}>
-          <li>200,000 calls a month</li>
-          <li>Every paid route, for agents and companies</li>
-          <li>Bought and renewed over x402</li>
         </Plan>
       </div>
       <PaymentNetworks className="-mt-8" />

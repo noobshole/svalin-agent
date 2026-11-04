@@ -37,7 +37,7 @@ export function FreeLimitReached({ message }: { message: string }) {
         <Link className={linkClass} href="/pricing">
           Svalin Pro
         </Link>{" "}
-        gives 100 calls a day and every next step for $5 a month. Developers and agents can{" "}
+        gives 100 calls a day and every next step for $9 a month. Developers and agents can{" "}
         <Link className={linkClass} href="/docs">
           pay per call
         </Link>{" "}

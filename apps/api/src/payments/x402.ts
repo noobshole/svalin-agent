@@ -44,6 +44,11 @@ const outputExamples: Record<PaidRouteKey, unknown> = {
     grade: "B",
     exit: { quotes: [{ saleUsd: 10000, fetchesUsd: 9292.95, lossPct: 7.07 }], within1PctUsd: 1327.61, wholeSupplyUsd: 128493.1 },
   },
+  proof: {
+    token: "token.rhealab.near",
+    grade: { day: "2026-11-04", grade: "B", backing_usd: 515904, proof: [{ hash: "6bb6e8416482da44c407365c3f0b4f7e5ad604d6e7246d1e5d1023ba026141c7", left: false }] },
+    registry: "svalin-ratings-v1.testnet",
+  },
 };
 
 /**

@@ -172,6 +172,30 @@ export function createSvalinMcpServer(client: SvalinClient) {
   );
 
   server.registerTool(
+    "svalin_token_proof",
+    {
+      title: "Token grade proof (paid)",
+      description:
+        "PAID per call in USDC via x402, or from a Svalin key (SVALIN_API_KEY). Before a contract or a Svalin Guard vault buys a NEAR token: its Svalin Index liquidity grade with a Merkle proof against the newest edition sealed on NEAR. Pass the returned `grade` object to the vault's request_buy, or check it with the Svalin Ratings registry's free verify call. Read-only.",
+      inputSchema: { contract: contractInput },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ contract }) => call(`/v1/proof/${encodeURIComponent(contract.toLowerCase())}`),
+  );
+
+  server.registerTool(
+    "svalin_token_proof_free",
+    {
+      title: "Token grade proof (free trial)",
+      description:
+        "FREE trial of svalin_token_proof, 10 calls a day shared with the other free tools: a NEAR token's liquidity grade with a Merkle proof against the newest edition sealed on NEAR. Read-only.",
+      inputSchema: { contract: contractInput },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ contract }) => call(`/v1/demo/proof/${encodeURIComponent(contract.toLowerCase())}`),
+  );
+
+  server.registerTool(
     "svalin_check_x402_payment",
     {
       title: "Check an x402 payment before paying",

@@ -179,6 +179,8 @@ describe("svalin-mcp end to end", () => {
       "svalin_spend_status",
       "svalin_token_exit",
       "svalin_token_exit_free",
+      "svalin_token_proof",
+      "svalin_token_proof_free",
     ]);
     expect(tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
   });
