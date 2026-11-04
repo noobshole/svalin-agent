@@ -1,7 +1,15 @@
-# Risk methodology (v2026-10.8)
+# Risk methodology (v2026-11.1)
 
 Svalin's report is computed by `apps/api/src/risk/engine.ts`. It is deterministic: the same
 holdings always produce the same report. No number in a report comes from a language model.
+
+Svalin gives two different A–F grades, and they answer different questions:
+- **Portfolio risk** (this report): how risky a whole wallet is, from how its money is spread.
+- **Liquidity grade** (the Svalin Index, below): how much of a sale of one NEAR token would be
+  lost, given the real money in its pools. It says how sellable a token is, not how good it is.
+
+A wallet full of B-grade tokens can still carry high portfolio risk, for example if one of them is
+80% of it. Since 2026-11.1 a token's liquidity grade sets how much it counts in the portfolio score.
 
 ## Inputs
 
@@ -23,6 +31,10 @@ holdings always produce the same report. No number in a report comes from a lang
   cannot make a wallet look richer, while one pulled since the edition lowers the value at once. A
   token too new for the Index counts as unpriced. If the edition cannot be read, live pools alone
   set the bound.
+- **Liquidity grade of NEAR tokens outside the registry** (`liquidityGrade` on each holding): the
+  Index grade of the same capped backing, `min(live depth, backing held for 24 hours)`. A pool
+  pulled since the edition lowers it at once. When the edition cannot be read, holdings get no
+  grade (`null`).
 - **NEAR specifics.** Native NEAR and wNEAR are `native`. NEAR delegated to a validator staking
   pool counts as `liquid-staking`: it is not liquid, but like stNEAR, LiNEAR and rNEAR it earns
   staking rewards, so it is staked rather than idle. Up to 10 staking pools are read per account.
@@ -44,11 +56,21 @@ holdings always produce the same report. No number in a report comes from a lang
 ```text
 concentration = 45 × ramp(largestVolatilePct, 30 → 80)
 stableBuffer  = 20 × ramp(15 − stablecoinPct, 0 → 15)
-longTail      = 35 × ramp(longTailPct + 0.6 × memePct, 0 → 50)
+longTail      = 35 × ramp(gradedLongTailPct + 0.6 × memePct, 0 → 50)
 score = round(concentration + stableBuffer + longTail)
+
+gradedLongTailPct = Σ over long-tail holdings of (share of priced value × weight of its liquidity grade)
+weight: A 0.25, B 0.4, C 0.6, D 0.85, F or no grade 1
 ```
 
 `ramp(x, a → b)` is 0 at or below `a`, 1 at or above `b`, linear in between.
+
+A long-tail token with real money behind it is less of a long shot than one with none, so it counts
+for less. Tokens with no backing at all are already unpriced and left out, so before 2026-11.1 the
+term weighed exactly the tokens that *had* backing in full, and a B the same as an F. A token
+without a grade (every Solana token, or any NEAR token when the Index cannot be read) still counts
+in full. Example: 60% NEAR, 10% USDC and 30% HOOT (grade C) moves the long-tail term from 21.0 to
+12.6 points. The `long-tail-exposure` finding still uses the plain long-tail share.
 Grades: A ≤ 20, B ≤ 40, C ≤ 60, D ≤ 80, F above. Levels: low ≤ 25, moderate ≤ 50,
 elevated ≤ 75, high above.
 
@@ -114,6 +136,28 @@ index is rebuilt every few hours by `apps/api/scripts/near-index.ts` and publish
 [svalin-index](https://github.com/noobshole/svalin-index) repository. Methodology
 `near-token-backing-v1` (from 22 October 2026) added DCL pools, the 24-hour hold and the burn
 exclusion; earlier editions are `near-token-backing-v0` and still verify with the current code.
+
+**Market data, from 4 November 2026.** None of it changes a grade.
+- *Symbols.* Ref leaves many tokens without a symbol (39 of the 84 graded D or better on
+  4 November, including the real HOOT, while 16 F-graded tokens carried "HOOT"). The Index then
+  uses the symbol from the token's own `ft_metadata`, cleaned like any on-chain text.
+- *Self-declared tests.* A token whose own name or symbol says it is a test or not to be bought
+  ("Hoot Test 3 (Do not Buy)") is noted (`notes[contract].selfDeclaredTest`, with its name). Test
+  tokens often trade under a real project's ticker.
+- *Holders.* The count comes from NearBlocks. It answers 0 for tokens it does not index (launchpad
+  tokens, for one); that now means unknown, not zero. Where NearBlocks has no count, or one below
+  it, the number of holders in FastNEAR's list of the 100 largest stands in as a lower bound
+  (`notes[contract].holdersAtLeast`, shown as "100+"). That list is never taken as a full count: it
+  can miss holders even when it ends in an empty account. NearBlocks' counts change rarely: over
+  the 17 editions of 19 October to 4 November, 102 of the 104 tokens with a count kept the same
+  number. Holder growth cannot be measured from it.
+- *Freshness.* Lookups are spread over runs. Tokens graded D or better are refreshed first, so
+  their figures are about a day old at most; the ~3,000 others rotate over about ten days.
+
+**Curated memecoins count as real money.** The yardstick tokens include the two curated NEAR
+memecoins, BLACKDRAGON and SHITZU, beside wNEAR, stablecoins and liquid staking. Measured on the
+3 November inputs, they supply $29K of the $6.8M of backing across the Index (0.4%) and change no
+token's grade.
 
 **Circuit breaker.** A new edition is refused, and the previous one stays published, when it looks
 broken rather than like a market (`apps/api/src/ratings/edition-guard.ts`):
@@ -215,6 +259,7 @@ check, so it does not catch look-alikes and says so in its reasons. The paid che
   outside the registry. 2026-10.4 stopped rating wallets with nothing priced. 2026-10.5 added
   Ref's concentrated-liquidity pools to the pool check, and 2026-10.6 capped it at backing that
   has held for 24 hours. 2026-10.7 added exit value and the `exit-cost` finding, outside the
-  score, and 2026-10.8 the `hidden-instructions` finding, also outside it. Weights and thresholds
-  of the score are unchanged since 2026-10.1. The recipient check is versioned apart: 2026-10.2
+  score, and 2026-10.8 the `hidden-instructions` finding, also outside it. 2026-11.1 weights each
+  long-tail NEAR token by its liquidity grade; the other weights and the thresholds are unchanged
+  since 2026-10.1. The recipient check is versioned apart: 2026-10.2
   added look-alike NEAR names, and 2026-10.3 look-alikes of well-known NEAR accounts.

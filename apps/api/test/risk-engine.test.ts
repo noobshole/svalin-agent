@@ -1,4 +1,4 @@
-import type { PortfolioOverview } from "@svalin-agent/shared";
+import type { PortfolioOverview, TokenGrade } from "@svalin-agent/shared";
 import { describe, expect, it } from "vitest";
 
 import { templateBrief } from "../src/narrate/narrator.js";
@@ -16,6 +16,7 @@ function overview(
     valueUsd: number;
     address?: string;
     exitValueUsd?: number;
+    liquidityGrade?: TokenGrade | null;
   }[],
   unpricedAssetCount = 0,
 ): PortfolioOverview {
@@ -30,6 +31,7 @@ function overview(
       valueUsd: holding.valueUsd,
       category: holding.category,
       ...(holding.exitValueUsd === undefined ? {} : { exitValueUsd: holding.exitValueUsd }),
+      ...(holding.liquidityGrade === undefined ? {} : { liquidityGrade: holding.liquidityGrade }),
     })),
   );
   return {
@@ -138,6 +140,38 @@ describe("risk engine", () => {
       expect.arrayContaining(["long-tail-exposure", "meme-exposure", "stable-buffer", "concentration"]),
     );
     expect(report.findings[0].severity).toBe("high");
+  });
+
+  it("counts a long-tail token by its liquidity grade: in full with no grade or an F, less with real backing", () => {
+    const longTail = (liquidityGrade?: TokenGrade | null) =>
+      buildRiskReport(
+        overview([
+          { symbol: "NEAR", category: "native", valueUsd: 6000 },
+          { symbol: "USDC", category: "stablecoin", valueUsd: 1000 },
+          { symbol: "HOOT", category: "long-tail", valueUsd: 3000, liquidityGrade },
+        ]),
+        NOW,
+      ).breakdown.longTail;
+    // 30% long-tail: 35 x 30/50 = 21 points in full.
+    expect(longTail()).toBe(21);
+    expect(longTail(null)).toBe(21);
+    expect(longTail("F")).toBe(21);
+    expect(longTail("D")).toBe(17.9);
+    expect(longTail("C")).toBe(12.6);
+    expect(longTail("B")).toBe(8.4);
+    expect(longTail("A")).toBe(5.3);
+    // The exposure itself is still 30%, and still a finding.
+    const report = buildRiskReport(
+      overview([
+        { symbol: "NEAR", category: "native", valueUsd: 6000 },
+        { symbol: "USDC", category: "stablecoin", valueUsd: 1000 },
+        { symbol: "HOOT", category: "long-tail", valueUsd: 3000, liquidityGrade: "A" },
+      ]),
+      NOW,
+    );
+    expect(report.metrics.longTailPct).toBe(30);
+    expect(report.findings.some((finding) => finding.kind === "long-tail-exposure")).toBe(true);
+    expect(report.methodologyVersion).toBe("2026-11.1");
   });
 
   it("does not rate a wallet with nothing priced, instead of calling it an A", () => {

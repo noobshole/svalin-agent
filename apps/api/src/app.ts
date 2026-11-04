@@ -122,7 +122,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
             priceUrl: config.portfolio.nearPriceApiUrl,
             poolsUrl: config.portfolio.nearPoolsApiUrl,
             dclDepthUrl: config.portfolio.nearDclDepthUrl,
-            indexRow: async (contract) => (await indexedToken(indexFeed, contract)).row,
+            indexToken: (contract) => indexedToken(indexFeed, contract),
             txApiUrl: config.portfolio.fastnearTxApiUrl,
           }),
         })
@@ -297,8 +297,8 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
 
   app.get("/v1/demo/exit/:address", async (c) => {
     await useFreeCall(c, "/v1/exit/{address}");
-    const { index, row } = await gradedToken(c.req.param("address"));
-    return c.json(tokenExit(row, index));
+    const { index, row, note } = await gradedToken(c.req.param("address"));
+    return c.json(tokenExit(row, index, undefined, note));
   });
 
   /* --------------------------------- paid ---------------------------------- */
@@ -315,8 +315,8 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   app.get("/v1/check/:address", async (c) => c.json(await checkRecipient(c)));
 
   app.get("/v1/exit/:address", async (c) => {
-    const { index, row } = await gradedToken(c.req.param("address"));
-    return c.json(tokenExit(row, index, exitSaleQuery(c, true)));
+    const { index, row, note } = await gradedToken(c.req.param("address"));
+    return c.json(tokenExit(row, index, exitSaleQuery(c, true), note));
   });
 
   /* ------------------------------ Svalin keys ------------------------------ */
@@ -530,7 +530,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
         "wNEAR, stablecoins and liquid staking tokens count at full value in Svalin reports.",
       );
     }
-    const { index, row } = await indexedToken(indexFeed, contract);
+    const { index, row, note } = await indexedToken(indexFeed, contract);
     if (!row) {
       throw new ApiError(
         404,
@@ -539,7 +539,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
         "The Index grades every NEAR token Ref Finance prices. A token without a Ref price has no pool to sell into.",
       );
     }
-    return { index, row };
+    return { index, row, note };
   }
 
   /**

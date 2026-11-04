@@ -56,8 +56,9 @@ export type EditionFiles = { prices: string; pools: string; index: string; dclPo
  * Checks an edition against its files: every hash, the fingerprint, and every token's backing and
  * grade recomputed from the archived inputs. From near-token-backing-v1 that includes Ref's DCL
  * pools and the 24-hour hold: the archived history must end with exactly the backing the inputs
- * give, and each grade must follow from the history. Market cap and holder data come from other
- * APIs and are pinned by the index hash but not recomputed.
+ * give, and each grade must follow from the history. Market cap, holder data, on-chain metadata
+ * (symbols missing from Ref) and notes come from other APIs and are pinned by the index hash but
+ * not recomputed.
  */
 export function checkEdition(edition: IndexEdition, files: EditionFiles): EditionCheck {
   const problems: string[] = [];

@@ -6,8 +6,9 @@
  *
  *   pnpm --filter @svalin-agent/api run index:near [data-dir]
  *
- * Supply and holder data barely move, and the public NEAR APIs rate limit bursts, so they are kept
- * in data-dir/near-token-stats.json and each token is refreshed about once a day, a few per run.
+ * Supply, holder and metadata lookups barely move, and the public NEAR APIs rate limit bursts, so
+ * they are kept in data-dir/near-token-stats.json and refreshed a few per run: tokens graded D or
+ * better first, so their figures are at most about a day old, then the ~3,000 others in rotation.
  * The backing history behind the 24-hour hold is read back from the previous edition's archive.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -20,7 +21,9 @@ import { editionAnomaly } from "../src/ratings/edition-guard.js";
 import { sealEdition, sha256Hex } from "../src/ratings/edition.js";
 import {
   heldDepth,
+  holdersFromTop,
   marketCapUsd,
+  mergeHolderCounts,
   rateNearTokens,
   recordBacking,
   top10Share,
@@ -46,21 +49,33 @@ const TRACK_WINDOWS = [1, 7, 30];
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Zero-backing tokens with the highest quoted prices also get a market cap: the loudest claims. */
 const LOUDEST_CLAIMS = 25;
-/** Lookups per run. A full refresh of ~500 tokens spreads over the day's 24 runs. */
+/**
+ * Lookups per run. GitHub runs the hourly schedule only every few hours, so with ~3,000 backed
+ * tokens a full rotation takes about ten days; the ~85 graded D or better go first every day.
+ */
 const BUDGET = {
   supply: Number(process.env.INDEX_SUPPLY_BUDGET ?? 60),
   topHolders: Number(process.env.INDEX_TOP_HOLDERS_BUDGET ?? 60),
   holderCount: Number(process.env.INDEX_HOLDER_COUNT_BUDGET ?? 8),
+  metadata: Number(process.env.INDEX_METADATA_BUDGET ?? 60),
 };
+/** Token metadata rarely changes: read again after a week. */
+const METADATA_MAX_AGE_MS = 7 * DAY_MS;
 
 /** What is remembered between runs for each token, with when it was last fetched. */
 type CachedStats = {
   supply?: string;
   supplyAt?: number;
   top10Pct?: number | null;
+  /** From the same FastNEAR list as the top-10 share: holders in it, a lower bound on all holders. */
+  listedHolders?: number | null;
   top10At?: number;
+  /** NearBlocks' count; null when it could not say (it answers 0 for tokens it does not index). */
   holders?: number | null;
   holdersAt?: number;
+  symbol?: string | null;
+  name?: string | null;
+  metadataAt?: number;
 };
 
 async function get(url: string, init?: RequestInit, attempt = 1): Promise<Response> {
@@ -103,6 +118,13 @@ async function totalSupply(contract: string): Promise<string> {
   return viewCall<string>(contract, "ft_total_supply", {});
 }
 
+/** The token's own symbol and name (NEP-148). Kept as plain strings; rateNearTokens cleans them. */
+async function metadata(contract: string): Promise<{ symbol: string | null; name: string | null }> {
+  const meta = await viewCall<{ symbol?: unknown; name?: unknown }>(contract, "ft_metadata", {});
+  const text = (value: unknown) => (typeof value === "string" ? value.slice(0, 200) : null);
+  return { symbol: text(meta?.symbol), name: text(meta?.name) };
+}
+
 /** Every DCL pool, paged from the contract, keeping only the fields the grades use. */
 async function dclPools(): Promise<RefDclPool[]> {
   const pools: RefDclPool[] = [];
@@ -119,18 +141,29 @@ async function topHolders(contract: string) {
   return body.accounts ?? [];
 }
 
-async function holderCount(contract: string): Promise<number | null> {
+/** NearBlocks' holder count. It answers 0 for tokens it does not index, so 0 means unknown. */
+async function nearBlocksHolders(contract: string): Promise<number | null> {
   const response = await get(`${NEARBLOCKS_URL}/v1/fts/${encodeURIComponent(contract)}/holders/count`);
   const body = (await response.json()) as { holders?: { count?: string }[] };
   const count = Number(body.holders?.[0]?.count);
-  return Number.isInteger(count) ? count : null;
+  return Number.isInteger(count) && count > 0 ? count : null;
 }
 
-/** The `budget` entries whose `at` timestamp is missing or oldest, among those older than a day. */
-function stalest(contracts: string[], at: (contract: string) => number | undefined, budget: number, now: number) {
+/**
+ * The `budget` entries due for a refresh (fetched longer than `maxAge` ago, or never): those in
+ * `first` before the rest, and the oldest first within each.
+ */
+function stalest(
+  contracts: string[],
+  at: (contract: string) => number | undefined,
+  budget: number,
+  now: number,
+  first: ReadonlySet<string>,
+  maxAge = DAY_MS,
+) {
   return contracts
-    .filter((contract) => now - (at(contract) ?? 0) >= DAY_MS)
-    .sort((left, right) => (at(left) ?? 0) - (at(right) ?? 0))
+    .filter((contract) => now - (at(contract) ?? 0) >= maxAge)
+    .sort((left, right) => Number(first.has(right)) - Number(first.has(left)) || (at(left) ?? 0) - (at(right) ?? 0))
     .slice(0, budget);
 }
 
@@ -171,31 +204,40 @@ const loudest = graded.rows
   .slice(0, LOUDEST_CLAIMS)
   .map((row) => row[0]);
 const gradedAtLeastD = backed.filter((contract) => tokenGradeFor(Math.round(depth.get(contract) ?? 0)) !== "F");
+const gradedFirst: ReadonlySet<string> = new Set(gradedAtLeastD);
 
 const previous: Record<string, CachedStats> = existsSync(STATS_FILE) ? JSON.parse(readFileSync(STATS_FILE, "utf8")) : {};
 const cache = new Map<string, CachedStats>([...backed, ...loudest].map((contract) => [contract, previous[contract] ?? {}]));
 const entry = (contract: string) => cache.get(contract) as CachedStats;
 
 // One lookup at a time: the public endpoints answer 429 to bursts.
-for (const contract of stalest([...backed, ...loudest], (c) => entry(c).supplyAt, BUDGET.supply, now)) {
+for (const contract of stalest([...backed, ...loudest], (c) => entry(c).metadataAt, BUDGET.metadata, now, gradedFirst, METADATA_MAX_AGE_MS)) {
+  try {
+    Object.assign(entry(contract), { ...(await metadata(contract)), metadataAt: now });
+  } catch (error) {
+    noteFailure("metadata", error);
+  }
+}
+for (const contract of stalest([...backed, ...loudest], (c) => entry(c).supplyAt, BUDGET.supply, now, gradedFirst)) {
   try {
     Object.assign(entry(contract), { supply: await totalSupply(contract), supplyAt: now });
   } catch (error) {
     noteFailure("supply", error);
   }
 }
-for (const contract of stalest(backed, (c) => entry(c).top10At, BUDGET.topHolders, now)) {
+for (const contract of stalest(backed, (c) => entry(c).top10At, BUDGET.topHolders, now, gradedFirst)) {
   const { supply } = entry(contract);
   if (!supply) continue;
   try {
-    Object.assign(entry(contract), { top10Pct: top10Share(contract, await topHolders(contract), supply), top10At: now });
+    const holders = await topHolders(contract);
+    Object.assign(entry(contract), { top10Pct: top10Share(contract, holders, supply), listedHolders: holdersFromTop(holders), top10At: now });
   } catch (error) {
     noteFailure("top holders", error);
   }
 }
-for (const contract of stalest(gradedAtLeastD, (c) => entry(c).holdersAt, BUDGET.holderCount, now)) {
+for (const contract of stalest(gradedAtLeastD, (c) => entry(c).holdersAt, BUDGET.holderCount, now, gradedFirst)) {
   try {
-    Object.assign(entry(contract), { holders: await holderCount(contract), holdersAt: now });
+    Object.assign(entry(contract), { holders: await nearBlocksHolders(contract), holdersAt: now });
   } catch (error) {
     noteFailure("holder count", error);
   }
@@ -205,10 +247,15 @@ for (const contract of stalest(gradedAtLeastD, (c) => entry(c).holdersAt, BUDGET
 const stats = new Map<string, TokenStats>();
 for (const [contract, cached] of cache) {
   const price = prices[contract];
+  // Counts cached before 4 Nov 2026 stored NearBlocks' 0 as a fact; it means unknown.
+  const { holders, atLeast } = mergeHolderCounts(cached.holders, cached.listedHolders);
   stats.set(contract, {
     fdvUsd: cached.supply && price ? marketCapUsd(cached.supply, price.decimal, Number(price.price)) : null,
     top10Pct: cached.top10Pct ?? null,
-    holders: cached.holders ?? null,
+    holders,
+    holdersAtLeast: atLeast,
+    symbol: cached.symbol ?? null,
+    name: cached.name ?? null,
   });
 }
 
@@ -288,6 +335,7 @@ console.log(
     withMarketCap: index.rows.filter((row) => row[5] !== null).length,
     withTop10: index.rows.filter((row) => row[6] !== null).length,
     withHolders: index.rows.filter((row) => row[7] !== null).length,
+    selfDeclaredTests: Object.values(index.notes ?? {}).filter((note) => note.selfDeclaredTest).length,
     fingerprint: edition.fingerprint,
     trackRecordWindows: windows.map((window) => window.days),
     seconds: Math.round((Date.now() - now) / 1000),

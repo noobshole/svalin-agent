@@ -1,4 +1,4 @@
-import type { RatedTokenRow } from "@svalin-agent/shared";
+import type { RatedTokenRow, TokenNote } from "@svalin-agent/shared";
 
 import { ApiError } from "../lib/errors.js";
 import { callFetch } from "../lib/fetch.js";
@@ -6,7 +6,19 @@ import { callFetch } from "../lib/fetch.js";
 type FetchLike = typeof fetch;
 
 /** The latest edition, parsed once for single-token lookups. */
-export type ParsedIndex = { generatedAt: string; methodology: string; byContract: Map<string, RatedTokenRow> };
+export type ParsedIndex = {
+  generatedAt: string;
+  methodology: string;
+  byContract: Map<string, RatedTokenRow>;
+  notes: Map<string, TokenNote>;
+};
+
+/** One token in the latest edition: its row and note, if any, and which edition it is. */
+export type IndexedToken = {
+  row: RatedTokenRow | undefined;
+  note: TokenNote | undefined;
+  edition: { generatedAt: string; methodology: string };
+};
 
 /** Something that returns the latest published index edition as JSON text. */
 export interface IndexFeed {
@@ -16,11 +28,12 @@ export interface IndexFeed {
 }
 
 export function parseIndex(text: string): ParsedIndex {
-  const body = JSON.parse(text) as { generatedAt?: string; methodology?: string; rows?: RatedTokenRow[] };
+  const body = JSON.parse(text) as { generatedAt?: string; methodology?: string; rows?: RatedTokenRow[]; notes?: Record<string, TokenNote> };
   return {
     generatedAt: body.generatedAt ?? "",
     methodology: body.methodology ?? "",
     byContract: new Map((body.rows ?? []).map((row) => [row[0], row])),
+    notes: new Map(Object.entries(body.notes ?? {})),
   };
 }
 
@@ -28,9 +41,14 @@ export function parseIndex(text: string): ParsedIndex {
  * One token's row in the latest edition (undefined if it is not graded there), with the edition.
  * Rejects when the edition cannot be fetched, so callers can tell "not graded" from "unavailable".
  */
-export async function indexedToken(feed: IndexFeed, contract: string): Promise<{ index: ParsedIndex; row: RatedTokenRow | undefined }> {
+export async function indexedToken(feed: IndexFeed, contract: string): Promise<IndexedToken & { index: ParsedIndex }> {
   const index = feed.parsed ? await feed.parsed() : parseIndex(await feed.latest());
-  return { index, row: index.byContract.get(contract) };
+  return {
+    index,
+    row: index.byContract.get(contract),
+    note: index.notes.get(contract),
+    edition: { generatedAt: index.generatedAt, methodology: index.methodology },
+  };
 }
 
 /**

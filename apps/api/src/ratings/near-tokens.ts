@@ -1,7 +1,7 @@
 import { NEAR_BURN_ACCOUNTS, NEAR_SHARED_CUSTODY_ACCOUNTS, lookupToken } from "@svalin-agent/chain-config";
-import { BACKING_HOLD_MS, tokenGradeFor, type NearTokenIndex, type RatedTokenRow } from "@svalin-agent/shared";
+import { BACKING_HOLD_MS, tokenGradeFor, type NearTokenIndex, type RatedTokenRow, type TokenNote } from "@svalin-agent/shared";
 
-import { onChainLabel } from "../lib/text.js";
+import { declaresItselfATest, onChainLabel } from "../lib/text.js";
 import type { NearPriceList } from "../sources/near-source.js";
 
 /** v1 counts Ref's concentrated-liquidity pools and grades only backing that has held for 24 hours. */
@@ -46,13 +46,24 @@ export function heldDepth(history: BackingHistory, now: number): Map<string, num
   return held;
 }
 
-/** Market data for one token, looked up only for tokens with real backing. */
-export type TokenStats = { fdvUsd: number | null; top10Pct: number | null; holders: number | null };
+/**
+ * Market data for one token, looked up only for tokens with real backing. `symbol` and `name` are
+ * its on-chain metadata (`ft_metadata`); `holdersAtLeast` marks `holders` as a lower bound.
+ */
+export type TokenStats = {
+  fdvUsd: number | null;
+  top10Pct: number | null;
+  holders: number | null;
+  holdersAtLeast?: boolean;
+  symbol?: string | null;
+  name?: string | null;
+};
 
 /**
  * Grades every NEAR token Ref Finance prices, except registry tokens (wNEAR, stablecoins, liquid
- * staking), which are the yardstick. `depth` is `poolDepth` over Ref's pools: the registry-token
- * value in each token's pools, the same figure Svalin's reports use to cap long-tail holdings.
+ * staking and the two curated memecoins), which are the yardstick. `depth` is `poolDepth` over
+ * Ref's pools: the registry-token value in each token's pools, the same figure Svalin's reports
+ * use to cap long-tail holdings.
  */
 export function rateNearTokens(
   prices: NearPriceList,
@@ -61,14 +72,24 @@ export function rateNearTokens(
   now: Date = new Date(),
 ): NearTokenIndex {
   const rows: RatedTokenRow[] = [];
+  const notes: Record<string, TokenNote> = {};
 
   for (const [contract, entry] of Object.entries(prices)) {
     const priceUsd = Number(entry.price);
     if (lookupToken("near", contract) || !Number.isFinite(priceUsd) || priceUsd <= 0) continue;
     const backingUsd = Math.round(depth.get(contract) ?? 0);
-    // Agents read the Index too: a symbol written as instructions is shown as [hidden name].
-    const symbol = onChainLabel(entry.symbol, 24) ?? `${contract.slice(0, 10)}…`;
     const extra = stats.get(contract);
+    // Ref leaves many launchpad tokens without a symbol; the token's own metadata usually has one.
+    // Agents read the Index too: a symbol written as instructions is shown as [hidden name].
+    const symbol = onChainLabel(entry.symbol, 24) ?? onChainLabel(extra?.symbol ?? undefined, 24) ?? `${contract.slice(0, 10)}…`;
+    const note: TokenNote = {};
+    if (declaresItselfATest(extra?.name ?? undefined) || declaresItselfATest(extra?.symbol ?? undefined) || declaresItselfATest(entry.symbol)) {
+      note.selfDeclaredTest = true;
+      const name = onChainLabel(extra?.name ?? undefined, 64);
+      if (name) note.name = name;
+    }
+    if (extra?.holdersAtLeast && extra.holders !== null) note.holdersAtLeast = true;
+    if (Object.keys(note).length > 0) notes[contract] = note;
     rows.push([
       contract,
       symbol,
@@ -85,7 +106,44 @@ export function rateNearTokens(
   const counts = { A: 0, B: 0, C: 0, D: 0, F: 0 };
   for (const row of rows) counts[row[4]] += 1;
 
-  return { generatedAt: now.toISOString(), methodology: NEAR_TOKEN_METHODOLOGY, counts, rows };
+  return {
+    generatedAt: now.toISOString(),
+    methodology: NEAR_TOKEN_METHODOLOGY,
+    counts,
+    rows,
+    ...(Object.keys(notes).length > 0 ? { notes } : {}),
+  };
+}
+
+/**
+ * How many accounts in FastNEAR's largest-holders list hold some of the token: a lower bound on
+ * its holders, never a full count. The list stops at 100, and it can miss holders even when it
+ * ends in an empty account (on 4 Nov 2026 it listed 99 APYS holders and a zero, while
+ * ekosupriono3.near held APYS on chain). Null for an empty list.
+ */
+export function holdersFromTop(holders: { balance: string }[]): number | null {
+  if (holders.length === 0) return null;
+  return holders.filter((holder) => toBigIntOrZero(holder.balance) > 0n).length;
+}
+
+/**
+ * One holder count from both sources. NearBlocks counts every holder but answers 0 for tokens it
+ * does not index (launchpad tokens, for one), and its counts change rarely, so a 0 from it is
+ * unknown, not zero. FastNEAR's list gives a lower bound; it stands when NearBlocks has no count
+ * or a count below it.
+ */
+export function mergeHolderCounts(nearBlocks: number | null | undefined, listed: number | null | undefined) {
+  if (nearBlocks && nearBlocks >= (listed ?? 0)) return { holders: nearBlocks, atLeast: false };
+  if (listed && listed > 0) return { holders: listed, atLeast: true };
+  return { holders: null, atLeast: false };
+}
+
+function toBigIntOrZero(value: string): bigint {
+  try {
+    return BigInt(value);
+  } catch {
+    return 0n;
+  }
 }
 
 /** Market cap at the quoted price: total supply (raw units) scaled by decimals, times price. */

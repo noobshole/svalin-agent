@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { supportedChainKeySchema, tokenAddressSchema, walletAddressSchema } from "./address.js";
+import { tokenGradeSchema } from "./token-index.js";
 
 /**
  * How a token is classified for risk purposes. Assigned from a curated registry;
@@ -36,6 +37,12 @@ export const portfolioAssetSchema = z.object({
    * its pools. Absent or null when the market depth is not known.
    */
   exitValueUsd: z.number().nonnegative().nullable().optional(),
+  /**
+   * NEAR tokens outside the curated list: the Svalin Index liquidity grade of the backing the
+   * position is valued against (24-hour held backing, capped by live pool depth). Null when the
+   * Index could not be read; then the token counts as ungraded.
+   */
+  liquidityGrade: tokenGradeSchema.nullable().optional(),
 });
 
 export const portfolioOverviewSchema = z.object({

@@ -212,7 +212,7 @@ describe("free surface", () => {
     expect(response.status).toBe(422);
     const body = await response.json();
     expect(body).toMatchObject({ code: "token_address", token });
-    expect(body.hint).toContain("grade C: $44,627");
+    expect(body.hint).toContain("Liquidity grade C in the Svalin Index: $44,627");
   });
 
   it("rejects EVM addresses, which Svalin no longer serves", async () => {

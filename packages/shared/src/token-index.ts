@@ -79,6 +79,19 @@ export const indexProvenanceSchema = z.object({
   inputs: z.object({ pricesSha256: sha256Schema, poolsSha256: sha256Schema }),
 });
 
+/**
+ * What a row cannot say about a token, kept beside the rows for the few tokens it applies to.
+ * Like market data, notes come from outside Ref Finance and are not part of the grade.
+ */
+export const tokenNoteSchema = z.object({
+  /** The token's on-chain name, given when it warns about the token itself. */
+  name: z.string().optional(),
+  /** The token's own name or symbol says it is a test, or not to be bought. */
+  selfDeclaredTest: z.literal(true).optional(),
+  /** The holder count is a lower bound, from FastNEAR's list of the largest holders, where NearBlocks has no count. */
+  holdersAtLeast: z.literal(true).optional(),
+});
+
 /** The published index file. Rows instead of objects keep it small enough for a browser. */
 export const nearTokenIndexSchema = z.object({
   generatedAt: z.string().datetime(),
@@ -86,6 +99,8 @@ export const nearTokenIndexSchema = z.object({
   counts: z.object({ A: z.number().int(), B: z.number().int(), C: z.number().int(), D: z.number().int(), F: z.number().int() }),
   provenance: indexProvenanceSchema.optional(),
   rows: z.array(ratedTokenSchema),
+  /** Per-token notes by contract, from 4 November 2026. */
+  notes: z.record(z.string(), tokenNoteSchema).optional(),
 });
 
 /**
@@ -160,6 +175,11 @@ export const tokenExitSchema = z.object({
   marketCapUsd: z.number().nonnegative().nullable(),
   top10Pct: z.number().min(0).max(100).nullable(),
   holders: z.number().int().nonnegative().nullable(),
+  /** `holders` is a lower bound. */
+  holdersAtLeast: z.literal(true).optional(),
+  /** The token's own name says it is a test, or not to be bought; `name` is that on-chain name. */
+  selfDeclaredTest: z.literal(true).optional(),
+  name: z.string().optional(),
   exit: z.object({
     quotes: z.array(exitQuoteSchema),
     /** The largest sales that lose at most 1% and 5%: how much can leave near the quoted price. */
@@ -176,6 +196,7 @@ export type TokenGrade = z.infer<typeof tokenGradeSchema>;
 export type ExitQuote = z.infer<typeof exitQuoteSchema>;
 export type TokenExit = z.infer<typeof tokenExitSchema>;
 export type RatedTokenRow = z.infer<typeof ratedTokenSchema>;
+export type TokenNote = z.infer<typeof tokenNoteSchema>;
 export type GradeMigration = z.infer<typeof gradeMigrationSchema>;
 export type TrackRecord = z.infer<typeof trackRecordSchema>;
 export type NearTokenIndex = z.infer<typeof nearTokenIndexSchema>;

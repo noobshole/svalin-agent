@@ -6,14 +6,16 @@ import {
   tokenGradeFor,
   type ChainFamily,
   type PortfolioOverview,
-  type RatedTokenRow,
   type RecipientKind,
+  type TokenGrade,
+  type TokenNotice,
 } from "@svalin-agent/shared";
 
 import { ApiError, tokenAddressError } from "../lib/errors.js";
 import type { RecipientSignals } from "../risk/check.js";
 import { callFetch } from "../lib/fetch.js";
 import { HIDDEN_NAME, onChainLabel } from "../lib/text.js";
+import type { IndexedToken } from "./index-feed.js";
 import { finaliseAssets, formatUnits, round, type PortfolioSource } from "./portfolio-source.js";
 
 /** The subset of FastNEAR's `GET /v1/account/{id}/full` response Svalin relies on. */
@@ -39,6 +41,9 @@ export type RefDclPool = { token_x: string; token_y: string; total_x: string; to
 
 /** NEAR delegated to a validator staking pool, in yoctoNEAR. */
 export type NearPoolStake = { poolId: string; yocto: bigint };
+
+/** A held token's liquidity grade from the Svalin Index, and the Index's symbol for it if it has one. */
+export type IndexGrade = { grade: TokenGrade; symbol: string | null };
 
 const NEAR_DECIMALS = 24;
 const MAX_POOLS = 10;
@@ -66,8 +71,11 @@ export type NearSourceOptions = {
    * Index edition (`near-dcl-depth.json`). Paging the DCL contract does not fit in a request.
    */
   dclDepthUrl?: string;
-  /** The token's row in the latest published Svalin Index, which carries its authoritative grade. */
-  indexRow?: (contract: string) => Promise<RatedTokenRow | undefined>;
+  /**
+   * The token in the latest published Svalin Index: its row, which carries its authoritative grade,
+   * its note and the edition. Rejects when the Index cannot be read.
+   */
+  indexToken?: (contract: string) => Promise<IndexedToken>;
   /**
    * FastNEAR transactions API base URL, e.g. https://tx.main.fastnear.com: account age, activity
    * and recent transfers for the recipient check.
@@ -124,33 +132,39 @@ export class NearPortfolioSource implements PortfolioSource {
     if (!account.state) {
       throw new ApiError(404, "account_not_found", "This NEAR account does not exist.");
     }
-    const [stakes, depth] = await Promise.all([
+    const [stakes, { depth, graded }] = await Promise.all([
       this.poolStakes(wallet, (account.pools ?? []).slice(0, MAX_POOLS)),
-      holdsUnvettedTokens(account, prices) ? this.heldDepthMap(account, prices) : new Map<string, number>(),
+      holdsUnvettedTokens(account, prices) ? this.heldDepthMap(account, prices) : { depth: new Map<string, number>(), graded: new Map() },
     ]);
-    return mapNearToOverview(wallet, account, prices, stakes, depth);
+    return mapNearToOverview(wallet, account, prices, stakes, depth, new Date(), graded);
   }
 
   /**
    * Live pool depth for the account's tokens, capped at the backing each has held for 24 hours in
    * the latest Index edition: a pool added this morning cannot make a wallet look richer, and one
    * pulled since the edition still lowers the value at once. A token too new for the Index counts
-   * as unpriced. If the Index cannot be read, live depth alone sets the bound.
+   * as unpriced. Each capped token also gets the liquidity grade of its capped backing, and the
+   * Index's symbol for it. If the Index cannot be read, live depth alone sets the bound and no
+   * token is graded.
    */
-  private async heldDepthMap(account: FastNearAccount, prices: NearPriceList): Promise<Map<string, number>> {
+  private async heldDepthMap(account: FastNearAccount, prices: NearPriceList): Promise<{ depth: Map<string, number>; graded: Map<string, IndexGrade> }> {
     const live = await this.depthMap(prices);
-    if (!this.options.indexRow) return live;
+    if (!this.options.indexToken) return { depth: live, graded: new Map() };
     const capped = new Map(live);
+    const graded = new Map<string, IndexGrade>();
     try {
       for (const { contract_id: contract } of account.tokens ?? []) {
         if (lookupToken("near", contract) || !live.has(contract)) continue;
-        const held = (await this.options.indexRow(contract))?.[3] ?? 0;
-        capped.set(contract, Math.min(live.get(contract) ?? 0, held));
+        const { row } = await this.options.indexToken(contract);
+        const usd = Math.min(live.get(contract) ?? 0, row?.[3] ?? 0);
+        capped.set(contract, usd);
+        // The Index's placeholder for a token without a symbol ends in "…".
+        graded.set(contract, { grade: tokenGradeFor(Math.round(usd)), symbol: row && !row[1].endsWith("…") ? row[1] : null });
       }
     } catch {
-      return live;
+      return { depth: live, graded: new Map() };
     }
-    return capped;
+    return { depth: capped, graded };
   }
 
   async inspectRecipient(recipient: string, payer: string | null): Promise<RecipientSignals> {
@@ -310,22 +324,31 @@ export class NearPortfolioSource implements PortfolioSource {
     const symbol = known?.symbol ?? onChainLabel(prices[contract]?.symbol) ?? null;
     if (known) return tokenAddressError({ chain: "near", address: contract, symbol, grade: null, backingUsd: null });
 
-    if (this.options.indexRow) {
-      let row: RatedTokenRow | undefined;
-      let indexed = true;
+    if (this.options.indexToken) {
+      let indexed: IndexedToken | undefined;
       try {
-        row = await this.options.indexRow(contract);
+        indexed = await this.options.indexToken(contract);
       } catch {
-        indexed = false; // The Index is unreachable: fall back to live pool depth below.
+        // The Index is unreachable: fall back to live pool depth below.
       }
-      if (row) {
-        const notice = { chain: "near" as const, address: contract, symbol, grade: row[4], backingUsd: row[3] };
+      const row = indexed?.row;
+      if (indexed && row) {
+        const notice: TokenNotice = {
+          chain: "near",
+          address: contract,
+          // The Index fills in symbols Ref leaves out from the token's metadata; its placeholder ends in "…".
+          symbol: symbol ?? (row[1].endsWith("…") ? null : row[1]),
+          grade: row[4],
+          backingUsd: row[3],
+          edition: indexed.edition,
+          ...(indexed.note?.selfDeclaredTest ? { selfDeclaredTest: true as const } : {}),
+        };
         // Backing that is newer than 24 hours is on hold: say so, rather than calling it $0.
         const live = Math.round((await this.depthMap(prices).catch(() => new Map<string, number>())).get(contract) ?? 0);
         if (live > row[3] && tokenGradeFor(live) !== row[4]) {
           return tokenAddressError(
             notice,
-            `Svalin Index grade ${row[4]}: $${row[3].toLocaleString("en-US")} of backing has held for 24 hours. Its pools hold $${live.toLocaleString("en-US")} now; the rest counts once it has held for 24 hours.`,
+            `Liquidity grade ${row[4]} in the Svalin Index: $${row[3].toLocaleString("en-US")} of backing has held for 24 hours. Its pools hold $${live.toLocaleString("en-US")} now; the rest counts once it has held for 24 hours.`,
           );
         }
         return tokenAddressError(notice);
@@ -393,6 +416,8 @@ export class NearPortfolioSource implements PortfolioSource {
 /**
  * Pure mapping, exported for tests. `depth` comes from `poolDepth`: a token outside the registry
  * is valued at no more than its pools could pay out, and counts as unpriced if they hold nothing.
+ * `graded` gives those tokens' liquidity grades, and a symbol where Ref has none; a token without
+ * a grade is ungraded (null).
  */
 export function mapNearToOverview(
   wallet: string,
@@ -401,6 +426,7 @@ export function mapNearToOverview(
   stakes: NearPoolStake[],
   depth: ReadonlyMap<string, number>,
   now: Date = new Date(),
+  graded: ReadonlyMap<string, IndexGrade> = new Map(),
 ): PortfolioOverview {
   const drafts: Parameters<typeof finaliseAssets>[0] = [];
   let unpricedAssetCount = 0;
@@ -444,7 +470,10 @@ export function mapNearToOverview(
     if (raw <= 0n || !isNearAccountId(token.contract_id)) continue;
 
     const entry = prices[token.contract_id];
-    if (entry && onChainLabel(entry.symbol) === HIDDEN_NAME) hiddenNameCount += 1;
+    const indexed = graded.get(token.contract_id);
+    // Ref's symbol first; for a token Ref leaves unnamed, the one the Index read from its metadata.
+    const label = onChainLabel(entry?.symbol) ?? indexed?.symbol ?? undefined;
+    if (label === HIDDEN_NAME) hiddenNameCount += 1;
     const price = priceOf(prices, token.contract_id);
     if (!entry || price === null || !Number.isInteger(entry.decimal)) {
       unpricedAssetCount += 1;
@@ -467,7 +496,7 @@ export function mapNearToOverview(
       exitValueUsd = exitValue(quotedUsd, sellable);
     }
 
-    const symbol = known?.symbol ?? onChainLabel(entry.symbol) ?? `${token.contract_id.slice(0, 6)}…`;
+    const symbol = known?.symbol ?? label ?? `${token.contract_id.slice(0, 6)}…`;
     drafts.push({
       chain: "near",
       tokenAddress: token.contract_id,
@@ -478,6 +507,7 @@ export function mapNearToOverview(
       valueUsd,
       exitValueUsd: round(exitValueUsd, 2),
       category: categoriseToken("near", token.contract_id),
+      ...(known ? {} : { liquidityGrade: indexed?.grade ?? null }),
     });
   }
 

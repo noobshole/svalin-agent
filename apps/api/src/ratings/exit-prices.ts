@@ -7,6 +7,7 @@ import {
   type ExitQuote,
   type RatedTokenRow,
   type TokenExit,
+  type TokenNote,
 } from "@svalin-agent/shared";
 
 import type { ParsedIndex } from "../sources/index-feed.js";
@@ -33,9 +34,15 @@ export function exitQuote(priceUsd: number, backingUsd: number, saleUsd: number)
 
 /**
  * One token's exit prices, derived from an Index edition's backing alone, so anyone holding the
- * edition can recompute them. `extraSaleUsd` adds the caller's own sale size to the standard ones.
+ * edition can recompute them. `extraSaleUsd` adds the caller's own sale size to the standard ones;
+ * `note` carries what the edition notes about the token (a self-declared test, a lower-bound count).
  */
-export function tokenExit(row: RatedTokenRow, index: Pick<ParsedIndex, "generatedAt" | "methodology">, extraSaleUsd?: number): TokenExit {
+export function tokenExit(
+  row: RatedTokenRow,
+  index: Pick<ParsedIndex, "generatedAt" | "methodology">,
+  extraSaleUsd?: number,
+  note?: TokenNote,
+): TokenExit {
   const [contract, symbol, priceUsd, backingUsd, grade, marketCapUsd, top10Pct, holders] = row;
   const sizes = [...EXIT_SALE_SIZES_USD];
   if (extraSaleUsd !== undefined && !sizes.includes(extraSaleUsd)) sizes.push(extraSaleUsd);
@@ -50,6 +57,8 @@ export function tokenExit(row: RatedTokenRow, index: Pick<ParsedIndex, "generate
     marketCapUsd,
     top10Pct,
     holders,
+    ...(note?.holdersAtLeast ? { holdersAtLeast: true } : {}),
+    ...(note?.selfDeclaredTest ? { selfDeclaredTest: true, ...(note.name ? { name: note.name } : {}) } : {}),
     exit: {
       quotes: sizes.map((saleUsd) => exitQuote(priceUsd, backingUsd, saleUsd)),
       within1PctUsd: round(largestSale(backingUsd, 0.01), 2),

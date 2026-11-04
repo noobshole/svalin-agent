@@ -74,15 +74,23 @@ agent ◀── 200 risk report ────────────────
 Invalid addresses are rejected *before* the paywall, and failed responses (4xx/5xx), such as a
 NEAR account that does not exist, are never settled, so a caller is never charged for an error.
 A token address is not a wallet, so it gets `422` with code `token_address` instead of a score,
-free of charge. For a NEAR token the answer carries its Svalin Index grade:
+free of charge. For a NEAR token the answer carries its liquidity grade from the Svalin Index,
+with the edition it comes from:
 
 ```json
 {
   "error": "This is the JAMBO token, not a wallet. Send the address of a wallet that holds it.",
   "code": "token_address",
-  "token": { "chain": "near", "address": "jambo-1679.meme-cooking.near", "symbol": "JAMBO", "grade": "C", "backingUsd": 44430 }
+  "token": {
+    "chain": "near", "address": "jambo-1679.meme-cooking.near", "symbol": "JAMBO", "grade": "C", "backingUsd": 44430,
+    "edition": { "generatedAt": "2026-11-04T01:20:45.746Z", "methodology": "near-token-backing-v1" }
+  }
 }
 ```
+
+A liquidity grade (how much a sale of one token would lose) is not the same as a wallet's
+portfolio risk grade below (how risky the whole wallet is); see the
+[methodology](docs/RISK_METHODOLOGY.md).
 
 A trimmed risk report:
 
@@ -103,7 +111,7 @@ A trimmed risk report:
       "confidence": 64
     }
   ],
-  "methodologyVersion": "2026-10.8"
+  "methodologyVersion": "2026-11.1"
 }
 ```
 

@@ -9,6 +9,7 @@ import {
   type RiskReport,
   type RiskSeverity,
   type SupportedChainKey,
+  type TokenGrade,
 } from "@svalin-agent/shared";
 
 const NATIVE_SYMBOL: Record<SupportedChainKey, string> = { solana: "SOL", near: "NEAR" };
@@ -37,6 +38,14 @@ export const THRESHOLDS = {
 
 const WEIGHTS = { concentration: 45, stableBuffer: 20, longTail: 35 } as const;
 
+/**
+ * How much a long-tail token counts toward the long-tail term, by its Svalin Index liquidity grade:
+ * a token with real money behind it is less of a long shot than one with none. A token without a
+ * grade (Solana, or the Index unreadable) counts in full, like F. Curated memecoins count 0.6.
+ */
+export const LONG_TAIL_GRADE_WEIGHT: Record<TokenGrade, number> = { A: 0.25, B: 0.4, C: 0.6, D: 0.85, F: 1 };
+const MEME_WEIGHT = 0.6;
+
 type Exposure = { key: string; label: string; valueUsd: number; volatile: boolean };
 
 export function buildRiskReport(overview: PortfolioOverview, now: Date = new Date()): RiskReport {
@@ -59,6 +68,11 @@ export function buildRiskReport(overview: PortfolioOverview, now: Date = new Dat
   const majorPct = categoryPct("major");
   const memePct = categoryPct("meme");
   const longTailPct = categoryPct("long-tail");
+  const gradedLongTailPct = pctOf(
+    assets
+      .filter((asset) => asset.category === "long-tail")
+      .reduce((sum, asset) => sum + asset.valueUsd * LONG_TAIL_GRADE_WEIGHT[asset.liquidityGrade ?? "F"], 0),
+  );
 
   const largest = assets[0] ?? null;
   const exposures = groupExposures(assets);
@@ -96,7 +110,7 @@ export function buildRiskReport(overview: PortfolioOverview, now: Date = new Dat
       : {
           concentration: round(WEIGHTS.concentration * ramp(metrics.largestVolatilePosition?.pct ?? 0, 30, 80), 1),
           stableBuffer: round(WEIGHTS.stableBuffer * ramp(15 - stablecoinPct, 0, 15), 1),
-          longTail: round(WEIGHTS.longTail * ramp(longTailPct + 0.6 * memePct, 0, 50), 1),
+          longTail: round(WEIGHTS.longTail * ramp(gradedLongTailPct + MEME_WEIGHT * memePct, 0, 50), 1),
         };
 
   // A wallet with nothing priced has nothing to score. It gets no grade rather than an A, which
@@ -201,7 +215,8 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
       severity: severityBands(metrics.longTailPct, [30, 40]),
       title: `${pct(metrics.longTailPct)} sits in unvetted long-tail tokens`,
       summary:
-        "These tokens are outside Svalin's curated list of stablecoins, liquid-staking tokens and majors. Thin liquidity, unlock schedules and rug risk are common here.",
+        "These tokens are outside Svalin's curated list of stablecoins, liquid-staking tokens and majors. Thin liquidity, unlock schedules and rug risk are common here." +
+        (chain === "near" ? " On NEAR, each counts toward the score by its Svalin Index liquidity grade: less for real backing, in full for none." : ""),
       action: "Review each long-tail position's liquidity and holder concentration before adding more; size them as if they can go to zero.",
       value: metrics.longTailPct,
       threshold: THRESHOLDS.longTailPct,

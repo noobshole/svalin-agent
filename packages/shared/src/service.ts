@@ -60,6 +60,10 @@ export const tokenNoticeSchema = z.object({
   grade: tokenGradeSchema.nullable(),
   /** Trusted money in the token's pools, in USD. Null when it has no grade. */
   backingUsd: z.number().nullable(),
+  /** The Svalin Index edition the grade comes from, when it comes from one. */
+  edition: z.object({ generatedAt: z.string(), methodology: z.string() }).optional(),
+  /** The token's own name says it is a test, or not to be bought. */
+  selfDeclaredTest: z.literal(true).optional(),
 });
 
 export const apiErrorSchema = z.object({

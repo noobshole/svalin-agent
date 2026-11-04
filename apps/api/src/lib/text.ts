@@ -36,6 +36,17 @@ export function looksLikeInstructions(text: string): boolean {
   });
 }
 
+/**
+ * A name in which the token warns about itself: "Hoot Test 3 (Do not Buy)". Launchpads leave such
+ * test tokens trading under a real project's ticker, where they pass for the real token.
+ */
+const SELF_WARNING = /\b(test(ing)?|do\s*n[o']?t\s+buy|not\s+for\s+sale)\b/;
+
+export function declaresItselfATest(text: string | undefined): boolean {
+  const plain = text?.replace(HIDDEN, "").toLowerCase();
+  return plain !== undefined && SELF_WARNING.test(plain);
+}
+
 export function onChainLabel(value: string | undefined, max = 32): string | undefined {
   // Line breaks and tabs become spaces first, so removing hidden characters never joins words.
   const plain = value?.replace(/\s+/g, " ").replace(HIDDEN, "").replace(/ {2,}/g, " ").trim();

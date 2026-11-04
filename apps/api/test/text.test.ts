@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { HIDDEN_NAME, looksLikeInstructions, onChainLabel } from "../src/lib/text.js";
+import { HIDDEN_NAME, declaresItselfATest, looksLikeInstructions, onChainLabel } from "../src/lib/text.js";
 
 describe("on-chain text", () => {
   it("strips control, invisible and direction-changing characters", () => {
@@ -42,6 +42,20 @@ describe("hidden-instruction alarm", () => {
   it("leaves ordinary token names alone, including ones that sound like orders", () => {
     for (const name of ["USDC", "wNEAR", "SEND", "PayPal USD", "AI16Z", "Agent AI Token", "BLACKDRAGON", "Dogwifhat", "Claim", "token.v2"]) {
       expect([name, looksLikeInstructions(name)]).toEqual([name, false]);
+    }
+  });
+});
+
+describe("self-declared tests", () => {
+  it("spots a token whose own name says it is a test or not to be bought", () => {
+    for (const name of ["Hoot Test 3 (Do not Buy)", "TEST", "testing token", "Don't buy this", "DONT BUY", "Not for sale", "Te​st coin"]) {
+      expect([name, declaresItselfATest(name)]).toEqual([name, true]);
+    }
+  });
+
+  it("leaves words that only contain test alone", () => {
+    for (const name of ["Hoot", "Latest", "Contest", "Testnet Bridge", "Protest Coin", "Buy NEAR", undefined]) {
+      expect([name, declaresItselfATest(name)]).toEqual([name, false]);
     }
   });
 });
