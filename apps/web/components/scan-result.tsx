@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 
 import { FreeCallsLeft, FreeLimitReached } from "@/components/free-calls";
 import { ProReminder } from "@/components/pro-status";
-import { RiskReportView } from "@/components/risk-report";
+import { RiskReportView, checkedAt } from "@/components/risk-report";
 import { ScanForm } from "@/components/scan-form";
 import { gradeTone } from "@/components/token-index";
 import { getDemoRisk, type DemoResult } from "@/lib/api";
@@ -77,7 +77,10 @@ const linkClass = "text-foreground underline decoration-border underline-offset-
 
 /** The Wallet Scan page before an address is entered: what a scan answers, and an example. */
 const scanGives = [
-  { title: "A grade", body: "A to F, from how the money is spread: too much in one token, too little in stablecoins, too much that is hard to sell." },
+  {
+    title: "A portfolio risk grade",
+    body: "A to F, from how the money is spread: too much in one token, too little in stablecoins, too much that is hard to sell.",
+  },
   { title: "What is wrong", body: "Each problem in plain words, with a next step." },
   { title: "What it would fetch", body: "On NEAR, what everything would really sell for today, not just what the prices say." },
 ];
@@ -120,9 +123,18 @@ function TokenNoticeView({ token, message, hint }: { token: TokenNotice; message
       {token.grade !== null && token.backingUsd !== null ? (
         <>
           <p className="text-sm text-mutedForeground">
-            Svalin Index grade <span className={cn("font-mono font-medium", gradeTone[token.grade])}>{token.grade}</span>, with{" "}
+            Liquidity grade <span className={cn("font-mono font-medium", gradeTone[token.grade])}>{token.grade}</span> in the Svalin Index, with{" "}
             {formatUsd(token.backingUsd)} of real backing in its pools.
+            {token.edition ? (
+              <>
+                {" "}
+                Edition of {checkedAt(token.edition.generatedAt)}, method <span className="font-mono text-xs">{token.edition.methodology}</span>.
+              </>
+            ) : null}
           </p>
+          {token.selfDeclaredTest ? (
+            <p className="text-sm text-riskMedium">Its own on-chain name says it is a test or not to be bought. Check the contract address before trusting the ticker.</p>
+          ) : null}
           <Link
             className="w-fit text-sm text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
             href={`/ratings?q=${encodeURIComponent(token.address)}`}

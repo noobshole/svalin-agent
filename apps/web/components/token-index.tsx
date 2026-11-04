@@ -10,6 +10,7 @@ import {
   type NearTokenIndex,
   type RatedTokenRow,
   type TokenGrade,
+  type TokenNote,
 } from "@svalin-agent/shared";
 import { ChevronDown, Search } from "lucide-react";
 import Link from "next/link";
@@ -33,7 +34,15 @@ export const gradeTone: Record<TokenGrade, string> = {
 const GRADES: TokenGrade[] = ["A", "B", "C", "D", "F"];
 const FILTERS: ("All" | TokenGrade)[] = ["All", ...GRADES];
 const PAGE = 50;
-const COLUMNS = "md:grid-cols-[minmax(0,1fr)_3rem_6.5rem_6.5rem_6.5rem_5.5rem_5rem_7rem]";
+const COLUMNS = "md:grid-cols-[minmax(0,1fr)_6rem_6.5rem_6.5rem_6.5rem_5.5rem_5rem_7rem]";
+
+type Notes = Record<string, TokenNote>;
+type Edition = Pick<NearTokenIndex, "generatedAt" | "methodology">;
+
+/** "4 Nov 2026, 01:20": when an edition was built, in UTC. */
+function editionTime(generatedAt: string) {
+  return new Date(generatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
+}
 
 /**
  * The latest Svalin Index edition, loaded from the API: the summary, then `story`, then the table.
@@ -85,7 +94,7 @@ export function TokenIndex({ story }: { story: ReactNode }) {
             fetch.
           </p>
         </div>
-        <TokenTable rows={index.rows} />
+        <TokenTable edition={index} notes={index.notes ?? {}} rows={index.rows} />
       </section>
     </div>
   );
@@ -94,7 +103,7 @@ export function TokenIndex({ story }: { story: ReactNode }) {
 function Summary({ index }: { index: NearTokenIndex }) {
   const total = index.rows.length;
   const noBacking = index.rows.filter((row) => row[3] === 0).length;
-  const edition = new Date(index.generatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
+  const edition = editionTime(index.generatedAt);
   const stats = [
     { label: "NEAR tokens graded", value: total.toLocaleString("en-US"), sub: "every token Ref Finance prices" },
     { label: "Grade F", value: `${Math.round((index.counts.F / total) * 100)}%`, sub: `${index.counts.F.toLocaleString("en-US")} tokens under $3K of real backing` },
@@ -112,7 +121,8 @@ function Summary({ index }: { index: NearTokenIndex }) {
     <section className="grid gap-4">
       <div className="flex flex-col gap-1 text-sm text-mutedForeground sm:flex-row sm:flex-wrap sm:gap-x-4">
         <span>
-          Edition of {edition} UTC, {ageLabel(index.generatedAt)}. A new one comes every few hours.
+          Edition of {edition} UTC, {ageLabel(index.generatedAt)}, method <span className="font-mono text-xs">{index.methodology}</span>. A new one comes
+          every few hours.
         </span>
         {provenance ? (
           <span>
@@ -192,7 +202,7 @@ function LoudestClaim({ rows }: { rows: RatedTokenRow[] }) {
   );
 }
 
-function TokenTable({ rows }: { rows: RatedTokenRow[] }) {
+function TokenTable({ rows, notes, edition }: { rows: RatedTokenRow[]; notes: Notes; edition: Edition }) {
   // Rendered only in the browser, once the edition has loaded, so the URL can be read directly.
   // The scanner links here with ?q=<contract> when someone scans a token instead of a wallet.
   const [linked] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
@@ -253,7 +263,7 @@ function TokenTable({ rows }: { rows: RatedTokenRow[] }) {
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
         <div className={cn("hidden gap-4 border-b border-border px-5 py-2.5 text-xs font-medium text-mutedForeground md:grid", COLUMNS)}>
           <span>Token</span>
-          <span>Grade</span>
+          <span>Liquidity grade</span>
           <span className="text-right">Price</span>
           <span className="text-right">Market cap</span>
           <span className="text-right">Real backing</span>
@@ -267,6 +277,7 @@ function TokenTable({ rows }: { rows: RatedTokenRow[] }) {
         ) : (
           filtered.slice(0, shown).map((row, position) => {
             const [contract, symbol, priceUsd, backingUsd, rowGrade, marketCap, top10, holders] = row;
+            const note = notes[contract];
             // A scanned token arrives with ?q=<contract> and opens on its exit prices.
             return (
               <details className={cn("group", position > 0 && "border-t border-border")} key={contract} open={contract === linked}>
@@ -280,6 +291,14 @@ function TokenTable({ rows }: { rows: RatedTokenRow[] }) {
                   <div className="min-w-0">
                     <p className="flex items-center gap-1.5 text-sm font-medium">
                       <span className="truncate">{symbol}</span>
+                      {note?.selfDeclaredTest ? (
+                        <span
+                          className="shrink-0 rounded border border-riskMedium/50 px-1.5 text-xs font-normal text-riskMedium"
+                          title={note.name ? `Its on-chain name: ${note.name}` : "Its own name says it is a test"}
+                        >
+                          Test token
+                        </span>
+                      ) : null}
                       <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-subtleForeground transition-transform group-open:rotate-180" />
                     </p>
                     <p className="truncate font-mono text-xs text-subtleForeground">{contract}</p>
@@ -293,11 +312,11 @@ function TokenTable({ rows }: { rows: RatedTokenRow[] }) {
                     label="Top 10 own"
                     value={top10 === null ? "—" : `${top10.toFixed(top10 < 10 ? 1 : 0)}%`}
                   />
-                  {/* Zero means the count could not be read (bridged tokens, for one), not that nobody holds it. */}
-                  <Cell label="Holders" value={!holders ? "—" : holders.toLocaleString("en-US")} />
+                  {/* Editions before 4 Nov 2026 record 0 when the count could not be read: unknown, not nobody. */}
+                  <Cell label="Holders" value={!holders ? "—" : `${holders.toLocaleString("en-US")}${note?.holdersAtLeast ? "+" : ""}`} />
                   <Cell label="$10K sale fetches" value={backingUsd > 0 ? formatUsd(saleProceeds(backingUsd, 10_000)) : "nothing"} />
                 </summary>
-                <ExitPanel row={row} />
+                <ExitPanel edition={edition} note={note} row={row} />
               </details>
             );
           })
@@ -333,8 +352,8 @@ function Cell({ label, value, flagged = false }: { label: string; value: string;
  * A token's exit prices: what selling it would actually fetch, how much can be sold near the
  * quoted price, and what the whole supply could fetch. The same numbers the API returns.
  */
-function ExitPanel({ row }: { row: RatedTokenRow }) {
-  const [, , priceUsd, backingUsd, , marketCap] = row;
+function ExitPanel({ row, note, edition }: { row: RatedTokenRow; note: TokenNote | undefined; edition: Edition }) {
+  const [, , priceUsd, backingUsd, grade, marketCap] = row;
   const pro = isRunning(useProPass().status);
   const backed = backingUsd > 0;
   const wholeSupply = !backed ? 0 : marketCap === null ? null : saleProceeds(backingUsd, marketCap);
@@ -350,6 +369,16 @@ function ExitPanel({ row }: { row: RatedTokenRow }) {
 
   return (
     <div className="grid gap-4 border-t border-border px-5 py-4">
+      <p className="text-sm text-mutedForeground">
+        Liquidity grade <span className={cn("font-mono font-medium", gradeTone[grade])}>{grade}</span> in the edition of {editionTime(edition.generatedAt)} UTC
+        (<span className="font-mono text-xs">{edition.methodology}</span>). It measures how much a sale would lose, not whether the project is good.
+      </p>
+      {note?.selfDeclaredTest ? (
+        <p className="text-sm text-riskMedium">
+          Its own on-chain name{note.name ? <> is “{note.name}”</> : " says it is a test"}. Test tokens often trade under a real project’s ticker; check the
+          contract address.
+        </p>
+      ) : null}
       <p className="eyebrow">Exit prices</p>
       <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
         {EXIT_SALE_SIZES_USD.map((saleUsd) => {

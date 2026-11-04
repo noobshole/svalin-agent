@@ -48,7 +48,7 @@ export default function RatingsPage() {
 
       <section className="grid gap-8 border-t border-border pt-12 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="grid content-start gap-3 text-sm leading-6 text-mutedForeground">
-          <h2 className="text-2xl font-medium tracking-tight text-foreground">How grades work</h2>
+          <h2 className="text-2xl font-medium tracking-tight text-foreground">How liquidity grades work</h2>
           <p>
             <span className="text-foreground">Real backing</span> is the money a token&apos;s trading pools actually hold in tokens Svalin trusts,
             such as NEAR and USDC. Selling a token can never take out more than that, so a price cannot be propped up without real money.
@@ -62,7 +62,8 @@ export default function RatingsPage() {
           <p>
             <span className="text-foreground">Market cap</span> is the quoted price times total supply, so a token with no backing can claim any
             number. <span className="text-foreground">Top 10 own</span> is the share held by the largest holders, leaving out exchange pools and
-            bridges.
+            bridges. <span className="text-foreground">Holders</span> with a + is a lower bound, and a token marked{" "}
+            <span className="text-foreground">Test token</span> says so in its own on-chain name.
           </p>
           <p>
             Grades describe how sellable a token is, not whether its project is good, and they are not financial advice. The index is rebuilt
@@ -78,7 +79,8 @@ export default function RatingsPage() {
             repository.
           </p>
           <p>
-            The same check runs inside every Svalin wallet report, so a junk token cannot make a wallet look rich.{" "}
+            The same check runs inside every Svalin wallet report, so a junk token cannot make a wallet look rich, and a token&apos;s liquidity
+            grade sets how much it adds to the wallet&apos;s portfolio risk.{" "}
             <Link className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/scan">
               Scan a wallet
             </Link>

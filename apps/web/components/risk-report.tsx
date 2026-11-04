@@ -57,7 +57,7 @@ export function GradeMark({ report, size = "lg" }: { report: RiskReport; size?: 
         {grade ?? "–"}
       </span>
       <div className="pb-1">
-        <p className="text-sm font-medium">{level ? `${level.charAt(0).toUpperCase()}${level.slice(1)} risk` : "Not rated"}</p>
+        <p className="text-sm font-medium">{level ? `${level.charAt(0).toUpperCase()}${level.slice(1)} portfolio risk` : "Not rated"}</p>
         <p className="font-mono text-xs text-mutedForeground">{score === null ? "Nothing priced to score" : `Score ${score}/100`}</p>
       </div>
     </div>
