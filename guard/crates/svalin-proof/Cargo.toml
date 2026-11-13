@@ -1,0 +1,11 @@
+[package]
+name = "svalin-proof"
+description = "Svalin Index proofs: one leaf per rated token and a SHA-256 Merkle tree per sealed edition, shared by the contracts and the tools."
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/noobshole/svalin-guard"
+publish = false
+
+[dev-dependencies]
+sha2 = "=0.10.9"

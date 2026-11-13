@@ -1,0 +1,20 @@
+[package]
+name = "svalin-checker"
+description = "Svalin's payee check for Svalin Guard: OutLayer runs it inside a TEE and the vault reads its answer."
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/noobshole/svalin-guard"
+publish = false
+
+[[bin]]
+name = "svalin-checker"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP exists only inside the WASI runtime; native builds run the tests with a fake RPC.
+[target.'cfg(target_os = "wasi")'.dependencies]
+wasi-http-client = "=0.2.1"

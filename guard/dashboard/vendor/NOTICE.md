@@ -1,0 +1,32 @@
+# Bundled third-party code
+
+`near-connect-0.11.4.mjs` is [@hot-labs/near-connect](https://www.npmjs.com/package/@hot-labs/near-connect)
+0.11.4 (source: https://github.com/hot-dao/near-selector), the wallet connector NEAR's documentation
+uses for web apps. It is the browser module jsDelivr builds from the npm package
+(`https://cdn.jsdelivr.net/npm/@hot-labs/near-connect@0.11.4/+esm`), kept here unchanged so the
+dashboard loads no script from another site:
+
+```
+sha256 dc3219fa151bb3cb97a983b8c4afa93face8228f3775e76e5a8925dda2ae7915
+```
+
+The package declares the MIT License in its `package.json`; it publishes no separate license file.
+
+> MIT License
+>
+> Copyright (c) the authors of @hot-labs/near-connect
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+> associated documentation files (the "Software"), to deal in the Software without restriction,
+> including without limitation the rights to use, copy, modify, merge, publish, distribute,
+> sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or
+> substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+> NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+> NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+> OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+> CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

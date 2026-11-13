@@ -1,0 +1,30 @@
+{
+  "token": "3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af",
+  "checker": {
+    "outlayer": "outlayer.testnet",
+    "wasm_url": "https://test.fastfs.io/svalin-demo.testnet/outlayer.testnet/9f51659f2b73aedd5c77965d7bcbabe04867ad6f9143d56970f37b493aa6d942.wasm",
+    "wasm_hash": "9f51659f2b73aedd5c77965d7bcbabe04867ad6f9143d56970f37b493aa6d942",
+    "min_age_ms": 86400000
+  },
+  "buying": {
+    "registry": "svalin-ratings-v1.testnet",
+    "methodology": "near-token-backing-v1",
+    "min_grade": "D",
+    "max_age_days": 2,
+    "market": "market.svalin-demo.testnet",
+    "fee_bps": 10,
+    "fee_account": "svalin-ops.testnet",
+    "pools": [
+      { "token": "token.rhealab.near", "pool_id": 1, "min_out_per_million": "1" },
+      { "token": "hoot-8ecf65.launchpad.justhoot.near", "pool_id": 1, "min_out_per_million": "1" }
+    ],
+    "market_returns_tokens": false
+  },
+  "solana": {
+    "signer": "v1.signer-prod.testnet",
+    "path": "solana-1",
+    "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+    "mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+    "decimals": 6
+  }
+}

@@ -1,0 +1,986 @@
+/* The Svalin website's look: stone, soft black, slate and one orange for the main action. One
+   typeface, and system mono only for addresses and code. Other colour carries meaning only: paid,
+   held, refused. It follows the visitor's system until they use the switch in the header. */
+:root {
+  color-scheme: light;
+  --background: 24 18.5% 89.4%;
+  --surface-2: 24 16% 84%;
+  --foreground: 220 12% 10%;
+  --muted-foreground: 220 9% 30%;
+  --subtle-foreground: 220 8% 38%;
+  --soft-ink: 220 32% 40.4%;
+  --border: 24 12% 80%;
+  --border-strong: 24 8% 64%;
+  --primary: 21.4 100% 59.4%;
+  --primary-foreground: 220 12% 10%;
+  --primary-hover: 21 100% 53%;
+  --risk-low: 158 45% 26%;
+  --risk-medium: 30 90% 30%;
+  --risk-high: 14 85% 38%;
+  --font-sans: "Jost", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --gut: clamp(16px, 3.6vw, 96px);
+  --gap: clamp(20px, 2.6vw, 64px);
+  --page-max: 2560px;
+  --header: 4.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --background: 220 10% 8%;
+    --surface-2: 220 9% 14%;
+    --foreground: 24 18.5% 89.4%;
+    --muted-foreground: 24 8% 72%;
+    --subtle-foreground: 24 6% 62%;
+    --soft-ink: 220 42% 72%;
+    --border: 220 8% 20%;
+    --border-strong: 220 7% 36%;
+    --primary-foreground: 220 12% 8%;
+    --primary-hover: 21 100% 66%;
+    --risk-low: 158 45% 62%;
+    --risk-medium: 36 85% 65%;
+    --risk-high: 18 100% 68%;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: 220 10% 8%;
+  --surface-2: 220 9% 14%;
+  --foreground: 24 18.5% 89.4%;
+  --muted-foreground: 24 8% 72%;
+  --subtle-foreground: 24 6% 62%;
+  --soft-ink: 220 42% 72%;
+  --border: 220 8% 20%;
+  --border-strong: 220 7% 36%;
+  --primary-foreground: 220 12% 8%;
+  --primary-hover: 21 100% 66%;
+  --risk-low: 158 45% 62%;
+  --risk-medium: 36 85% 65%;
+  --risk-high: 18 100% 68%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: hsl(var(--border));
+}
+
+html {
+  background: hsl(var(--background));
+  font-size: clamp(16px, calc(0.625vw + 7px), 21px);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+p,
+li,
+dd {
+  text-wrap: pretty;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.link,
+td a {
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--border-strong));
+  text-underline-offset: 5px;
+}
+
+a.link:hover,
+td a:hover {
+  text-decoration-color: currentColor;
+}
+
+:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.3);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 300;
+}
+
+h1 {
+  font-size: clamp(2.25rem, 4.4vw, 5rem);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+h2 {
+  font-size: clamp(30px, 3vw, 3.5rem);
+  line-height: 1.12;
+  letter-spacing: -0.022em;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+.wrap {
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding-left: max(var(--gut), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--gut), env(safe-area-inset-right, 0px));
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.top-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--header);
+  padding-block: 12px;
+}
+
+.brand {
+  display: inline-flex;
+  gap: 0.625rem;
+  align-items: center;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.brand svg {
+  width: 26px;
+  height: 26px;
+}
+
+.brand > span {
+  position: relative;
+  top: -2px;
+}
+
+.brand .dim {
+  color: hsl(var(--soft-ink));
+}
+
+.top-tools {
+  display: flex;
+  flex: 1 1 18rem;
+  gap: 16px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.pick {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  max-width: 30rem;
+}
+
+.pick input {
+  flex: 1;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 0;
+  border-bottom: 2px solid hsl(var(--foreground));
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: 0.9375rem var(--font-mono);
+}
+
+.pick input:focus {
+  border-bottom-color: hsl(var(--primary));
+}
+
+.pick input::placeholder {
+  color: hsl(var(--subtle-foreground));
+  font-family: var(--font-sans);
+}
+
+.theme {
+  display: inline-flex;
+  flex: none;
+  margin: -8px;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.theme svg {
+  width: 22px;
+  height: 22px;
+}
+
+main.wrap {
+  display: grid;
+  gap: clamp(56px, 7vw, 112px);
+  padding-top: clamp(24px, 4vw, 56px);
+  padding-bottom: clamp(64px, 8vw, 112px);
+}
+
+.intro {
+  display: grid;
+  gap: 14px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: hsl(var(--soft-ink));
+}
+
+.lede {
+  max-width: 34em;
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: clamp(1.125rem, 1.45vw, 1.5rem);
+  line-height: 1.5;
+}
+
+.lede strong {
+  color: hsl(var(--foreground));
+  font-weight: 500;
+}
+
+.lede strong.tone-refused {
+  color: hsl(var(--risk-high));
+}
+
+/* A vault's name is an address, not a headline: smaller than the page titles, and set flush left. */
+#title {
+  margin-left: -0.04em;
+  font-size: clamp(1.75rem, 3vw, 3rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+/* Where to send money to an empty vault: one short line, then each address on its own row. */
+.fund {
+  display: grid;
+  gap: 8px;
+  max-width: 51em;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9375rem;
+}
+
+.fund__lead {
+  margin: 0;
+}
+
+.fund__list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.fund__list dt {
+  color: hsl(var(--subtle-foreground));
+}
+
+.fund__list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.updated {
+  margin: 0;
+  color: hsl(var(--subtle-foreground));
+  font-size: 0.9375rem;
+}
+
+.numbers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+}
+
+@media (min-width: 1024px) {
+  .numbers {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  /* A vault that also pays on Solana has a fifth number. */
+  .numbers:has(.number:nth-child(5)) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  /* Five across leaves each number less room: a balance like 19.998 USDC stays on one line. */
+  .numbers:has(.number:nth-child(5)) .value {
+    font-size: clamp(1.5rem, 2.35vw, 2.875rem);
+  }
+}
+
+.number {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 2px solid hsl(var(--foreground));
+}
+
+.number .value {
+  font-size: clamp(1.75rem, 3vw, 3.5rem);
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.number .label {
+  color: hsl(var(--muted-foreground));
+  font-size: 1rem;
+}
+
+.block {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.note {
+  max-width: 46rem;
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+th {
+  padding: 8px 20px 8px 0;
+  border-bottom: 2px solid hsl(var(--foreground));
+  font-weight: 500;
+  text-align: left;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+td {
+  padding: 13px 20px 13px 0;
+  border-bottom: 1px solid hsl(var(--border));
+  vertical-align: top;
+}
+
+th:last-child,
+td:last-child {
+  padding-right: 0;
+}
+
+td.when {
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+
+td.tx {
+  white-space: nowrap;
+}
+
+td.what {
+  min-width: 16rem;
+}
+
+td.verdict {
+  min-width: 14rem;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+.sub {
+  display: block;
+  margin-top: 2px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+
+.code {
+  color: hsl(var(--subtle-foreground));
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.outcome {
+  font-weight: 500;
+}
+
+.tone-paid {
+  color: hsl(var(--risk-low));
+}
+
+.tone-held {
+  color: hsl(var(--risk-medium));
+}
+
+.tone-refused {
+  color: hsl(var(--risk-high));
+}
+
+.tone-quiet {
+  color: hsl(var(--muted-foreground));
+}
+
+.held-list {
+  display: grid;
+}
+
+.held {
+  display: grid;
+  gap: 6px;
+  padding-block: 18px;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.held .head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.held p {
+  margin: 0;
+  font-size: 1rem;
+}
+
+details {
+  margin-top: 6px;
+}
+
+details summary {
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+details[open] summary {
+  margin-bottom: 10px;
+}
+
+.wallet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  font-size: 1rem;
+}
+
+.wallet .sub {
+  flex-basis: 100%;
+}
+
+.pick button,
+.wallet button,
+.actions button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1px solid hsl(var(--foreground));
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.pick button:hover,
+.wallet button:hover,
+.actions button:hover {
+  background: hsl(var(--surface-2));
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.wallet button.primary,
+.actions button.primary {
+  padding: 0 1.25rem;
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 500;
+}
+
+.wallet button.primary:hover,
+.actions button.primary:hover {
+  border-color: hsl(var(--primary-hover));
+  background: hsl(var(--primary-hover));
+}
+
+.wallet button.danger,
+.actions button.danger {
+  border-color: hsl(var(--risk-high));
+  color: hsl(var(--risk-high));
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.command {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.command .row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9375rem;
+}
+
+.command button {
+  padding: 2px 10px;
+  border: 1px solid hsl(var(--border-strong));
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+pre {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  background: hsl(var(--surface-2));
+  font: 0.8125rem/1.5 var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+dl.rules {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  margin: 0;
+  border-top: 2px solid hsl(var(--foreground));
+}
+
+dl.rules dt,
+dl.rules dd {
+  margin: 0;
+  padding-block: 13px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+dl.rules dt {
+  padding-right: 16px;
+  color: hsl(var(--muted-foreground));
+}
+
+dl.rules dd {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  dl.rules {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  dl.rules dt {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  dl.rules dd {
+    padding-top: 2px;
+  }
+
+  .top-tools {
+    flex-basis: 100%;
+  }
+
+  .pick {
+    max-width: none;
+  }
+
+  /* Each table row becomes a short stack, so nothing scrolls sideways on a phone. */
+  .table-wrap thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .table-wrap table,
+  .table-wrap tbody,
+  .table-wrap tr,
+  .table-wrap td {
+    display: block;
+    width: auto;
+  }
+
+  .table-wrap tr {
+    padding-block: 14px;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .table-wrap td {
+    min-width: 0;
+    padding: 2px 0;
+    border-bottom: 0;
+    white-space: normal;
+  }
+
+  .table-wrap td:first-child {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9375rem;
+  }
+}
+
+.foot {
+  padding-top: 24px;
+  padding-bottom: 40px;
+  color: hsl(var(--subtle-foreground));
+  font-size: 0.9375rem;
+}
+
+.foot::before {
+  display: block;
+  margin-bottom: 24px;
+  border-top: 1px solid hsl(var(--border));
+  content: "";
+}
+
+.wallet input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 0;
+  border-bottom: 2px solid hsl(var(--foreground));
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1rem;
+}
+
+.wallet input:focus {
+  border-bottom-color: hsl(var(--primary));
+}
+
+.wallet .actions {
+  flex-basis: 100%;
+  flex-wrap: wrap;
+}
+
+h1 .dim {
+  color: hsl(var(--soft-ink));
+}
+
+.button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  min-height: 3.375rem;
+  padding: 0 1.625rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+.button-primary:hover {
+  background: hsl(var(--primary-hover));
+}
+
+.open {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  max-width: 30rem;
+  margin-top: 12px;
+}
+
+.open .form-field {
+  flex: 1;
+}
+
+.open button {
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1px solid hsl(var(--foreground));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.open button:hover {
+  background: hsl(var(--surface-2));
+}
+
+#open-error:empty {
+  display: none;
+}
+
+.create {
+  display: grid;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.create > button {
+  justify-self: start;
+  min-height: 3.375rem;
+  padding: 0 1.625rem;
+  border: 0;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  cursor: pointer;
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+.create > button:hover {
+  background: hsl(var(--primary-hover));
+}
+
+.create .note button {
+  min-height: 2rem;
+  margin-left: 8px;
+  padding: 0 0.75rem;
+  border: 1px solid hsl(var(--foreground));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9375rem;
+}
+
+.steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1.125rem;
+}
+
+.steps li {
+  padding-left: 1.5rem;
+  position: relative;
+}
+
+.steps li::before {
+  position: absolute;
+  top: 0.55em;
+  left: 0;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: hsl(var(--border-strong));
+  content: "";
+}
+
+.steps__done {
+  color: hsl(var(--muted-foreground));
+}
+
+.steps__done::before {
+  background: hsl(var(--risk-low)) !important;
+}
+
+.steps__now::before {
+  background: hsl(var(--primary)) !important;
+}
+
+.steps__next {
+  color: hsl(var(--subtle-foreground));
+}
+
+/* With no vault picked, the header holds only the switch, on the same line as the name. */
+.top-tools:has(#pick[hidden]) {
+  flex: none;
+}
+
+/* Changing the rules, and the form that creates a vault. */
+.changes {
+  display: grid;
+}
+
+/* The waiting list and the forms sit in the same grid. */
+.changes__part {
+  display: contents;
+}
+
+.change {
+  margin: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.change:last-of-type {
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.change summary {
+  padding-block: 16px;
+  color: inherit;
+  font-size: 1.25rem;
+}
+
+.change[open] summary {
+  margin-bottom: 0;
+}
+
+.change__body {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 24px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 14px var(--gap);
+  max-width: 60rem;
+}
+
+.form-field {
+  display: grid;
+  gap: 2px;
+}
+
+.form-field span {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9375rem;
+}
+
+.form-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 0;
+  border-bottom: 2px solid hsl(var(--foreground));
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1.0625rem;
+}
+
+.form-field input:focus {
+  border-bottom-color: hsl(var(--primary));
+}
+
+.form-field input::placeholder {
+  color: hsl(var(--subtle-foreground));
+}
+
+.pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 60rem;
+  padding-block: 6px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.pool .actions,
+.pool button {
+  margin: 0;
+}
+
+.waiting {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+
+.waiting h3 {
+  font-size: 1.3125rem;
+  font-weight: 400;
+}
+
+.waiting__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 12px;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.waiting__row .actions {
+  margin: 0;
+}
+
+.pool button,
+.pool .actions button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid hsl(var(--foreground));
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9375rem;
+}

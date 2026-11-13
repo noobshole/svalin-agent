@@ -1,0 +1,60 @@
+{
+ "backing_usd": 19672,
+ "day": "2026-11-03",
+ "grade": "D",
+ "proof": [
+  {
+   "hash": "20ff2a4b6635aea74179a529ab870efb28f4ca9aeae1705672ce6c10ce3299d8",
+   "left": false
+  },
+  {
+   "hash": "37a2a840b0e555729525dd085b5729662d5cc67c29ec67c55bde8c98c21e1c78",
+   "left": false
+  },
+  {
+   "hash": "1c9b0fb963669c31f0309f308563047befa486a1164c885cba7d2d95d8ca25a0",
+   "left": false
+  },
+  {
+   "hash": "a1ebe66869b3d6dabfc20833303cd27dcc3dc32dd7569cd83f75467012bf4873",
+   "left": false
+  },
+  {
+   "hash": "e6ab5fef7c334c1d03eff9c8c96bcf3afb0e4b671f041823a0a52c014bc8e04f",
+   "left": true
+  },
+  {
+   "hash": "7045bb29ca71163eac8ae91a6e9a2a9c9bfbe67caac6d9664ba0b310635bbc46",
+   "left": false
+  },
+  {
+   "hash": "eb30c7c22769a1a4c7ddd1d0302a95757feb2690cf4a8a0985f9d49125eb15cc",
+   "left": true
+  },
+  {
+   "hash": "1d0183eab5f4cd2c74a0e4e802a0aa2e7cfd643bd3769f4874f250587882672a",
+   "left": true
+  },
+  {
+   "hash": "679d27feb73bf954c4a12a6c6be5d871f853b32ac5909d2ac592e4bf20fae0f3",
+   "left": false
+  },
+  {
+   "hash": "24f2cf103af8b1e8f4ca5fc416a103fb237dc61bb3eeae1f0f0401a804c3fe07",
+   "left": false
+  },
+  {
+   "hash": "b50ed48ce7f84c3422a1c5b88d7adcd34751e87e6697380ee1b8735fc3e4bc78",
+   "left": false
+  },
+  {
+   "hash": "8de134d179dfb45b8abdee7debf9bb13c613e6a270c2698a55192a82ddc3af3c",
+   "left": false
+  },
+  {
+   "hash": "78541e6e9692aeee611d34f697ce4ee789f441853313f3875a3220e108e49c6f",
+   "left": false
+  }
+ ],
+ "token": "apys.token.a11bd.near"
+}

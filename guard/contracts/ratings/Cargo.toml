@@ -1,0 +1,19 @@
+[package]
+name = "svalin-ratings"
+description = "Svalin Ratings: the sealed Svalin Index editions on NEAR, append-only, with free proof checks any contract can call."
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/noobshole/svalin-guard"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Without the default `wee_alloc` feature, which is unmaintained (RUSTSEC-2022-0054).
+near-sdk = { version = "=5.30.0", default-features = false }
+svalin-proof = { path = "../../crates/svalin-proof" }
+
+[dev-dependencies]
+near-sdk = { version = "=5.30.0", default-features = false, features = ["unit-testing"] }

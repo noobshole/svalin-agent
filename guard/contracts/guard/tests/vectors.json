@@ -1,0 +1,189 @@
+{
+  "generatedFrom": "svalin-agent apps/api/src/risk/check.ts",
+  "cases": [
+    {
+      "a": "intent5.near",
+      "b": "intents.near",
+      "skeleton_a": "intentsnear",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "intents.near",
+      "b": "intents.near",
+      "skeleton_a": "intentsnear",
+      "names_look_alike": false,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "binance-hot.near",
+      "b": "binancehot.near",
+      "skeleton_a": "binancehotnear",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "rnirror.near",
+      "b": "mirror.near",
+      "skeleton_a": "mirrornear",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "vvallet.near",
+      "b": "wallet.near",
+      "skeleton_a": "walletnear",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "w0rld1ib.near",
+      "b": "worldlib.near",
+      "skeleton_a": "worldlibnear",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "linear-protokol.near",
+      "b": "linear-protocol.near",
+      "skeleton_a": "linearprotokolnear",
+      "names_look_alike": false,
+      "names_nearly_alike": true,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "shop-pays.near",
+      "b": "shop-pay.near",
+      "skeleton_a": "shoppaysnear",
+      "names_look_alike": false,
+      "names_nearly_alike": true,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "shoppay.near",
+      "b": "shop-pay.near",
+      "skeleton_a": "shoppaynear",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "bob1.near",
+      "b": "bob2.near",
+      "skeleton_a": "boblnear",
+      "names_look_alike": false,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "alice.near",
+      "b": "bob.near",
+      "skeleton_a": "alicenear",
+      "names_look_alike": false,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "token.v2.ref-finance.near",
+      "b": "token.v2.ref-flnance.near",
+      "skeleton_a": "tokenv2reffinancenear",
+      "names_look_alike": false,
+      "names_nearly_alike": true,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "meta-pool.near",
+      "b": "metapool.near",
+      "skeleton_a": "metapoolnear",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "meta-pool.near",
+      "b": "meta-pooi.near",
+      "skeleton_a": "metapoolnear",
+      "names_look_alike": false,
+      "names_nearly_alike": true,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "xtoken.rhealab.near",
+      "b": "token.rhealab.near",
+      "skeleton_a": "xtokenrhealabnear",
+      "names_look_alike": false,
+      "names_nearly_alike": true,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "abcd00000000000000000000000000000000000000000000000000000000ef01",
+      "b": "abcd11111111111111111111111111111111111111111111111111111111ef01",
+      "skeleton_a": "abcdooooooooooooooooooooooooooooooooooooooooooooooooooooooooefol",
+      "names_look_alike": false,
+      "names_nearly_alike": false,
+      "addresses_look_alike": true
+    },
+    {
+      "a": "abcd00000000000000000000000000000000000000000000000000000000ef01",
+      "b": "abcd00000000000000000000000000000000000000000000000000000000ef01",
+      "skeleton_a": "abcdooooooooooooooooooooooooooooooooooooooooooooooooooooooooefol",
+      "names_look_alike": false,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "usdt.tether-token.near",
+      "b": "usdt.tether-tokens.near",
+      "skeleton_a": "usdttethertokennear",
+      "names_look_alike": false,
+      "names_nearly_alike": true,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "0x1234567890abcdef1234567890abcdef12345678",
+      "b": "0x1234567890abcdef1234567890abcdef12345679",
+      "skeleton_a": "oxl234s6789oabcdefl234s6789oabcdefl234s678",
+      "names_look_alike": false,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "sputnik-dao.near",
+      "b": "sputnikdao.near",
+      "skeleton_a": "sputnikdaonear",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "game.hot.tg",
+      "b": "garne.hot.tg",
+      "skeleton_a": "gamehottg",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "aurora",
+      "b": "aur0ra",
+      "skeleton_a": "aurora",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    },
+    {
+      "a": "wrap.near",
+      "b": "vvrap.near",
+      "skeleton_a": "wrapnear",
+      "names_look_alike": true,
+      "names_nearly_alike": false,
+      "addresses_look_alike": false
+    }
+  ]
+}

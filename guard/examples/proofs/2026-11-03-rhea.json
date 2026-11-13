@@ -1,0 +1,52 @@
+{
+ "backing_usd": 521053,
+ "day": "2026-11-03",
+ "grade": "B",
+ "proof": [
+  {
+   "hash": "4374b9c7b0540f356b194f22fd216e90cc9ae0a76ae3d9ba283ec967104ead76",
+   "left": true
+  },
+  {
+   "hash": "8e195ee04c312d1f662e0b57b901ca188c24eba1d2fc0579d78cffd52460f9ac",
+   "left": false
+  },
+  {
+   "hash": "6a31dc1971d061cc870ecfd605970ec8fc09ddd9c44a60f4a1db45886abacbc5",
+   "left": true
+  },
+  {
+   "hash": "1a28ef89da44d08425ae9eefe6cacd52774d31ce02ced1dfa0b00b59f2029a14",
+   "left": true
+  },
+  {
+   "hash": "414b65310259e617320d0c195b2c526d1f678a33ed12e8d9ff1cf654eade1631",
+   "left": false
+  },
+  {
+   "hash": "94cf6aa7075095c4ecf68bdda0991dfb0bf94bae0d4830a2796f9e514dbba73f",
+   "left": true
+  },
+  {
+   "hash": "2e44bd0bde7c61adadb851ff409d42fb7f40e9fcfe698da1344c9dc4408bf498",
+   "left": true
+  },
+  {
+   "hash": "a42fc9e89cce15a873e585d7bcd2ad767345cd5b4d3fd957bc8ab8c4f18d5c62",
+   "left": false
+  },
+  {
+   "hash": "a6a50c88765249015ab1bd913f44bb20651939855eea2a19cada4086e1a624f9",
+   "left": false
+  },
+  {
+   "hash": "a6c9b4a97c481cd703547b91ca4b4436a53410a732ad95e1506036d071d4038b",
+   "left": false
+  },
+  {
+   "hash": "f8803000b5636a15068e0f573fdde2aa5e13364262e3b4cef16f89202ee95c41",
+   "left": true
+  }
+ ],
+ "token": "token.rhealab.near"
+}
