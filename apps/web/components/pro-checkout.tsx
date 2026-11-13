@@ -27,12 +27,6 @@ const POLL_FOR_MS = 15 * 60_000;
 
 type Chain = "solana" | "near";
 
-const buttonClass =
-  "inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primaryForeground transition-opacity hover:opacity-90 disabled:opacity-50";
-const quietButtonClass =
-  "inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground transition-colors hover:border-borderStrong";
-const linkClass = "text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground";
-
 /**
  * Svalin Pro checkout. The buyer pays from their own wallet app; this page never connects to a
  * wallet. The Pro code is made and kept in this browser, and the API finds the payment on-chain:
@@ -142,14 +136,10 @@ export function ProCheckout() {
   }
 
   if (offer === undefined) {
-    return <div aria-busy="true" aria-label="Loading checkout" className="h-64 animate-pulse rounded-lg border border-border bg-surface" />;
+    return <div aria-busy="true" aria-label="Loading checkout" className="h-64 animate-pulse bg-surface2" />;
   }
   if (offer === null || (!offer.solana && !offer.near)) {
-    return (
-      <div className="rounded-lg border border-border bg-surface p-6 text-sm text-mutedForeground">
-        The checkout cannot reach the Svalin API right now. Try again in a minute.
-      </div>
-    );
+    return <p className="notice text-mutedForeground">The checkout cannot reach the Svalin API right now. Try again in a minute.</p>;
   }
 
   const chosen = offer.plans.find((entry) => entry.id === plan) ?? offer.plans[0]!;
@@ -157,50 +147,39 @@ export function ProCheckout() {
   const testMode = (chain === "solana" ? offer.solana : offer.near)?.environment === "testnet";
 
   return (
-    <div className="not-prose grid scroll-mt-20 gap-4 rounded-lg border border-border bg-surface p-6 text-foreground [&_p]:mb-0 [&_p]:max-w-none" id="checkout">
+    <div className="grid scroll-mt-8 gap-6 border-t-2 border-foreground pt-3" id="checkout">
       {active && status?.until && !paying ? (
         <ActivePass days={proDaysLeft(status)} onRenew={startPaying} onRemove={removePass} status={status} code={code} />
       ) : (
         <>
-          <div className="grid gap-1">
-            <p className="text-lg font-medium">{paying ? "Pay from your own wallet app" : "Choose your pass"}</p>
-          </div>
+          <h2 className="title">{paying ? "Pay from your own wallet app" : "Choose your pass"}</h2>
 
           {testMode ? (
-            <p className="rounded-md border border-riskMedium/40 px-3 py-2 text-sm">
-              Test mode: this checkout takes free test USDC on {chain === "solana" ? "Solana devnet" : "NEAR testnet"}. Real USDC opens soon,
-              and a test pass stops working then.
+            <p className="text-sm text-riskMedium">
+              Test mode: this checkout takes free test USDC on {chain === "solana" ? "Solana devnet" : "NEAR testnet"}. Real USDC opens soon, and a test pass stops working then.
             </p>
           ) : null}
 
-          <fieldset className="grid gap-2">
-            <legend className="mb-2 text-sm text-mutedForeground">Pass</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {offer.plans.map((entry) => (
-                <label
-                  className={cn(
-                    "flex cursor-pointer items-baseline justify-between gap-3 rounded-md border px-4 py-3 text-sm",
-                    plan === entry.id ? "border-foreground" : "border-border hover:border-borderStrong",
-                  )}
-                  key={entry.id}
-                >
-                  <span className="flex items-center gap-2">
-                    <input checked={plan === entry.id} className="accent-current" name="plan" onChange={() => setPlan(entry.id)} type="radio" />
-                    {entry.id === "year" ? "1 year" : "30 days"}
-                    {entry.id === "year" ? <span className="text-xs text-mutedForeground">two months free</span> : null}
-                  </span>
-                  <span className="font-mono">${entry.usd}</span>
-                </label>
-              ))}
-            </div>
+          <fieldset className="border-b border-border">
+            <legend className="sr-only">Pass</legend>
+            {offer.plans.map((entry) => (
+              <label className="line cursor-pointer" key={entry.id}>
+                <span className="flex items-center gap-3">
+                  <input checked={plan === entry.id} className="h-4 w-4 accent-current" name="plan" onChange={() => setPlan(entry.id)} type="radio" />
+                  {entry.id === "year" ? "1 year" : "30 days"}
+                  {entry.id === "year" ? <span className="text-sm text-mutedForeground">two months free</span> : null}
+                </span>
+                <span className="text-lg">${entry.usd}</span>
+              </label>
+            ))}
           </fieldset>
 
           {offer.solana && offer.near ? (
-            <div aria-label="Pay with" className="flex gap-2" role="radiogroup">
+            <div aria-label="Pay with" className="grid grid-cols-2 gap-3" role="radiogroup">
               {(["solana", "near"] as const).map((entry) => (
                 <button
                   aria-checked={chain === entry}
-                  className={cn(quietButtonClass, chain === entry && "border-foreground")}
+                  className={cn("btn-quiet", chain === entry && "bg-foreground text-background hover:bg-foreground")}
                   key={entry}
                   onClick={() => setChain(entry)}
                   role="radio"
@@ -213,47 +192,39 @@ export function ProCheckout() {
           ) : null}
 
           {!paying ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <button className={buttonClass} onClick={startPaying} type="button">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+              <button className="btn" onClick={startPaying} type="button">
                 Continue to payment
               </button>
-              <span className="text-xs text-mutedForeground">Your wallet shows the amount and Svalin&apos;s address before you approve.</span>
+              <span className="min-w-0 flex-1 basis-56 text-sm text-mutedForeground">Your wallet shows the amount and Svalin’s address before you approve.</span>
             </div>
           ) : code ? (
-            <div className="grid gap-5">
+            <div className="grid gap-8">
               <Step number={1} title="Save your Pro code first">
-                <p className="text-sm leading-6 text-mutedForeground">
-                  This code is your pass. It stays in this browser; copy it somewhere safe to use Pro on another device. Svalin cannot recover a lost
-                  code.
-                </p>
+                <p className="text-mutedForeground">This code is your pass. It stays in this browser; copy it somewhere safe to use Pro on another device. Svalin cannot recover a lost code.</p>
                 <CodeBox code={code} />
               </Step>
 
               <Step number={2} title={`Pay ${chosen.usd} USDC`}>
                 {chain === "solana" && offer.solana ? (
                   reference ? (
-                    <SolanaPay
-                      offer={offer.solana}
-                      url={solanaPayUrl(offer.solana, chosen.usd, reference, `Svalin Pro, ${chosen.id === "year" ? "1 year" : "30 days"}`)}
-                    />
+                    <SolanaPay offer={offer.solana} url={solanaPayUrl(offer.solana, chosen.usd, reference, `Svalin Pro, ${chosen.id === "year" ? "1 year" : "30 days"}`)} />
                   ) : null
                 ) : nearCheckout ? (
                   <NearPay checkout={nearCheckout} />
                 ) : (
-                  <div className="h-24 animate-pulse rounded-md border border-border" />
+                  <div className="h-24 animate-pulse bg-surface2" />
                 )}
               </Step>
 
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <button className={quietButtonClass} disabled={checking} onClick={() => void check(code)} type="button">
-                  {checking ? "Checking…" : "I've paid: check now"}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                <button className="btn-quiet" disabled={checking} onClick={() => void check(code)} type="button">
+                  {checking ? "Checking…" : "I’ve paid: check now"}
                 </button>
-                <span className="text-xs text-mutedForeground" role="status">
-                  {pollUntil > 0
-                    ? `Waiting for your payment${checkedAt ? `, last checked at ${new Date(checkedAt).toLocaleTimeString()}` : ""}.`
-                    : "Stopped checking automatically. Use the button once you have paid."}
+                <span className="min-w-0 flex-1 basis-56 text-mutedForeground" role="status">
+                  {pollUntil > 0 ? `Waiting for your payment${checkedAt ? `, last checked at ${new Date(checkedAt).toLocaleTimeString()}` : ""}.` : "Stopped checking automatically. Use the button once you have paid."}
                 </span>
-                <button className={cn(linkClass, "text-xs")} onClick={() => setPaying(false)} type="button">
+                <button className="link" onClick={() => setPaying(false)} type="button">
                   Back
                 </button>
               </div>
@@ -271,10 +242,10 @@ export function ProCheckout() {
 function Step({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-3">
-      <p className="text-sm font-medium">
-        <span className="mr-2 font-mono text-subtleForeground">{number}</span>
+      <h3 className="subtitle">
+        <span className="dim mr-2">{number}</span>
         {title}
-      </p>
+      </h3>
       {children}
     </section>
   );
@@ -283,13 +254,13 @@ function Step({ number, title, children }: { number: number; title: string; chil
 function SolanaPay({ offer, url }: { offer: NonNullable<ProOffer["solana"]>; url: string }) {
   return (
     <div className="grid gap-4 sm:grid-cols-[12rem_minmax(0,1fr)] sm:items-start">
-      <QrCode className="w-48 max-w-full rounded-md border border-border" label="Solana Pay QR code for your Svalin Pro payment" value={url} />
-      <div className="grid gap-2 text-sm leading-6">
+      <QrCode className="w-48 max-w-full" label="Solana Pay QR code for your Svalin Pro payment" value={url} />
+      <div className="grid justify-items-start gap-3">
         <p>Scan it with Phantom, Solflare or any Solana Pay wallet. It asks for USDC, not SOL.</p>
         <p className="text-mutedForeground">
-          Before you approve, check the payee is Svalin: <span className="break-all font-mono text-foreground">{offer.payTo}</span>
+          Before you approve, check the payee is Svalin: <span className="break-all text-foreground">{offer.payTo}</span>
         </p>
-        <a className={cn(quietButtonClass, "w-fit !no-underline")} href={url}>
+        <a className="btn-quiet" href={url}>
           Open in a wallet on this device
         </a>
       </div>
@@ -299,15 +270,15 @@ function SolanaPay({ offer, url }: { offer: NonNullable<ProOffer["solana"]>; url
 
 function NearPay({ checkout }: { checkout: NearCheckout }) {
   return (
-    <div className="grid gap-3 text-sm leading-6">
+    <div className="grid gap-3">
       <p>From any NEAR wallet, send exactly this much USDC:</p>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Copyable label="Amount (USDC)" value={checkout.amount} />
         <Copyable label="To" value={checkout.payTo} />
       </div>
       <p className="text-mutedForeground">
-        The exact amount is how Svalin knows the payment is yours, so send it to the last digit. It is held for your code until{" "}
-        {formatDay(checkout.expiresAt)}. Use native USDC (token <span className="font-mono">{checkout.token.slice(0, 8)}…</span>), not USDC.e.
+        The exact amount is how Svalin knows the payment is yours, so send it to the last digit. It is held for your code until {formatDay(checkout.expiresAt)}. Use native USDC (token{" "}
+        {checkout.token.slice(0, 8)}…), not USDC.e.
       </p>
     </div>
   );
@@ -327,27 +298,26 @@ function ActivePass({
   onRemove: () => void;
 }) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <div className="grid gap-1">
-        <p className="eyebrow text-riskLow">Svalin Pro is active</p>
-        <p className="text-lg font-medium">
+        <h2 className="title text-riskLow">Svalin Pro is active</h2>
+        <p className="text-lg">
           Until {formatDay(status.until!)}
-          {days !== null && days <= 3 ? <span className="text-riskMedium">, ending in {days} day{days === 1 ? "" : "s"}</span> : null}
+          {days !== null && days <= 3 ? (
+            <span className="text-riskMedium">
+              , ending in {days} day{days === 1 ? "" : "s"}
+            </span>
+          ) : null}
         </p>
-        <p className="text-sm text-mutedForeground">
-          {status.callsLeft} of today&apos;s calls left. Scans and checks on this site now use your pass.
-        </p>
+        <p className="text-mutedForeground">{status.callsLeft} of today’s calls left. Scans and checks on this site now use your pass.</p>
       </div>
       {code ? <CodeBox code={code} /> : null}
-      <p className="text-sm leading-6 text-mutedForeground">
-        On another device, open this page, choose &quot;I have a Pro code&quot; and paste it. Renewing with the same code adds its days after
-        the current end.
-      </p>
-      <div className="flex flex-wrap gap-3">
-        <button className={buttonClass} onClick={onRenew} type="button">
+      <p className="text-mutedForeground">On another device, open this page, choose “I have a Pro code” and paste it. Renewing with the same code adds its days after the current end.</p>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <button className="btn" onClick={onRenew} type="button">
           Renew or extend
         </button>
-        <button className={quietButtonClass} onClick={onRemove} type="button">
+        <button className="link" onClick={onRemove} type="button">
           Remove from this browser
         </button>
       </div>
@@ -356,10 +326,10 @@ function ActivePass({
 }
 
 function CodeBox({ code }: { code: string }) {
-  return <Copyable label="Your Pro code" mono value={code} />;
+  return <Copyable label="Your Pro code" value={code} />;
 }
 
-function Copyable({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
+function Copyable({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -372,9 +342,9 @@ function Copyable({ label, value, mono = true }: { label: string; value: string;
   }
   return (
     <div className="grid gap-1">
-      <span className="text-xs text-mutedForeground">{label}</span>
-      <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
-        <span className={cn("min-w-0 flex-1 break-all text-sm", mono && "font-mono")}>{value}</span>
+      <span className="text-sm text-mutedForeground">{label}</span>
+      <div className="flex items-center gap-2 border-b-2 border-foreground pb-2">
+        <span className="min-w-0 flex-1 break-all">{value}</span>
         <button aria-label={`Copy ${label.toLowerCase()}`} className="shrink-0 text-mutedForeground hover:text-foreground" onClick={() => void copy()} type="button">
           {copied ? <Check aria-hidden="true" className="h-4 w-4" /> : <Copy aria-hidden="true" className="h-4 w-4" />}
         </button>
@@ -401,7 +371,7 @@ function HaveCode({ onCode }: { onCode: (code: string) => void }) {
 
   if (!open) {
     return (
-      <button className={cn(linkClass, "w-fit text-sm")} onClick={() => setOpen(true)} type="button">
+      <button className="link w-fit" onClick={() => setOpen(true)} type="button">
         I have a Pro code
       </button>
     );
@@ -411,17 +381,9 @@ function HaveCode({ onCode }: { onCode: (code: string) => void }) {
       <label className="text-sm text-mutedForeground" htmlFor="pro-code">
         Paste your Pro code
       </label>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          autoComplete="off"
-          className="min-w-0 flex-1 rounded-md border border-border bg-transparent px-3 py-2 font-mono text-sm outline-none focus:border-borderStrong"
-          id="pro-code"
-          onChange={(event) => setValue(event.target.value)}
-          placeholder="svp_…"
-          spellCheck={false}
-          value={value}
-        />
-        <button className={buttonClass} type="submit">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <input autoComplete="off" className="field flex-1" id="pro-code" onChange={(event) => setValue(event.target.value)} placeholder="svp_…" spellCheck={false} value={value} />
+        <button className="btn-quiet !min-h-[54px]" type="submit">
           Use this code
         </button>
       </div>

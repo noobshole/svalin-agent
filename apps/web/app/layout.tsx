@@ -1,7 +1,7 @@
 import "./globals.css";
 
 import type { Metadata } from "next";
-import { Source_Code_Pro, Source_Sans_3, Source_Serif_4 } from "next/font/google";
+import { Jost } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { NavProgress } from "@/components/nav-progress";
@@ -9,30 +9,28 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { THEME_BOOT } from "@/lib/theme";
 
-// Adobe's Source family (SIL Open Font License): serif headlines for the authority of a rating
-// report, a plain sans for reading, and a mono for figures. next/font serves them from this site.
-const display = Source_Serif_4({ subsets: ["latin"], variable: "--font-display" });
-const sans = Source_Sans_3({ subsets: ["latin"], variable: "--font-sans" });
-const mono = Source_Code_Pro({ subsets: ["latin"], variable: "--font-mono" });
+// One typeface for the whole site (SIL Open Font License). next/font serves it from this site.
+const type = Jost({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Svalin — portfolio risk intelligence for AI agents",
-  description:
-    "Read-only Solana and NEAR portfolio risk reports for AI agents and humans. Free scan, or pay per call in USDC over x402 on Solana or NEAR. Svalin can never move funds.",
+  metadataBase: new URL("https://svalin.noobshole.workers.dev"),
+  title: "Svalin — read-only risk grades for wallets, tokens and payments",
+  description: "Risk grades for wallets, tokens and payments on NEAR and Solana, for people and AI agents. Free to try, or pay per call in USDC over x402. Svalin can never move funds.",
   openGraph: {
-    title: "Svalin — the agent that can't drain your wallet",
-    description: "Read-only portfolio risk reports for AI agents. Pay per call in USDC over x402.",
+    title: "Svalin — two addresses look alike, their seals can’t",
+    description: "Read-only risk grades for wallets, tokens and payments on NEAR and Solana. It can never move your money.",
   },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html className={`${display.variable} ${sans.variable} ${mono.variable}`} lang="en" suppressHydrationWarning>
+    <html className={type.variable} lang="en" suppressHydrationWarning>
       <head>
         {/* A fixed string, not user content: applies the saved theme before the first paint. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       </head>
-      <body className="bg-background font-sans text-foreground antialiased">
+      <body className="font-sans antialiased">
         <NavProgress />
         <SiteHeader />
         {children}

@@ -29,8 +29,9 @@ const MAX_LINE = 2000;
  * blocked. A page with too many scripts to fit Cloudflare's line limit keeps the site-wide policy only.
  */
 function pageRules() {
-  return readdirSync(outDir)
-    .filter((name) => name.endsWith(".html") && name !== "404.html")
+  return readdirSync(outDir, { recursive: true })
+    .map((name) => name.replaceAll("\\", "/"))
+    .filter((name) => name.endsWith(".html") && name !== "404.html" && !name.startsWith("_next/"))
     .sort()
     .flatMap((name) => {
       const html = readFileSync(new URL(name, outDir), "utf8");

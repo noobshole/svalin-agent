@@ -1,45 +1,15 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { toggleTheme } from "@/lib/theme";
 
-import { THEME_KEY } from "@/lib/theme";
-
-type Theme = "light" | "dark";
-
-function currentTheme(): Theme {
-  const chosen = document.documentElement.dataset.theme;
-  if (chosen === "light" || chosen === "dark") return chosen;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-/** Switches between light and dark, and remembers the choice in this browser. */
+/** Switches between white and dark, and remembers the choice in this browser. */
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme | null>(null);
-
-  useEffect(() => setTheme(currentTheme()), []);
-
-  function toggle() {
-    const next: Theme = currentTheme() === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    try {
-      localStorage.setItem(THEME_KEY, next);
-    } catch {
-      // Storage can be blocked; the switch still works for this visit.
-    }
-    setTheme(next);
-  }
-
-  const label = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
   return (
-    <button
-      aria-label={label}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-mutedForeground transition-colors hover:text-foreground"
-      onClick={toggle}
-      title={label}
-      type="button"
-    >
-      {theme === "dark" ? <Sun aria-hidden="true" className="h-4 w-4" /> : <Moon aria-hidden="true" className="h-4 w-4" />}
+    <button aria-label="Switch between white and dark" className="-m-2 p-2" onClick={toggleTheme} title="Switch between white and dark" type="button">
+      <svg aria-hidden="true" className="h-[22px] w-[22px]" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" fill="none" r="9.5" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M12 2.5a9.5 9.5 0 0 1 0 19z" fill="currentColor" />
+      </svg>
     </button>
   );
 }

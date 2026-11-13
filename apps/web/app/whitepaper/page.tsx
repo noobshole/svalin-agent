@@ -9,7 +9,8 @@ export const metadata: Metadata = {
     "Svalin: verifiable risk ratings, a check before paying, and on-chain guardrails for agent money on NEAR and Solana.",
 };
 
-const contents = [
+const contents: [string, string][] = [
+  ["summary", "Summary"],
   ["problem", "The problem"],
   ["principles", "Design principles"],
   ["overview", "How Svalin fits together"],
@@ -25,24 +26,17 @@ const contents = [
 export default function WhitepaperPage() {
   return (
     <DocPage
+      contents={contents}
+      path="/whitepaper"
       lede="A read-only service that tells AI agents what is real before they spend, a check before every payment, and a guard contract that makes the chain enforce it."
-      note="Whitepaper, public edition, October 2026"
-      title="Verifiable risk ratings and on‑chain guardrails for agent money"
+      note="Public edition, November 2026"
+      title={
+        <>
+          Verifiable risk ratings and <span className="whitespace-nowrap">on-chain</span> guardrails for agent money
+        </>
+      }
     >
-      <nav aria-label="Contents" className="mt-8 rounded-lg border border-border bg-surface px-5 py-4">
-        <p className="eyebrow mb-2">Contents</p>
-        <ol className="!mb-0 grid gap-1 sm:grid-cols-2">
-          {contents.map(([id, label]) => (
-            <li key={id}>
-              <a className="!no-underline text-mutedForeground hover:text-foreground" href={`#${id}`}>
-                {label}
-              </a>
-            </li>
-          ))}
-        </ol>
-      </nav>
-
-      <h2>Summary</h2>
+      <h2 id="summary">Summary</h2>
       <p>
         AI agents now hold and spend money. They can be talked into bad decisions, and the data they read can be fake: a token can carry a price with
         no money behind it, and an address can be planted to look like one the agent has paid before.
@@ -50,9 +44,9 @@ export default function WhitepaperPage() {
       <p>
         Svalin is a read-only service that rates what an agent is about to touch. It grades tokens by the trusted money in their trading pools, scores
         wallets for concentration and exposure, and checks a recipient before a payment. Every token grade can be recomputed by anyone from archived
-        inputs. Two planned additions follow: the <strong>Svalin Registry</strong> puts grades on-chain where contracts can read them, and{" "}
+        inputs. Two more parts run on NEAR’s test network: the <strong>Svalin Registry</strong> puts grades on-chain where contracts can check them, and{" "}
         <strong>Svalin Guard</strong> lets an owner give an agent spending power under rules the blockchain enforces. Svalin itself never holds a key to
-        anyone&apos;s funds. What is live and what comes next is on the <Link href="/roadmap">roadmap</Link>.
+        anyone’s funds. What is live and what comes next is on the <Link href="/roadmap">roadmap</Link>.
       </p>
 
       <h2 id="problem">1. The problem</h2>
@@ -100,18 +94,18 @@ export default function WhitepaperPage() {
       </ul>
 
       <h2 id="overview">3. How Svalin fits together</h2>
-      <div className="mb-5 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3">
+      <div className="mb-5 grid gap-x-[var(--gap)] sm:grid-cols-3">
         {[
           { name: "Ratings", status: "live" as const, body: "Turn market data into grades, reports and a check before paying. Sold per call over x402." },
-          { name: "Registry", status: "planned" as const, body: "Publishes token grades on-chain, so contracts and agents can read them." },
-          { name: "Guard", status: "planned" as const, body: "Enforces an owner's rules, including a minimum grade, on whatever the agent tries to do." },
+          { name: "Registry", status: "testnet" as const, body: "Seals token grades on-chain, so contracts and agents can check them." },
+          { name: "Guard", status: "testnet" as const, body: "Enforces an owner’s rules, including a minimum grade, on whatever the agent tries to do." },
         ].map((layer) => (
-          <div className="grid content-start gap-2 bg-surface p-4" key={layer.name}>
-            <p className="!mb-0 font-medium text-foreground">
+          <div className="grid content-start gap-1 border-t border-border py-4" key={layer.name}>
+            <p className="!mb-0 text-lg">
               {layer.name}
               <Status kind={layer.status} />
             </p>
-            <p className="!mb-0 text-sm leading-6">{layer.body}</p>
+            <p className="!mb-0 text-sm text-mutedForeground">{layer.body}</p>
           </div>
         ))}
       </div>
@@ -159,7 +153,7 @@ export default function WhitepaperPage() {
         </li>
       </ul>
       <p>
-        If the payer&apos;s history cannot be read, the check says so and cautions instead of guessing, because a gap could hide the very payment a
+        If the payer’s history cannot be read, the check says so and cautions instead of guessing, because a gap could hide the very payment a
         look-alike imitates. <Link href="/check">Try the free check.</Link>
       </p>
 
@@ -173,7 +167,7 @@ export default function WhitepaperPage() {
         would be lost to price movement?
       </p>
       <div className="table-wrap">
-        <table>
+        <table className="keep">
           <thead>
             <tr>
               <th>Grade</th>
@@ -189,7 +183,7 @@ export default function WhitepaperPage() {
               ["F", "more than 25%"],
             ].map(([grade, loss]) => (
               <tr key={grade}>
-                <td className="font-mono text-foreground">{grade}</td>
+                <td>{grade}</td>
                 <td>{loss}</td>
               </tr>
             ))}
@@ -205,7 +199,7 @@ export default function WhitepaperPage() {
         Every token also has <strong>exit prices</strong>: what selling $1K, $10K or $100K of it would actually fetch, how much can be sold close
         to the quoted price, and the most its whole supply could fetch. A wallet can show them beside a balance, a lender can size a loan by them,
         and an agent can check them before accepting a token as payment, at any sale size, through the API. They need nothing but an
-        edition&apos;s data, so anyone can recompute them.
+        edition’s data, so anyone can recompute them.
       </p>
 
       <h3>
@@ -229,69 +223,68 @@ export default function WhitepaperPage() {
 
       <h2 id="registry">
         5. Svalin Registry
-        <Status kind="planned" />
+        <Status kind="testnet" />
       </h2>
       <p>
-        The Registry is a NEAR contract that holds the latest token grades, so other contracts and agents can read them on-chain. Its layout follows
-        the reputation and validation ideas of ERC-8004, the draft standard for trust records about AI agents.
+        The Registry is a NEAR contract, <code>svalin-ratings-v1.testnet</code>, that holds a fingerprint of every sealed Index edition, so any contract
+        can confirm a token’s grade with a short proof.
       </p>
       <ul>
         <li>
-          <strong>What it stores:</strong> for each graded token, its grade, real backing and edition; for the edition, its fingerprint, time and
-          methodology.
+          <strong>What it stores:</strong> one Merkle root per edition, added in date order and never replaced.
         </li>
         <li>
-          <strong>Unknown means F:</strong> a token that is not listed has no backing worth grading.
+          <strong>Who can write:</strong> only Svalin’s publishing key, a NEAR key that can publish and do nothing else, so even if it leaked it could
+          not move money.
         </li>
         <li>
-          <strong>Who can write:</strong> only Svalin&apos;s publishing key, a NEAR key that can publish grades and do nothing else, so even if it
-          leaked it could not move money.
+          <strong>A challenge window:</strong> a new edition can be used only after a wait, so a wrong root can be retracted before anyone relies on it.
         </li>
         <li>
-          <strong>How to check it:</strong> the fingerprint on-chain must match the public edition.
+          <strong>How to check it:</strong> anyone can rebuild a root from the sealed files and compare.
         </li>
         <li>
-          <strong>Reading is free:</strong> any contract or agent can look up a token&apos;s grade.
+          <strong>Reading is free:</strong> any contract or agent can verify a token’s grade.
         </li>
       </ul>
 
       <h2 id="guard">
         6. Svalin Guard
-        <Status kind="planned" />
+        <Status kind="testnet" />
       </h2>
       <p>
         The Guard is a small contract an owner deploys on their own account, such as <code>vault.alice.near</code>. It holds a spending budget.
-        Someone else, usually an AI agent, gets a key that can only ask the Guard to trade or pay. The Guard checks each request against the
-        owner&apos;s rules and the Registry, then executes it, refuses it, or queues it for the owner.
+        Someone else, usually an AI agent, gets a key that can only ask the Guard to buy or pay. The Guard checks each request against the
+        owner’s rules and the Registry, then pays it, refuses it, or holds it for the owner. <Link href="/docs/guard">How the vault works</Link> has the
+        details.
       </p>
       <h3>Roles and keys</h3>
       <ul>
         <li>
-          <strong>Owner:</strong> holds a full-access key, sets the policy, approves queued requests, freezes the Guard and withdraws at any time.
+          <strong>Owner:</strong> approves held requests and freezes the Guard at once. Looser rules and every withdrawal wait, so a stolen key cannot empty it in one go.
         </li>
         <li>
-          <strong>Spender:</strong> holds a NEAR function-call key limited to the Guard&apos;s trade and pay methods. It cannot attach funds, call
-          other contracts, add keys or withdraw. Its only power is to ask.
+          <strong>Spender:</strong> holds a NEAR function-call key limited to the Guard’s buy and pay methods. It cannot attach funds, call
+          other contracts, add keys or start a withdrawal. Its power is to ask.
         </li>
         <li>
-          <strong>Svalin:</strong> publishes grades to the Registry. It has no key to any Guard and no say over any owner&apos;s funds.
+          <strong>Svalin:</strong> publishes grades to the Registry. It has no key to any Guard and no say over any owner’s funds.
         </li>
       </ul>
       <h3>Rules an owner can set</h3>
       <ul>
         <li>A minimum grade for any token the agent buys.</li>
-        <li>Spending limits per payment and per day.</li>
-        <li>A list of approved recipients, and a waiting period before paying a new one.</li>
-        <li>Owner approval above a set amount, and a freeze switch.</li>
+        <li>Spending limits per payment and per day, with a smaller limit for a payee it has never paid.</li>
+        <li>A guardian, who can freeze the Guard and must also approve payments above the limits.</li>
       </ul>
       <p>
         The Guard is a general engine: one owner, one limited spender, rules the chain enforces. AI agents come first because they act fastest and are
-        easiest to trick, but the same contract suits a trading bot, a team member paying contributors, or a person&apos;s own wallet in a safe mode.
-        It is not custody by Svalin, not a full wallet, and not audited yet; until it is, budgets should stay small.
+        easiest to trick, but the same contract suits a trading bot, a team member paying contributors, or a person’s own wallet in a safe mode.
+        It is not custody by Svalin and not a full wallet, and budgets should stay small.
       </p>
 
       <h2 id="chains">7. NEAR and Solana</h2>
-      <p>The rating method is the same on every chain. How grades are published and enforced follows each chain&apos;s own tools.</p>
+      <p>The rating method is the same on every chain. How grades are published and enforced follows each chain’s own tools.</p>
       <div className="table-wrap">
         <table>
           <thead>
@@ -304,39 +297,39 @@ export default function WhitepaperPage() {
           <tbody>
             <tr>
               <td>Wallet reports and the check</td>
-              <td>Live</td>
-              <td>Live</td>
+              <td data-label="NEAR">Live</td>
+              <td data-label="Solana">Live</td>
             </tr>
             <tr>
               <td>Token grades</td>
-              <td>Live: the Svalin Index</td>
-              <td>Planned: the same method on Solana pools</td>
+              <td data-label="NEAR">Live: the Svalin Index</td>
+              <td data-label="Solana">Planned: the same method on Solana pools</td>
             </tr>
             <tr>
               <td>Grades on-chain</td>
-              <td>Planned: the Svalin Registry</td>
-              <td>Planned: a grade account</td>
+              <td data-label="NEAR">On testnet: the Svalin Registry</td>
+              <td data-label="Solana">Planned: a grade account</td>
             </tr>
             <tr>
               <td>Enforcement</td>
-              <td>Planned: Svalin Guard with function-call keys</td>
-              <td>Planned: grade rules in existing smart wallets</td>
+              <td data-label="NEAR">On testnet: Svalin Guard with function-call keys</td>
+              <td data-label="Solana">Planned: grade rules in existing smart wallets</td>
             </tr>
             <tr>
               <td>Paying Svalin</td>
-              <td>x402 in USDC, on testnet today</td>
-              <td>x402 in USDC, on devnet today</td>
+              <td data-label="NEAR">x402 in USDC, on testnet today</td>
+              <td data-label="Solana">x402 in USDC, on devnet today</td>
             </tr>
           </tbody>
         </table>
       </div>
       <p>
-        <Status kind="research" /> NEAR Chain Signatures let a NEAR contract sign for other chains, including Solana. A Guard on NEAR could then be
-        the only signer for an agent&apos;s Solana address: the rules live on NEAR, and the money can sit on Solana.
+        NEAR Chain Signatures let a NEAR contract sign for other chains, including Solana. A Guard on NEAR is already the only signer for its own Solana
+        address on devnet: the rules live on NEAR, and the money can sit on Solana.
       </p>
 
       <h2 id="security">8. Security model</h2>
-      <p>Rows about the Guard and the Registry describe their planned design; the rest is how Svalin works today.</p>
+      <p>Rows about the Guard and the Registry describe what runs on NEAR’s test network; the rest is how Svalin works today.</p>
       <div className="table-wrap">
         <table>
           <thead>
@@ -351,7 +344,7 @@ export default function WhitepaperPage() {
               <td>Its key can only ask the Guard. Caps bound the loss; junk tokens and unknown recipients are refused.</td>
             </tr>
             <tr>
-              <td>The agent&apos;s key is stolen</td>
+              <td>The agent’s key is stolen</td>
               <td>The same limits. The owner freezes the Guard and removes the key.</td>
             </tr>
             <tr>
@@ -364,14 +357,14 @@ export default function WhitepaperPage() {
             </tr>
             <tr>
               <td>A look-alike payment address</td>
-              <td>The check compares it with the payer&apos;s recent payments and blocks it.</td>
+              <td>The check compares it with the payer’s recent payments and blocks it.</td>
             </tr>
             <tr>
               <td>Grades go stale or Svalin goes offline</td>
-              <td>The Guard refuses buys once grades pass their maximum age. Owners keep full access to their funds.</td>
+              <td>The Guard refuses buys once grades pass their maximum age. Owners can still take their funds out, after the usual wait.</td>
             </tr>
             <tr>
-              <td>Svalin&apos;s publishing key leaks</td>
+              <td>Svalin’s publishing key leaks</td>
               <td>It can only publish, never move money, and fingerprints can be checked against the public editions.</td>
             </tr>
             <tr>
@@ -391,7 +384,7 @@ export default function WhitepaperPage() {
           Exit value and exit prices cover NEAR for now and count only NEAR pools, so a token that also trades elsewhere could fetch more. Exit value
           assumes each position is sold on its own.
         </li>
-        <li>The Registry and the Guard are designs; the Guard will not be audited at first.</li>
+        <li>The Registry and the Guard run on test networks only.</li>
       </ul>
 
       <h2 id="references">References</h2>

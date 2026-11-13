@@ -28,11 +28,11 @@ export function ProReminder() {
   const days = proDaysLeft(status);
   if (!status?.until || days === null || days > 3 || days < -30) return null;
   return (
-    <p className="rounded-lg border border-riskMedium/40 bg-surface px-4 py-3 text-sm">
+    <p className="notice !block !border-riskMedium text-sm">
       {days > 0
         ? `Your Svalin Pro ends on ${formatDay(status.until)}, in ${days} day${days === 1 ? "" : "s"}. `
         : `Your Svalin Pro ended on ${formatDay(status.until)}. `}
-      <Link className="font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/pricing#checkout">
+      <Link className="link" href="/pricing#checkout">
         Renew with the same code
       </Link>
     </p>

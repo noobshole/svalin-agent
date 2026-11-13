@@ -1,38 +1,103 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { DocContents } from "@/components/doc-contents";
+import { DOC_GROUPS, docPlace } from "@/lib/docs-nav";
 import { cn } from "@/lib/utils/cn";
 
-/** The frame shared by About, Docs and the Whitepaper: a heading block and one readable column. */
-export function DocPage({ title, lede, note, children }: { title: string; lede?: ReactNode; note?: string; children: ReactNode }) {
+type Contents = [id: string, label: string][];
+
+/** The list of docs pages. The open page's sections drop down under it. */
+function DocList({ path, contents }: { path: string; contents: Contents }) {
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-14 md:px-8">
-      <div className="mx-auto grid w-full max-w-3xl gap-0">
-        <header className="grid gap-4 border-b border-border pb-10">
-          <h1 className="text-3xl font-medium leading-tight tracking-tight md:text-4xl" style={{ textWrap: "balance" }}>
-            {title}
-          </h1>
-          {lede ? <p className="max-w-2xl text-base leading-7 text-mutedForeground">{lede}</p> : null}
-          {note ? <p className="text-sm text-subtleForeground">{note}</p> : null}
-        </header>
-        <article className="doc">{children}</article>
+    <nav aria-label="Docs" className="grid gap-5">
+      {DOC_GROUPS.map((group) => (
+        <div key={group.name}>
+          <p className="docs__label">{group.name}</p>
+          <ul className="docs__links">
+            {group.links.map((link) => (
+              <li key={link.href}>
+                <Link aria-current={link.href === path ? "page" : undefined} href={link.href}>
+                  {link.label}
+                </Link>
+                {link.href === path ? <DocContents contents={contents} /> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+/**
+ * The frame every docs page shares, built the way the big Solana projects build theirs: the list of pages on
+ * the left, and one reading column with each heading above its text.
+ */
+export function DocPage({
+  path,
+  title,
+  lede,
+  note,
+  contents,
+  children,
+}: {
+  /** This page's address, as listed in lib/docs-nav.ts. */
+  path: string;
+  title: ReactNode;
+  lede?: ReactNode;
+  note?: string;
+  contents: Contents;
+  children: ReactNode;
+}) {
+  const { group, previous, next } = docPlace(path);
+  return (
+    <main className="page main">
+      <div className="docs">
+        <aside className="docs__side">
+          <DocList contents={contents} path={path} />
+        </aside>
+        <div className="docs__main">
+          <details className="docs__menu" key={path}>
+            <summary>All docs pages</summary>
+            <div className="pt-5">
+              <DocList contents={contents} path={path} />
+            </div>
+          </details>
+          <header className="grid gap-3">
+            {group ? <p className="dim">{group}</p> : null}
+            <h1 className="docs__title">{title}</h1>
+            {lede ? <p className="docs__lede">{lede}</p> : null}
+            {note ? <p className="text-sm text-mutedForeground">{note}</p> : null}
+          </header>
+          <article className="doc">{children}</article>
+          <nav aria-label="Previous and next page" className="mt-14 grid grid-cols-2 gap-6 border-t border-border pt-6">
+            {previous ? (
+              <Link className="grid justify-items-start gap-0.5" href={previous.href}>
+                <span className="text-sm text-mutedForeground">Previous</span>
+                <span className="hover:underline hover:underline-offset-4">{previous.label}</span>
+              </Link>
+            ) : (
+              <span />
+            )}
+            {next ? (
+              <Link className="grid justify-items-end gap-0.5 text-right" href={next.href}>
+                <span className="text-sm text-mutedForeground">Next</span>
+                <span className="hover:underline hover:underline-offset-4">{next.label}</span>
+              </Link>
+            ) : null}
+          </nav>
+        </div>
       </div>
     </main>
   );
 }
 
-/** "Live", "Planned" or "Research": where a part of Svalin stands today. */
-export function Status({ kind }: { kind: "live" | "planned" | "research" }) {
-  const label = { live: "Live", planned: "Planned", research: "Research" }[kind];
+/** Where a part of Svalin stands today. */
+export function Status({ kind }: { kind: "live" | "testnet" | "planned" | "research" }) {
+  const label = { live: "Live", testnet: "On testnet", planned: "Planned", research: "Research" }[kind];
   return (
-    <span
-      className={cn(
-        "ml-2 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 align-middle text-xs",
-        kind === "live" && "border-riskLow/40 text-riskLow",
-        kind === "planned" && "border-riskMedium/40 text-riskMedium",
-        kind === "research" && "border-border text-subtleForeground",
-      )}
-    >
-      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+    <span className={cn("ml-2 text-sm font-normal tracking-normal", kind === "live" && "text-riskLow", (kind === "testnet" || kind === "planned") && "text-riskMedium", kind === "research" && "text-mutedForeground")}>
       {label}
     </span>
   );

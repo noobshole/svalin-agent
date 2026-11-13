@@ -1,17 +1,16 @@
 import type { RiskFinding, RiskGrade, RiskReport } from "@svalin-agent/shared";
-import { Lock } from "lucide-react";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils/cn";
-import { formatPct, formatUsd } from "@/lib/utils/formatting";
+import { formatPct, formatUsd, typeset } from "@/lib/utils/formatting";
 
 /** "26 Oct 2026, 06:30 UTC": when a report or check was made. */
 export function checkedAt(iso: string) {
   return `${new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })} UTC`;
 }
 
-/* Colour only carries meaning here: the grade and finding severity. Everything else is grey. */
-const gradeText: Record<RiskGrade, string> = {
+/* Colour only carries meaning here: the grade and finding severity. */
+export const gradeText: Record<RiskGrade, string> = {
   A: "text-riskLow",
   B: "text-riskLow",
   C: "text-riskMedium",
@@ -25,14 +24,14 @@ const gradeFill: Record<RiskGrade, string> = {
   D: "bg-riskHigh",
   F: "bg-riskHigh",
 };
-const severityStyle: Record<RiskFinding["severity"], { label: string; dot: string; text: string }> = {
-  high: { label: "High", dot: "bg-riskHigh", text: "text-riskHigh" },
-  medium: { label: "Medium", dot: "bg-riskMedium", text: "text-riskMedium" },
-  low: { label: "Low", dot: "bg-riskMedium/50", text: "text-mutedForeground" },
-  info: { label: "Info", dot: "bg-riskInfo", text: "text-mutedForeground" },
+const severityStyle: Record<RiskFinding["severity"], { label: string; text: string }> = {
+  high: { label: "High", text: "text-riskHigh" },
+  medium: { label: "Medium", text: "text-riskMedium" },
+  low: { label: "Low", text: "text-mutedForeground" },
+  info: { label: "Info", text: "text-mutedForeground" },
 };
 
-export function exposureSlices(metrics: RiskReport["metrics"]) {
+function exposureSlices(metrics: RiskReport["metrics"]) {
   return [
     { label: "Native", value: metrics.nativePct, tone: "bg-exposure1" },
     { label: "Liquid staking", value: metrics.liquidStakingPct, tone: "bg-exposure2" },
@@ -43,75 +42,38 @@ export function exposureSlices(metrics: RiskReport["metrics"]) {
   ];
 }
 
-export function GradeMark({ report, size = "lg" }: { report: RiskReport; size?: "lg" | "md" }) {
-  const { grade, level, score } = report;
-  return (
-    <div className="flex items-end gap-4">
-      <span
-        className={cn(
-          "font-medium leading-none tracking-tight",
-          grade ? gradeText[grade] : "text-subtleForeground",
-          size === "lg" ? "text-7xl" : "text-5xl",
-        )}
-      >
-        {grade ?? "–"}
-      </span>
-      <div className="pb-1">
-        <p className="text-sm font-medium">{level ? `${level.charAt(0).toUpperCase()}${level.slice(1)} portfolio risk` : "Not rated"}</p>
-        <p className="font-mono text-xs text-mutedForeground">{score === null ? "Nothing priced to score" : `Score ${score}/100`}</p>
-      </div>
-    </div>
-  );
+/** The sentence that goes with a grade. */
+export function gradeSentence(report: RiskReport) {
+  const { level, score } = report;
+  if (!level || score === null) return "Not rated. Nothing here has a price to score.";
+  return `${level.charAt(0).toUpperCase()}${level.slice(1)} portfolio risk. Score ${score} of 100.`;
 }
 
 /** 0 (safest) to 100 (riskiest), with ticks at the grade boundaries. Empty when the wallet is not rated. */
-export function ScoreBar({ report }: { report: RiskReport }) {
+function ScoreBar({ report }: { report: RiskReport }) {
   const { grade, score } = report;
   return (
-    <div
-      aria-label={score === null ? "Not rated" : `Risk score ${score} out of 100`}
-      className="relative h-1.5 rounded-full bg-surface2"
-      role="img"
-    >
-      {grade && score !== null ? (
-        <div className={cn("h-full rounded-full", gradeFill[grade])} style={{ width: `${Math.max(score, 2)}%` }} />
-      ) : null}
+    <div aria-label={score === null ? "Not rated" : `Risk score ${score} out of 100`} className="relative h-2 bg-surface2" role="img">
+      {grade && score !== null ? <div className={cn("h-full", gradeFill[grade])} style={{ width: `${Math.max(score, 2)}%` }} /> : null}
       {[20, 40, 60, 80].map((tick) => (
-        <span className="absolute top-0 h-full w-px bg-background" key={tick} style={{ left: `${tick}%` }} />
+        <span className="absolute top-0 h-full w-0.5 bg-background" key={tick} style={{ left: `${tick}%` }} />
       ))}
     </div>
   );
 }
 
-export function ExposureBar({ metrics }: { metrics: RiskReport["metrics"] }) {
-  return (
-    <div className="flex h-2 gap-px overflow-hidden rounded-full bg-surface2">
-      {exposureSlices(metrics).map((slice) =>
-        slice.value > 0 ? (
-          <div className={slice.tone} key={slice.label} style={{ width: `${slice.value}%` }} title={`${slice.label} ${formatPct(slice.value)}`} />
-        ) : null,
-      )}
-    </div>
-  );
-}
-
-export function FindingRow({ finding, compact = false }: { finding: RiskFinding; compact?: boolean }) {
+function FindingRow({ finding }: { finding: RiskFinding }) {
   const style = severityStyle[finding.severity];
   return (
-    <article className={cn("grid gap-1.5", compact ? "py-3" : "px-5 py-4")}>
-      <div className="flex items-start gap-3">
-        <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", style.dot)} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h3 className="font-medium leading-6">{finding.title}</h3>
-            <span className={cn("font-mono text-xs", style.text)}>{style.label}</span>
-          </div>
-          {compact ? null : <p className="mt-1 text-sm leading-6 text-mutedForeground">{finding.summary}</p>}
-          <p className={cn("text-sm leading-6", compact ? "text-mutedForeground" : "mt-1")}>
-            <span className="text-mutedForeground">Next step: </span>
-            {finding.action ?? <LockedStep />}
-          </p>
-        </div>
+    <article className="grid items-baseline gap-x-4 gap-y-1 border-t border-border py-4 sm:grid-cols-[5.5rem_minmax(0,1fr)]">
+      <p className={cn("text-sm", style.text)}>{style.label}</p>
+      <div className="grid gap-1.5">
+        <h3 className="text-lg font-normal">{typeset(finding.title)}</h3>
+        <p className="text-sm text-mutedForeground">{typeset(finding.summary)}</p>
+        <p className="text-sm">
+          <span className="text-mutedForeground">Next step: </span>
+          {finding.action ? typeset(finding.action) : <LockedStep />}
+        </p>
       </div>
     </article>
   );
@@ -127,25 +89,27 @@ function LockedStep() {
       <span aria-hidden="true" className="select-none text-mutedForeground blur-[3px]">
         Trim this position over the coming weeks and keep a stable reserve
       </span>
-      <Link className="inline-flex items-center gap-1 text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/pricing">
-        <Lock aria-hidden="true" className="h-3 w-3" />
+      <Link className="link" href="/pricing">
         Unlock with Pro
       </Link>
     </span>
   );
 }
 
+/** The report's figures, exposure and findings. The page around it shows the seal and the address. */
 export function RiskReportView({ report }: { report: RiskReport }) {
   const { metrics } = report;
   const stats = [
-    {
-      label: "Priced value",
-      value: formatUsd(metrics.totalValueUsd),
-      sub:
-        typeof metrics.exitValueUsd === "number" && typeof metrics.exitLossPct === "number"
-          ? `${formatUsd(metrics.exitValueUsd)} if sold now${metrics.exitLossPct >= 0.5 ? ` (−${formatPct(metrics.exitLossPct)})` : ""}`
-          : undefined,
-    },
+    { label: "Priced value", value: formatUsd(metrics.totalValueUsd) },
+    ...(typeof metrics.exitValueUsd === "number" && typeof metrics.exitLossPct === "number"
+      ? [
+          {
+            label: "If sold now",
+            value: formatUsd(metrics.exitValueUsd),
+            sub: metrics.exitLossPct >= 0.5 ? `${formatPct(metrics.exitLossPct)} less` : undefined,
+          },
+        ]
+      : []),
     {
       label: "Largest volatile bet",
       value: metrics.largestVolatilePosition ? formatPct(metrics.largestVolatilePosition.pct) : "—",
@@ -160,60 +124,49 @@ export function RiskReportView({ report }: { report: RiskReport }) {
   ];
 
   return (
-    <div className="grid gap-6">
-      {report.dataSource === "mock" ? (
-        <p className="rounded-lg border border-riskMedium/40 px-4 py-3 text-sm text-riskMedium">
-          This API instance is running on sample data. Numbers are illustrative.
-        </p>
-      ) : null}
+    <div className="grid gap-12">
+      {report.dataSource === "mock" ? <p className="notice text-sm text-riskMedium">This API instance is running on sample data. Numbers are illustrative.</p> : null}
 
-      <section className="grid overflow-hidden rounded-lg border border-border bg-surface md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
-        <div className="grid content-between gap-6 border-b border-border p-6 md:border-b-0 md:border-r">
-          <GradeMark report={report} />
-          <ScoreBar report={report} />
+      <ScoreBar report={report} />
+
+      <dl className="border-b border-border">
+        {stats.map((stat) => (
+          <div className="line" key={stat.label}>
+            <dt className="text-mutedForeground">{stat.label}</dt>
+            <dd>
+              <span className="text-lg">{stat.value}</span>
+              {stat.sub ? <span className="block text-sm text-mutedForeground [overflow-wrap:anywhere]">{stat.sub}</span> : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <section className="grid gap-4">
+        <h2 className="title">Exposure</h2>
+        <div className="flex h-3 gap-0.5 bg-surface2">
+          {exposureSlices(metrics).map((slice) =>
+            slice.value > 0 ? <div className={slice.tone} key={slice.label} style={{ width: `${slice.value}%` }} title={`${slice.label} ${formatPct(slice.value)}`} /> : null,
+          )}
         </div>
-        <dl className="grid grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat, index) => (
-            <div
-              className={cn(
-                "grid content-start gap-1 border-border p-5",
-                index % 2 === 0 ? "border-r" : "",
-                index < 2 ? "border-b lg:border-b-0" : "",
-                index === 1 ? "lg:border-r" : "",
-                index === 2 ? "lg:border-r" : "",
-              )}
-              key={stat.label}
-            >
-              <dt className="text-xs text-mutedForeground">{stat.label}</dt>
-              <dd className="font-mono text-xl tracking-tight">{stat.value}</dd>
-              {stat.sub ? <dd className="font-mono text-xs leading-5 text-subtleForeground [overflow-wrap:anywhere]">{stat.sub}</dd> : null}
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <section className="grid gap-4 rounded-lg border border-border bg-surface p-6">
-        <h2 className="text-sm font-medium">Exposure</h2>
-        <ExposureBar metrics={metrics} />
-        <ul className="grid grid-cols-1 gap-x-10 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-x-[var(--gap)] sm:grid-cols-2">
           {exposureSlices(metrics).map((slice) => (
-            <li className="flex items-center gap-2" key={slice.label}>
-              <span className={cn("h-2 w-2 rounded-sm", slice.tone)} />
+            <li className="line !grid-cols-[auto_minmax(0,1fr)_auto] !gap-x-2" key={slice.label}>
+              <span aria-hidden="true" className={cn("h-2.5 w-2.5 self-center", slice.tone)} />
               <span className="text-mutedForeground">{slice.label}</span>
-              <span className="ml-auto font-mono">{formatPct(slice.value)}</span>
+              <span>{formatPct(slice.value)}</span>
             </li>
           ))}
         </ul>
       </section>
 
-      <section className="grid gap-3">
-        <h2 className="text-sm font-medium">
-          Findings <span className="font-mono text-xs text-subtleForeground">{report.findings.length}</span>
+      <section className="grid gap-4">
+        <h2 className="title">
+          Findings <span className="dim">{report.findings.length}</span>
         </h2>
         {report.findings.length === 0 ? (
-          <p className="rounded-lg border border-border bg-surface p-5 text-sm text-mutedForeground">No findings. This wallet clears every check.</p>
+          <p className="text-mutedForeground">No findings. This wallet clears every check.</p>
         ) : (
-          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+          <div className="border-b border-border">
             {report.findings.map((finding) => (
               <FindingRow finding={finding} key={finding.id} />
             ))}
@@ -221,9 +174,7 @@ export function RiskReportView({ report }: { report: RiskReport }) {
         )}
       </section>
 
-      <p className="text-xs leading-5 text-subtleForeground">
-        Checked {checkedAt(report.generatedAt)}. Not financial advice; Svalin only reads public data and never moves funds.
-      </p>
+      <p className="text-sm text-mutedForeground">Checked {checkedAt(report.generatedAt)}. Not financial advice; Svalin only reads public data and never moves funds.</p>
     </div>
   );
 }

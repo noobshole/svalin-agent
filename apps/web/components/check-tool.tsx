@@ -1,7 +1,6 @@
 "use client";
 
 import type { RecipientCheck } from "@svalin-agent/shared";
-import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
@@ -10,9 +9,12 @@ import { FreeCallsLeft, FreeLimitReached } from "@/components/free-calls";
 import { ProReminder, useProPass } from "@/components/pro-status";
 import { checkedAt } from "@/components/risk-report";
 import { normaliseAddress } from "@/components/scan-form";
+import { Seal } from "@/components/seal";
 import { getDemoCheck, type CheckResult } from "@/lib/api";
 import { isRunning } from "@/lib/pro";
+import type { SealTone } from "@/lib/seal";
 import { cn } from "@/lib/utils/cn";
+import { typeset } from "@/lib/utils/formatting";
 
 const EXAMPLES = [
   { label: "intent5.near", address: "intent5.near" },
@@ -21,16 +23,16 @@ const EXAMPLES = [
 ];
 
 /* Colour only carries meaning here: the verdict and each reason's severity. */
-const verdictStyle: Record<RecipientCheck["verdict"], { label: string; summary: string; text: string; border: string }> = {
-  allow: { label: "Allow", summary: "No warning signs found.", text: "text-riskLow", border: "border-riskLow/40" },
-  caution: { label: "Caution", summary: "Look twice before paying.", text: "text-riskMedium", border: "border-riskMedium/40" },
-  block: { label: "Block", summary: "Don't send money here.", text: "text-riskHigh", border: "border-riskHigh/40" },
+const verdictStyle: Record<RecipientCheck["verdict"], { label: string; summary: string; text: string; tone: SealTone }> = {
+  allow: { label: "Allow", summary: "No warning signs found.", text: "text-riskLow", tone: "green" },
+  caution: { label: "Caution", summary: "Look twice before paying.", text: "text-riskMedium", tone: "amber" },
+  block: { label: "Block", summary: "Don’t send money here.", text: "text-riskHigh", tone: "red" },
 };
 
-const severityDot: Record<RecipientCheck["reasons"][number]["severity"], string> = {
-  block: "bg-riskHigh",
-  caution: "bg-riskMedium",
-  info: "bg-riskInfo",
+const severityStyle: Record<RecipientCheck["reasons"][number]["severity"], { label: string; text: string }> = {
+  block: { label: "Block", text: "text-riskHigh" },
+  caution: { label: "Caution", text: "text-riskMedium" },
+  info: { label: "Note", text: "text-mutedForeground" },
 };
 
 const kindLabel: Record<RecipientCheck["kind"], string> = {
@@ -42,6 +44,9 @@ const kindLabel: Record<RecipientCheck["kind"], string> = {
   unused: "Never used",
   missing: "Does not exist",
 };
+
+/** Keeps a seal small enough that it and the form below it fit on one screen. */
+const SEAL_WIDTH = "w-full max-w-[min(100%,58vh)]";
 
 export function CheckTool() {
   const params = useSearchParams();
@@ -66,94 +71,125 @@ export function CheckTool() {
 
   if (!address) return <CheckIntro payer={payer} pro={pro} />;
 
+  const verdict = result?.ok ? verdictStyle[result.check.verdict] : null;
+
   return (
-    <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 pb-20 pt-10 md:px-8">
-      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] md:items-end">
-        <div className="grid min-w-0 gap-2">
-          <p className="eyebrow">Check Before Paying</p>
-          <h1 className="break-all font-mono text-xl tracking-tight md:text-2xl">{address}</h1>
+    <main className="page main">
+      <div className="grid4 items-start">
+        <div className="contents lg:sticky lg:top-8 lg:col-span-2 lg:grid lg:content-start lg:gap-8">
+          <div className={cn("order-1 lg:order-none", SEAL_WIDTH)}>
+            <Seal address={address} tone={verdict?.tone ?? "soft"}>
+              {verdict ? <span className={cn("text-[8.5cqw] leading-none", verdict.text)}>{verdict.label}</span> : null}
+            </Seal>
+          </div>
+          <div className={cn("order-3 lg:order-none", SEAL_WIDTH)}>
+            <CheckForm initialPayer={payer} initialValue={address} key={address + payer} pro={pro} />
+          </div>
         </div>
-        <CheckForm initialPayer={payer} initialValue={address} key={address + payer} pro={pro} />
+
+        <div className="order-2 grid min-w-0 gap-8 lg:order-none lg:col-span-2">
+          <header className="grid gap-2">
+            <h1 className="title break-all [text-wrap:wrap]">{address}</h1>
+            <p className="lede">{verdict ? verdict.summary : result ? null : "Reading the chain…"}</p>
+          </header>
+
+          <ProReminder />
+
+          {result === null ? (
+            <div aria-busy="true" aria-label="Checking address" className="grid gap-4">
+              {[0, 1, 2, 3].map((row) => (
+                <div className="h-7 animate-pulse bg-surface2" key={row} />
+              ))}
+            </div>
+          ) : result.ok ? (
+            <div className="grid gap-6">
+              <CheckView check={result.check} />
+              <FreeCallsLeft usage={result} />
+            </div>
+          ) : result.status === 429 ? (
+            <FreeLimitReached message={result.message} />
+          ) : (
+            <div className="notice !border-riskHigh">
+              <p className="text-riskHigh">{typeset(result.message)}</p>
+              {result.hint ? <p className="text-sm text-mutedForeground">{typeset(result.hint)}</p> : null}
+            </div>
+          )}
+
+          <p className="border-t border-border pt-4 text-sm text-mutedForeground">
+            With{" "}
+            <Link className="link text-foreground" href="/pricing">
+              Svalin Pro
+            </Link>{" "}
+            or the paid API, a check also compares the address with your own wallet’s recent payments, to catch a look-alike planted in your history. Agents can{" "}
+            <Link className="link text-foreground" href="/docs">
+              call it before every payment
+            </Link>
+            .
+          </p>
+        </div>
       </div>
-
-      <ProReminder />
-
-      {result === null ? (
-        <div aria-busy="true" aria-label="Checking address" className="h-48 animate-pulse rounded-lg border border-border bg-surface" />
-      ) : result.ok ? (
-        <div className="grid gap-3">
-          <CheckView check={result.check} />
-          <FreeCallsLeft usage={result} />
-        </div>
-      ) : result.status === 429 ? (
-        <FreeLimitReached message={result.message} />
-      ) : (
-        <div className="rounded-lg border border-riskHigh/40 bg-surface p-6">
-          <p className="font-medium text-riskHigh">{result.message}</p>
-          {result.hint ? <p className="mt-2 text-sm text-mutedForeground">{result.hint}</p> : null}
-        </div>
-      )}
-
-      <p className="border-t border-border pt-6 text-sm leading-6 text-mutedForeground">
-        With{" "}
-        <Link className={linkClass} href="/pricing">
-          Svalin Pro
-        </Link>{" "}
-        or the paid API, a check also compares the address with your own wallet&apos;s recent payments, to catch a look-alike planted in your
-        history. Agents can{" "}
-        <Link className={linkClass} href="/docs">
-          call it before every payment
-        </Link>
-        .
-      </p>
     </main>
   );
 }
-
-const linkClass = "text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground";
 
 const checkLooksAt = [
   { title: "The address itself", body: "What kind of account it is, how old it is, and how much it has been used. A token or a program is never a payee." },
   { title: "Look-alike names", body: "A NEAR name made to look like a well-known account, such as intent5.near for intents.near." },
   {
     title: "Your own history",
-    body: "With Svalin Pro or the paid API, it compares the address with your wallet's recent payments, to catch a planted look-alike.",
+    body: "With Svalin Pro or the paid API, it compares the address with your wallet’s recent payments, to catch a planted look-alike.",
   },
 ];
 
-/** Before a check: the form is the page, with what a check looks at underneath. */
+/** Before a check: the form beside two look-alike addresses, with what a check looks at underneath. */
 function CheckIntro({ payer, pro }: { payer: string; pro: boolean }) {
   return (
-    <main className="mx-auto grid w-full max-w-3xl gap-10 px-4 pb-24 pt-16 md:px-8 md:pt-24">
-      <div className="grid gap-4">
-        <h1 className="text-4xl font-medium leading-tight tracking-tight md:text-5xl" style={{ textWrap: "balance" }}>
-          Is it safe to pay this address?
-        </h1>
-        <p className="max-w-2xl text-lg leading-8 text-mutedForeground">
-          Paste the address you are about to send money to, on NEAR or Solana. You get allow, caution or block, and the reasons.
-        </p>
-      </div>
-      <ProReminder />
-      <CheckForm initialPayer={payer} initialValue="" pro={pro} />
-      <dl className="grid gap-8 border-t border-border pt-10 sm:grid-cols-3">
+    <main className="page main">
+      <section className="grid4 items-center">
+        <div className="grid content-start gap-6 lg:col-span-2">
+          <h1 className="display">
+            <span className="dim">Check an address</span> before you pay it.
+          </h1>
+          <p className="lede">Paste the address you are about to send money to, on NEAR or Solana. You get allow, caution or block, and the reasons.</p>
+          <ProReminder />
+          <CheckForm initialPayer={payer} initialValue="" pro={pro} />
+        </div>
+        <div className="grid grid-cols-2 gap-[var(--gap)] lg:col-span-2 lg:pl-[clamp(32px,6vw,160px)]">
+          <figure className="grid justify-items-center gap-3">
+            <Seal address="intents.near" />
+            <figcaption>intents.near</figcaption>
+          </figure>
+          <figure className="grid justify-items-center gap-3">
+            <Seal address="intent5.near" tone="red">
+              <span className="text-[8.5cqw] leading-none text-riskHigh">Block</span>
+            </Seal>
+            <figcaption>intent5.near</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <dl className="mt-16 border-b border-border lg:mt-24">
         {checkLooksAt.map((entry) => (
-          <div className="grid content-start gap-2" key={entry.title}>
-            <dt className="font-medium text-foreground">{entry.title}</dt>
-            <dd className="text-[15px] leading-7 text-mutedForeground">{entry.body}</dd>
+          <div className="grid4 !gap-y-1 border-t border-border py-5" key={entry.title}>
+            <dt className="text-lg lg:col-span-2">{entry.title}</dt>
+            <dd className="text-mutedForeground lg:col-span-2">{entry.body}</dd>
           </div>
         ))}
       </dl>
-      <p className="text-sm leading-6 text-mutedForeground">
-        A check judges whether to pay an address. To grade what a wallet holds instead, use{" "}
-        <Link className={linkClass} href="/scan">
-          Wallet Scan
-        </Link>
-        . Agents can{" "}
-        <Link className={linkClass} href="/docs">
-          call it before every payment
-        </Link>
-        .
-      </p>
+
+      <div className="grid4 mt-5">
+        <p className="text-sm text-mutedForeground lg:col-span-2 lg:col-start-3">
+          A check looks at the address you are about to pay. To grade what a wallet holds instead, use{" "}
+          <Link className="link text-foreground" href="/scan">
+            Wallet Scan
+          </Link>
+          . Agents can{" "}
+          <Link className="link text-foreground" href="/docs">
+            call it before every payment
+          </Link>
+          .
+        </p>
+      </div>
     </main>
   );
 }
@@ -173,12 +209,12 @@ function CheckForm({ initialValue, initialPayer, pro }: { initialValue: string; 
     event.preventDefault();
     const address = normaliseAddress(value);
     if (!address) {
-      setError("That doesn't look like a Solana address or a NEAR account.");
+      setError("That doesn’t look like a Solana address or a NEAR account.");
       return;
     }
     const from = pro && payer.trim() ? normaliseAddress(payer) : "";
     if (from === null) {
-      setError("Your wallet doesn't look like a Solana address or a NEAR account.");
+      setError("Your wallet doesn’t look like a Solana address or a NEAR account.");
       return;
     }
     check(address, from);
@@ -186,35 +222,33 @@ function CheckForm({ initialValue, initialPayer, pro }: { initialValue: string; 
 
   return (
     <form className="grid w-full gap-3" onSubmit={onSubmit}>
-      <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-1.5 focus-within:border-borderStrong sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <label className="sr-only" htmlFor="recipient">
           Address you are about to pay
         </label>
         <input
+          autoCapitalize="off"
           autoComplete="off"
-          className="min-w-0 flex-1 bg-transparent px-3 py-2 font-mono text-sm outline-none placeholder:text-subtleForeground"
+          className="field flex-1"
           id="recipient"
           onChange={(event) => setValue(event.target.value)}
           placeholder="Address you are about to pay"
           spellCheck={false}
           value={value}
         />
-        <button
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primaryForeground transition-opacity hover:opacity-90"
-          type="submit"
-        >
+        <button className="btn" type="submit">
           {pro ? "Check" : "Check free"}
-          <ArrowRight aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>
       {pro ? (
         <div className="grid gap-1">
-          <label className="text-xs text-mutedForeground" htmlFor="payer">
+          <label className="text-sm text-mutedForeground" htmlFor="payer">
             Your wallet (Pro, optional): also catches look-alikes of addresses you paid
           </label>
           <input
+            autoCapitalize="off"
             autoComplete="off"
-            className="min-w-0 rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm outline-none placeholder:text-subtleForeground focus:border-borderStrong"
+            className="field"
             id="payer"
             onChange={(event) => setPayer(event.target.value)}
             placeholder="The wallet you will pay from"
@@ -224,15 +258,10 @@ function CheckForm({ initialValue, initialPayer, pro }: { initialValue: string; 
         </div>
       ) : null}
       {error ? <p className="text-sm text-riskHigh">{error}</p> : null}
-      <p className="flex flex-wrap items-center gap-2 text-xs text-mutedForeground">
+      <p className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm text-mutedForeground">
         Try
         {EXAMPLES.map((example) => (
-          <button
-            className="rounded-md border border-border px-2 py-1 font-mono text-foreground transition-colors hover:border-borderStrong"
-            key={example.address}
-            onClick={() => check(example.address)}
-            type="button"
-          >
+          <button className="link text-foreground" key={example.address} onClick={() => check(example.address)} type="button">
             {example.label}
           </button>
         ))}
@@ -242,7 +271,6 @@ function CheckForm({ initialValue, initialPayer, pro }: { initialValue: string; 
 }
 
 function CheckView({ check }: { check: RecipientCheck }) {
-  const verdict = verdictStyle[check.verdict];
   const { ageDays, transactions, transactionsAtLeast } = check.signals;
   const facts = [
     { label: "Account", value: kindLabel[check.kind] },
@@ -254,37 +282,29 @@ function CheckView({ check }: { check: RecipientCheck }) {
   ];
 
   return (
-    <section aria-label="Check result" className={cn("grid gap-6 rounded-lg border bg-surface p-6", verdict.border)}>
-      <div className="grid gap-1">
-        <p className="eyebrow">Verdict</p>
-        <p className={cn("text-3xl font-medium tracking-tight", verdict.text)}>{verdict.label}</p>
-        <p className="text-sm text-mutedForeground">{verdict.summary}</p>
-      </div>
-
-      <dl className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
+    <section aria-label="Check result" className="grid gap-12">
+      <dl className="border-b border-border">
         {facts.map((fact) => (
-          <div className="grid gap-1 bg-surface px-4 py-3" key={fact.label}>
-            <dt className="text-xs text-mutedForeground">{fact.label}</dt>
-            <dd className="font-mono text-sm tabular-nums">{fact.value}</dd>
+          <div className="line" key={fact.label}>
+            <dt className="text-mutedForeground">{fact.label}</dt>
+            <dd className="text-lg">{fact.value}</dd>
           </div>
         ))}
       </dl>
 
-      <ul className="grid gap-3">
-        {check.reasons.map((reason) => (
-          <li className="flex gap-3 text-sm leading-6" key={reason.code}>
-            <span aria-hidden="true" className={cn("mt-2 h-2 w-2 shrink-0 rounded-full", severityDot[reason.severity])} />
-            <span className="min-w-0">
-              <span className="sr-only">{reason.severity}: </span>
-              {reason.message}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <section className="grid gap-4">
+        <h2 className="title">Reasons</h2>
+        <ul className="border-b border-border">
+          {check.reasons.map((reason) => (
+            <li className="grid items-baseline gap-x-4 gap-y-1 border-t border-border py-4 sm:grid-cols-[5.5rem_minmax(0,1fr)]" key={reason.code}>
+              <span className={cn("text-sm", severityStyle[reason.severity].text)}>{severityStyle[reason.severity].label}</span>
+              <span className="min-w-0">{typeset(reason.message)}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
-      <p className="text-xs text-subtleForeground">
-        Checked {checkedAt(check.checkedAt)}
-      </p>
+      <p className="text-sm text-mutedForeground">Checked {checkedAt(check.checkedAt)}</p>
     </section>
   );
 }

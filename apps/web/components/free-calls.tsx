@@ -1,8 +1,7 @@
 import Link from "next/link";
 
 import type { Usage } from "@/lib/api";
-
-const linkClass = "text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground";
+import { typeset } from "@/lib/utils/formatting";
 
 /** "3 free calls left today", or a Pro code's calls left today, shown under a scan or check. */
 export function FreeCallsLeft({ usage }: { usage: Partial<Usage> }) {
@@ -10,7 +9,7 @@ export function FreeCallsLeft({ usage }: { usage: Partial<Usage> }) {
     return (
       <p className="text-sm text-mutedForeground">
         Svalin Pro: {usage.proLeft} call{usage.proLeft === 1 ? "" : "s"} left today.{" "}
-        <Link className={linkClass} href="/pricing">
+        <Link className="link text-foreground" href="/pricing">
           Your pass
         </Link>
       </p>
@@ -20,9 +19,9 @@ export function FreeCallsLeft({ usage }: { usage: Partial<Usage> }) {
   if (left === null || left === undefined) return null;
   return (
     <p className="text-sm text-mutedForeground">
-      {left === 0 ? "No free calls left today" : `${left} free call${left === 1 ? "" : "s"} left today`}, reset at midnight UTC.{" "}
-      <Link className={linkClass} href="/pricing">
-        No limit with Pro
+      {left === 0 ? "No free calls left today" : `${left} free call${left === 1 ? "" : "s"} left today`}. Resets at midnight UTC.{" "}
+      <Link className="link text-foreground" href="/pricing">
+        100 a day with Pro
       </Link>
     </p>
   );
@@ -31,14 +30,14 @@ export function FreeCallsLeft({ usage }: { usage: Partial<Usage> }) {
 /** Shown instead of a result once the visitor has used today's free calls. */
 export function FreeLimitReached({ message }: { message: string }) {
   return (
-    <div className="grid gap-2 rounded-lg border border-border bg-surface p-6">
-      <p className="font-medium">{message}</p>
-      <p className="text-sm leading-6 text-mutedForeground">
-        <Link className={linkClass} href="/pricing">
+    <div className="notice">
+      <p className="text-lg">{typeset(message)}</p>
+      <p className="text-sm text-mutedForeground">
+        <Link className="link text-foreground" href="/pricing">
           Svalin Pro
         </Link>{" "}
         gives 100 calls a day and every next step for $9 a month. Developers and agents can{" "}
-        <Link className={linkClass} href="/docs">
+        <Link className="link text-foreground" href="/docs">
           pay per call
         </Link>{" "}
         instead.
