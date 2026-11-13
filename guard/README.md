@@ -256,8 +256,8 @@ Three look-alikes or forged grades within an hour freeze the vault, and each exa
 [OutLayer](https://outlayer.ai), FastNEAR RPC, NEAR Chain Signatures (`v1.signer-prod.testnet`),
 NEAR AI Cloud, and x402.org's facilitator on Solana devnet. The vault page is plain HTML, CSS and
 JavaScript with a pinned copy of NEAR Connect (MIT). The demo agent uses only Node's own modules.
-No template was used. The code was written with an AI coding assistant (Claude Code) and is tested
-as described above.
+No template was used. Built with an AI coding assistant (Claude Code), directed by Svalin's founder,
+and tested as described above.
 The look-alike rules are ported from Svalin's API (`apps/api/src/risk/check.ts`), and shared test
 cases keep the two in step.
 

@@ -252,7 +252,7 @@ How NEAR is used:
   signed.
 - Editions are sealed in a NEAR contract, and paid calls settle in USDC on NEAR.
 
-## Libraries, services and AI-written code
+## Libraries, services and AI assistance
 
 - **API and MCP server:** [Hono](https://hono.dev), [Zod](https://zod.dev), the x402 packages
   (`@x402/core`, `@x402/hono`, `@x402/fetch`, `@x402/near`, `@x402/svm`, `@coinbase/x402`),
@@ -264,8 +264,8 @@ How NEAR is used:
   facilitators, OutLayer, NEAR Chain Signatures, NEAR AI Cloud, Cloudflare Workers and GitHub
   Actions.
 - **Templates:** none.
-- **AI-written code:** the code was written with an AI coding assistant (Claude Code) and is
-  covered by the tests above. When an Anthropic API key is configured, `/v1/brief` uses Claude to
+- **AI assistance:** Svalin is built with an AI coding assistant (Claude Code), directed by its
+  founder, and checked by the tests above and by live runs on testnet. When an Anthropic API key is configured, `/v1/brief` uses Claude to
   word its summary; no model computes a score, a grade or a vault decision.
 
 ## Limits
