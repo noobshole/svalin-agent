@@ -1,0 +1,13 @@
+[package]
+name = "svalin-roots"
+description = "Computes a sealed Svalin Index edition's Merkle root and token proofs for the Svalin Ratings registry."
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/noobshole/svalin-guard"
+publish = false
+
+[dependencies]
+serde_json = "1"
+sha2 = "=0.10.9"
+svalin-proof = { path = "../../crates/svalin-proof" }

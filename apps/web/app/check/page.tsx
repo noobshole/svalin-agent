@@ -5,7 +5,7 @@ import { CheckTool } from "@/components/check-tool";
 
 export const metadata: Metadata = {
   title: "Check Before Paying — Svalin",
-  description: "Is it safe to send money to this Solana address or NEAR account? Allow, caution or block, with reasons. Free and read-only.",
+  description: "Check a Solana address or NEAR account before you send money to it. Allow, caution or block, with reasons. Free and read-only.",
 };
 
 export default function CheckPage() {

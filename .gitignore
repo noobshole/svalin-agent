@@ -13,3 +13,9 @@ supabase/.temp
 .dev.vars
 out
 index-out
+
+# Svalin Guard (Rust)
+target
+*.pem
+*.key
+neardev/

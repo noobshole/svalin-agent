@@ -1,3 +1,8 @@
+/** Proper apostrophes for words that come from the API. */
+export function typeset(text: string) {
+  return text.replace(/'/g, "’");
+}
+
 export function formatUsd(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",

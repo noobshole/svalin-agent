@@ -9,20 +9,29 @@ export const metadata: Metadata = {
   description: "Svalin is an independent, read-only rating service for agent money on NEAR and Solana.",
 };
 
+const contents: [string, string][] = [
+  ["why", "Why it exists"],
+  ["what", "What it does"],
+  ["how", "How we work"],
+  ["name", "The name"],
+  ["status", "Status"],
+];
+
 export default function AboutPage() {
   return (
     <DocPage
+      contents={contents}
+      path="/about"
       lede="Svalin is an independent, read-only rating service for agent money on NEAR and Solana. It tells AI agents, and the people behind them, what is real before they spend."
       title="Know what is real before you spend."
     >
-      <h2>Why it exists</h2>
+      <h2 id="why">Why it exists</h2>
       <p>
-        AI agents now hold and spend money, and they can be talked into bad decisions. The data they read can be wrong too: anyone can create a token,
-        put a price on it and send it to a wallet, and a look-alike address can be planted in a wallet&apos;s history so the next payment goes to a
-        thief. Svalin checks these things before the money moves.
+        AI agents now hold and spend money, and they can be talked into bad decisions. The data they read can be wrong too: anyone can create a token, put a price on it and send it to a wallet,
+        and a look-alike address can be planted in a wallet’s history so the next payment goes to a thief. Svalin checks these things before the money moves.
       </p>
 
-      <h2>What it does</h2>
+      <h2 id="what">What it does</h2>
       <div className="table-wrap">
         <table>
           <thead>
@@ -37,37 +46,44 @@ export default function AboutPage() {
                 <Link href="/scan">Wallet Scan</Link>
                 <Status kind="live" />
               </td>
-              <td>How risky is this wallet&apos;s mix of holdings?</td>
+              <td>How risky is this wallet’s mix of holdings?</td>
             </tr>
             <tr>
               <td>
                 <Link href="/check">Check Before Paying</Link>
                 <Status kind="live" />
               </td>
-              <td>Is it safe to send money to this address?</td>
+              <td>What is known about this address before you pay it?</td>
             </tr>
             <tr>
               <td>
                 <Link href="/ratings">Svalin Index</Link>
                 <Status kind="live" />
               </td>
-              <td>Is there real money behind this token&apos;s price?</td>
+              <td>Is there real money behind this token’s price?</td>
             </tr>
             <tr>
               <td>
-                Registry and Guard
-                <Status kind="planned" />
+                <Link href="/guard">Svalin Guard</Link>
+                <Status kind="testnet" />
               </td>
-              <td>Grades that contracts can read on-chain, and spending rules the chain enforces.</td>
+              <td>What can an AI agent spend, under rules the chain enforces?</td>
+            </tr>
+            <tr>
+              <td>
+                Svalin Registry
+                <Status kind="testnet" />
+              </td>
+              <td>Can a contract confirm this token’s grade on-chain?</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <h2>How we work</h2>
+      <h2 id="how">How we work</h2>
       <ul>
         <li>
-          <strong>Read-only.</strong> Svalin never asks for wallet keys, approvals or signatures, and has no way to move anyone&apos;s funds.
+          <strong>Read-only.</strong> Svalin never asks for wallet keys, approvals or signatures, and has no way to move anyone’s funds.
         </li>
         <li>
           <strong>Deterministic.</strong> The same data always gives the same answer. No language model computes a number.
@@ -80,19 +96,15 @@ export default function AboutPage() {
         </li>
       </ul>
 
-      <h2>The name</h2>
-      <p>
-        In Norse myth, Svalinn is the shield that stands before the sun and keeps it from burning the earth. Svalin stands between an agent and a bad
-        payment.
-      </p>
+      <h2 id="name">The name</h2>
+      <p>In Norse myth, Svalinn is the shield that stands before the sun and keeps it from burning the earth. Svalin stands between an agent and a bad payment.</p>
 
-      <h2>Status</h2>
+      <h2 id="status">Status</h2>
       <p>
-        Svalin is early. The scan, the check and the Index are live, and each chain moves from its test network to real USDC on its own. The
-        Registry and the Guard are designed and described in the <Link href="/whitepaper">whitepaper</Link>, and the{" "}
-        <Link href="/roadmap">roadmap</Link> shows what comes next.
+        Svalin is early. The scan, the check and the Index are live, and each chain moves from its test network to real USDC on its own. The Registry and the Guard run on NEAR’s test network. The
+        <Link href="/whitepaper"> whitepaper</Link> describes them, and the <Link href="/roadmap">roadmap</Link> shows what comes next.
       </p>
-      <PaymentNetworks className="not-prose" />
+      <PaymentNetworks className="mb-4" />
       <p>
         Questions, bugs and ideas are welcome on <a href="https://github.com/noobshole/svalin-agent/issues">GitHub</a>.
       </p>

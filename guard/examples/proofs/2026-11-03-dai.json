@@ -1,0 +1,60 @@
+{
+ "backing_usd": 1790802,
+ "day": "2026-11-03",
+ "grade": "A",
+ "proof": [
+  {
+   "hash": "beabdaa80d3cddb506ef469fa35ab3994091beb76f983e5778a157863ce95a7e",
+   "left": true
+  },
+  {
+   "hash": "ba666391c8b8e9281c2ab3cfa2c0825dfab9c4cc324ab4a65e08d44c24501eea",
+   "left": true
+  },
+  {
+   "hash": "c5406b027c2d1d7765a5d757a59dd39a0198cb9e22cd6bb5434a1830e830622b",
+   "left": false
+  },
+  {
+   "hash": "0444578cc4c98e0eb44cbbe655220691c355f6a47685d6ffad3a123ea9d3a49c",
+   "left": false
+  },
+  {
+   "hash": "4c8504bf1d107bfc7acf14d158fd5ebeb3ddd5cfe5f3aad7ce383639330e9f4f",
+   "left": false
+  },
+  {
+   "hash": "7d140e398b890b4e835e2a74091adb25704d3ebb03d12304410ed22924d25783",
+   "left": false
+  },
+  {
+   "hash": "103701374ea7a7c46fb4d398b13921e1614b731e74381718f91a5d168b799fd9",
+   "left": true
+  },
+  {
+   "hash": "33d473a494c68ab71c4116b08536e4328a929c6ce4a7b99043cfa4ac8f297301",
+   "left": false
+  },
+  {
+   "hash": "679d27feb73bf954c4a12a6c6be5d871f853b32ac5909d2ac592e4bf20fae0f3",
+   "left": false
+  },
+  {
+   "hash": "24f2cf103af8b1e8f4ca5fc416a103fb237dc61bb3eeae1f0f0401a804c3fe07",
+   "left": false
+  },
+  {
+   "hash": "b50ed48ce7f84c3422a1c5b88d7adcd34751e87e6697380ee1b8735fc3e4bc78",
+   "left": false
+  },
+  {
+   "hash": "8de134d179dfb45b8abdee7debf9bb13c613e6a270c2698a55192a82ddc3af3c",
+   "left": false
+  },
+  {
+   "hash": "78541e6e9692aeee611d34f697ce4ee789f441853313f3875a3220e108e49c6f",
+   "left": false
+  }
+ ],
+ "token": "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near"
+}

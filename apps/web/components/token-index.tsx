@@ -12,14 +12,15 @@ import {
   type TokenGrade,
   type TokenNote,
 } from "@svalin-agent/shared";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useProPass } from "@/components/pro-status";
-import { summaryReset } from "@/components/site-nav";
+import { IndexDisc } from "@/components/seal";
 import { API_BASE_URL } from "@/lib/api";
 import { isRunning } from "@/lib/pro";
+import { INDEX_COUNTS_FALLBACK, indexCounts } from "@/lib/seal";
 import { cn } from "@/lib/utils/cn";
 import { formatCompactUsd, formatPrice, formatUsd } from "@/lib/utils/formatting";
 
@@ -34,7 +35,8 @@ export const gradeTone: Record<TokenGrade, string> = {
 const GRADES: TokenGrade[] = ["A", "B", "C", "D", "F"];
 const FILTERS: ("All" | TokenGrade)[] = ["All", ...GRADES];
 const PAGE = 50;
-const COLUMNS = "md:grid-cols-[minmax(0,1fr)_6rem_6.5rem_6.5rem_6.5rem_5.5rem_5rem_7rem]";
+/** The table's columns: the heading row and every token row share this one definition. */
+const COLUMNS = "lg:grid-cols-[minmax(0,1fr)_3.5rem_6rem_8.5rem_6rem_5rem_5.5rem_7.5rem]";
 
 type Notes = Record<string, TokenNote>;
 type Edition = Pick<NearTokenIndex, "generatedAt" | "methodology">;
@@ -45,10 +47,11 @@ function editionTime(generatedAt: string) {
 }
 
 /**
- * The latest Svalin Index edition, loaded from the API: the summary, then `story`, then the table.
+ * The latest Svalin Index edition, loaded from the API. The page gives the opening words and the story;
+ * this draws every token as a dot and adds the summary and the table.
  * The edition is rebuilt every few hours, so the page is static and the numbers are current.
  */
-export function TokenIndex({ story }: { story: ReactNode }) {
+export function TokenIndex({ intro, story }: { intro: ReactNode; story: ReactNode }) {
   const [index, setIndex] = useState<NearTokenIndex | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -66,44 +69,68 @@ export function TokenIndex({ story }: { story: ReactNode }) {
     return () => controller.abort();
   }, []);
 
-  if (failed) {
-    return <p className="rounded-lg border border-border bg-surface px-5 py-8 text-sm text-mutedForeground">The index could not be loaded. Refresh to try again.</p>;
-  }
-  if (!index) {
-    return (
-      <div className="grid gap-12" aria-busy="true">
-        <div className="h-28 animate-pulse rounded-lg border border-border bg-surface" />
-        {story}
-        <div className="h-96 animate-pulse rounded-lg border border-border bg-surface" />
-      </div>
-    );
-  }
   return (
-    <div className="grid gap-12">
-      <Summary index={index} />
-      <div className="grid gap-6 md:grid-cols-2">
-        {story}
-        <LoudestClaim rows={index.rows} />
-      </div>
-      <section className="grid gap-5">
-        <div className="grid gap-2">
-          <h2 className="text-2xl font-medium tracking-tight">All graded tokens</h2>
-          <p className="text-sm text-mutedForeground">
-            Sorted by real backing. Market cap is the quoted price times total supply. A flagged top-10 share means ten wallets outside pools,
-            bridges and NEAR Intents hold {CONCENTRATION_FLAG_PCT}% or more. Open a token to see its exit prices: what selling it would actually
-            fetch.
-          </p>
+    <div className="grid gap-16 lg:gap-24">
+      <section className="grid4 items-center">
+        <div className="grid content-start gap-6 lg:col-span-2">
+          {intro}
+          {index ? (
+            <EditionLine index={index} />
+          ) : (
+            <p className="text-sm text-mutedForeground">{failed ? "The index could not be loaded. Refresh to try again." : "Loading the latest edition…"}</p>
+          )}
         </div>
-        <TokenTable edition={index} notes={index.notes ?? {}} rows={index.rows} />
+        <div className="w-full max-w-[min(100%,58vh)] lg:col-span-2 lg:justify-self-end">
+          <IndexDisc counts={index ? indexCounts(index.counts) : INDEX_COUNTS_FALLBACK} />
+        </div>
       </section>
+
+      {index ? (
+        <>
+          <Summary index={index} />
+          <section className="grid4">
+            {story}
+            <LoudestClaim rows={index.rows} />
+          </section>
+          <section className="grid gap-6">
+            <div className="grid gap-3">
+              <h2 className="title">All graded tokens</h2>
+              <p className="max-w-[50em] text-mutedForeground">
+                Sorted by real backing. Market cap is the quoted price times total supply. An amber top-10 share means ten wallets outside pools, bridges and NEAR Intents hold{" "}
+                {CONCENTRATION_FLAG_PCT}% or more. Open a token to see its exit prices: what selling it would actually fetch.
+              </p>
+            </div>
+            <TokenTable edition={index} notes={index.notes ?? {}} rows={index.rows} />
+          </section>
+        </>
+      ) : (
+        <section className="grid4">{story}</section>
+      )}
     </div>
+  );
+}
+
+function EditionLine({ index }: { index: NearTokenIndex }) {
+  return (
+    <p className="text-sm text-mutedForeground">
+      Edition of {editionTime(index.generatedAt)} UTC, {ageLabel(index.generatedAt)}, method <span className="font-mono text-xs">{index.methodology}</span>. A new one comes every few hours.
+      {index.provenance ? (
+        <>
+          {" "}
+          Each edition is saved with the data behind it, so you can{" "}
+          <a className="link text-foreground" href="https://github.com/noobshole/svalin-index#dont-trust-it-verify-it" rel="noreferrer" target="_blank">
+            check it yourself
+          </a>
+          .
+        </>
+      ) : null}
+    </p>
   );
 }
 
 function Summary({ index }: { index: NearTokenIndex }) {
   const total = index.rows.length;
   const noBacking = index.rows.filter((row) => row[3] === 0).length;
-  const edition = editionTime(index.generatedAt);
   const stats = [
     { label: "NEAR tokens graded", value: total.toLocaleString("en-US"), sub: "every token Ref Finance prices" },
     { label: "Grade F", value: `${Math.round((index.counts.F / total) * 100)}%`, sub: `${index.counts.F.toLocaleString("en-US")} tokens under $3K of real backing` },
@@ -115,66 +142,24 @@ function Summary({ index }: { index: NearTokenIndex }) {
     },
   ];
 
-  const provenance = index.provenance;
-
   return (
-    <section className="grid gap-4">
-      <div className="flex flex-col gap-1 text-sm text-mutedForeground sm:flex-row sm:flex-wrap sm:gap-x-4">
-        <span>
-          Edition of {edition} UTC, {ageLabel(index.generatedAt)}, method <span className="font-mono text-xs">{index.methodology}</span>. A new one comes
-          every few hours.
-        </span>
-        {provenance ? (
-          <span>
-            Each edition is saved with the data behind it, so you can{" "}
-            <a
-              className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
-              href="https://github.com/noobshole/svalin-index#dont-trust-it-verify-it"
-              rel="noreferrer"
-              target="_blank"
-            >
-              check it yourself
-            </a>
-            .
-          </span>
-        ) : null}
-      </div>
-      <div className="grid overflow-hidden rounded-lg border border-border bg-surface sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, position) => (
-          <div
-            className={cn(
-              "grid gap-1 p-5",
-              position > 0 && "border-t border-border sm:border-t-0",
-              position % 2 === 1 && "sm:border-l",
-              position >= 2 && "sm:border-t lg:border-t-0",
-              position > 0 && "lg:border-l",
-            )}
-            key={stat.label}
-          >
-            <p className="text-xs text-mutedForeground">{stat.label}</p>
-            <p className="font-mono text-3xl tracking-tight">{stat.value}</p>
-            <p className="text-xs text-subtleForeground">{stat.sub}</p>
+    <section className="grid gap-6">
+      <dl className="grid grid-cols-2 gap-x-[var(--gap)] gap-y-1 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <div className="row-span-3 grid grid-rows-subgrid border-t-2 border-foreground pt-3" key={stat.label}>
+            <dt>{stat.label}</dt>
+            <dd className="title">{stat.value}</dd>
+            <dd className="pb-5 text-sm text-mutedForeground lg:pb-0">{stat.sub}</dd>
           </div>
         ))}
-      </div>
-      <div className="flex h-3 gap-px overflow-hidden rounded-full bg-surface2" role="img" aria-label="Share of tokens per grade">
-        {GRADES.map((grade) =>
-          index.counts[grade] > 0 ? (
-            <div
-              className={cn(grade === "A" || grade === "B" ? "bg-riskLow" : grade === "C" ? "bg-riskMedium" : "bg-riskHigh", grade === "D" && "opacity-60")}
-              key={grade}
-              style={{ width: `${Math.max((index.counts[grade] / total) * 100, 0.6)}%` }}
-            />
-          ) : null,
-        )}
-      </div>
-      <div className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs text-mutedForeground">
+      </dl>
+      <p className="flex flex-wrap gap-x-8 gap-y-1">
         {GRADES.map((grade) => (
           <span key={grade}>
             <span className={gradeTone[grade]}>{grade}</span> {index.counts[grade].toLocaleString("en-US")}
           </span>
         ))}
-      </div>
+      </p>
     </section>
   );
 }
@@ -184,20 +169,20 @@ function LoudestClaim({ rows }: { rows: RatedTokenRow[] }) {
   const claim = rows.filter((row) => row[3] === 0 && row[5] !== null).sort((left, right) => (right[5] ?? 0) - (left[5] ?? 0))[0];
   if (!claim) return null;
   return (
-    <div className="grid content-start gap-3 rounded-lg border border-border bg-surface p-6">
-      <p className="eyebrow">Loudest claim in this edition</p>
-      <p className="truncate font-mono text-sm">{claim[0]}</p>
-      <dl className="grid grid-cols-2 gap-4">
-        <div>
-          <dt className="text-xs text-mutedForeground">Claimed market cap</dt>
-          <dd className="font-mono text-2xl">{formatCompactUsd(claim[5] ?? 0)}</dd>
+    <div className="grid content-start gap-4 lg:col-span-2">
+      <h2 className="title">The loudest claim in this edition</h2>
+      <p className="break-all">{claim[0]}</p>
+      <dl className="border-b border-border">
+        <div className="line">
+          <dt className="text-mutedForeground">Claimed market cap</dt>
+          <dd className="text-lg">{formatCompactUsd(claim[5] ?? 0)}</dd>
         </div>
-        <div>
-          <dt className="text-xs text-mutedForeground">Real backing</dt>
-          <dd className="font-mono text-2xl">none</dd>
+        <div className="line">
+          <dt className="text-mutedForeground">Real backing</dt>
+          <dd className="text-lg">none</dd>
         </div>
       </dl>
-      <p className="text-xs text-subtleForeground">Quoted at {formatPrice(claim[2])} per token. Grade F: nobody can sell it at that price.</p>
+      <p className="text-sm text-mutedForeground">Quoted at {formatPrice(claim[2])} per token. Grade F: nobody can sell it at that price.</p>
     </div>
   );
 }
@@ -224,29 +209,23 @@ function TokenTable({ rows, notes, edition }: { rows: RatedTokenRow[]; notes: No
   }, [rows, query, grade]);
 
   return (
-    <div className="grid scroll-mt-24 gap-4" ref={table}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex h-10 w-full items-center gap-2 rounded-md border border-border bg-surface px-3 focus-within:border-borderStrong sm:max-w-sm">
-          <Search aria-hidden="true" className="h-4 w-4 text-subtleForeground" />
-          <input
-            aria-label="Search tokens"
-            className="w-full bg-transparent text-sm placeholder:text-subtleForeground focus-visible:outline-none"
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setShown(PAGE);
-            }}
-            placeholder="Search a token or contract"
-            value={query}
-          />
-        </label>
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by grade">
+    <div className="grid scroll-mt-8 gap-6" ref={table}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <input
+          aria-label="Search tokens"
+          className="field sm:max-w-md"
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setShown(PAGE);
+          }}
+          placeholder="Search a token or contract"
+          value={query}
+        />
+        <div aria-label="Filter by grade" className="flex items-center gap-x-5 pb-2" role="group">
           {FILTERS.map((option) => (
             <button
               aria-pressed={grade === option}
-              className={cn(
-                "rounded-md px-3 py-1.5 font-mono text-xs transition-colors",
-                grade === option ? "bg-primary text-primaryForeground" : "text-mutedForeground hover:text-foreground",
-              )}
+              className={cn(grade === option ? "underline underline-offset-4" : "text-mutedForeground hover:text-foreground")}
               key={option}
               onClick={() => {
                 setGrade(option);
@@ -260,10 +239,10 @@ function TokenTable({ rows, notes, edition }: { rows: RatedTokenRow[]; notes: No
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-surface">
-        <div className={cn("hidden gap-4 border-b border-border px-5 py-2.5 text-xs font-medium text-mutedForeground md:grid", COLUMNS)}>
+      <div className="border-b border-border tabular-nums">
+        <div className={cn("hidden gap-x-4 border-b-2 border-foreground pb-2 text-sm lg:grid", COLUMNS)}>
           <span>Token</span>
-          <span>Liquidity grade</span>
+          <span>Grade</span>
           <span className="text-right">Price</span>
           <span className="text-right">Market cap</span>
           <span className="text-right">Real backing</span>
@@ -273,48 +252,36 @@ function TokenTable({ rows, notes, edition }: { rows: RatedTokenRow[]; notes: No
         </div>
 
         {filtered.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-mutedForeground">No token matches that search.</p>
+          <p className="py-8 text-mutedForeground">No token matches that search.</p>
         ) : (
           filtered.slice(0, shown).map((row, position) => {
             const [contract, symbol, priceUsd, backingUsd, rowGrade, marketCap, top10, holders] = row;
             const note = notes[contract];
+            const flagged = top10 !== null && top10 >= CONCENTRATION_FLAG_PCT;
             // A scanned token arrives with ?q=<contract> and opens on its exit prices.
             return (
               <details className={cn("group", position > 0 && "border-t border-border")} key={contract} open={contract === linked}>
-                <summary
-                  className={cn(
-                    summaryReset,
-                    "grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-5 py-3 transition-colors hover:bg-surface2/40 md:items-center",
-                    COLUMNS,
-                  )}
-                >
+                <summary className={cn("grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 py-3 lg:items-center", COLUMNS)}>
                   <div className="min-w-0">
-                    <p className="flex items-center gap-1.5 text-sm font-medium">
+                    <p className="flex items-center gap-1.5">
                       <span className="truncate">{symbol}</span>
                       {note?.selfDeclaredTest ? (
-                        <span
-                          className="shrink-0 rounded border border-riskMedium/50 px-1.5 text-xs font-normal text-riskMedium"
-                          title={note.name ? `Its on-chain name: ${note.name}` : "Its own name says it is a test"}
-                        >
+                        <span className="shrink-0 text-sm text-riskMedium" title={note.name ? `Its on-chain name: ${note.name}` : "Its own name says it is a test"}>
                           Test token
                         </span>
                       ) : null}
                       <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-subtleForeground transition-transform group-open:rotate-180" />
                     </p>
-                    <p className="truncate font-mono text-xs text-subtleForeground">{contract}</p>
+                    <p className="truncate text-xs text-mutedForeground">{contract}</p>
                   </div>
-                  <span className={cn("font-mono text-lg font-medium md:text-base", gradeTone[rowGrade])}>{rowGrade}</span>
+                  <span className={cn("text-lg lg:text-base", gradeTone[rowGrade])}>{rowGrade}</span>
                   <Cell label="Price" value={formatPrice(priceUsd)} />
-                  <Cell label="Market cap" value={marketCap === null ? "—" : formatCompactUsd(marketCap)} />
+                  <Cell label="Market cap" more value={marketCap === null ? "—" : formatCompactUsd(marketCap)} />
                   <Cell label="Real backing" value={backingUsd > 0 ? formatCompactUsd(backingUsd) : "none"} />
-                  <Cell
-                    flagged={top10 !== null && top10 >= CONCENTRATION_FLAG_PCT}
-                    label="Top 10 own"
-                    value={top10 === null ? "—" : `${top10.toFixed(top10 < 10 ? 1 : 0)}%`}
-                  />
+                  <Cell flagged={flagged} label="Top 10 own" more value={top10 === null ? "—" : `${top10.toFixed(top10 < 10 ? 1 : 0)}%`} />
                   {/* Editions before 4 Nov 2026 record 0 when the count could not be read: unknown, not nobody. */}
-                  <Cell label="Holders" value={!holders ? "—" : `${holders.toLocaleString("en-US")}${note?.holdersAtLeast ? "+" : ""}`} />
-                  <Cell label="$10K sale fetches" value={backingUsd > 0 ? formatUsd(saleProceeds(backingUsd, 10_000)) : "nothing"} />
+                  <Cell label="Holders" more value={!holders ? "—" : `${holders.toLocaleString("en-US")}${note?.holdersAtLeast ? "+" : ""}`} />
+                  <Cell label="$10K sale fetches" more value={backingUsd > 0 ? formatUsd(saleProceeds(backingUsd, 10_000)) : "nothing"} />
                 </summary>
                 <ExitPanel edition={edition} note={note} row={row} />
               </details>
@@ -324,11 +291,7 @@ function TokenTable({ rows, notes, edition }: { rows: RatedTokenRow[]; notes: No
       </div>
 
       {filtered.length > shown ? (
-        <button
-          className="justify-self-center rounded-full border border-border px-4 py-2 text-sm text-mutedForeground transition-colors hover:text-foreground"
-          onClick={() => setShown((count) => count + PAGE)}
-          type="button"
-        >
+        <button className="link justify-self-start" onClick={() => setShown((count) => count + PAGE)} type="button">
           Show more ({(filtered.length - shown).toLocaleString("en-US")} left)
         </button>
       ) : null}
@@ -336,13 +299,14 @@ function TokenTable({ rows, notes, edition }: { rows: RatedTokenRow[]; notes: No
   );
 }
 
-function Cell({ label, value, flagged = false }: { label: string; value: string; flagged?: boolean }) {
+/** One figure in a token's row. On a phone, `more` figures move into the opened row to keep the list short. */
+function Cell({ label, value, flagged = false, more = false }: { label: string; value: string; flagged?: boolean; more?: boolean }) {
   return (
-    <p className={cn("col-span-2 flex justify-between font-mono text-sm md:col-span-1 md:block md:text-right", flagged && "text-riskMedium")}>
-      <span className="text-xs text-subtleForeground md:hidden">{label}</span>
+    <p className={cn("col-span-2 justify-between whitespace-nowrap text-sm lg:col-span-1 lg:block lg:text-right", more ? "hidden" : "flex", flagged && "text-riskMedium")}>
+      <span className="text-mutedForeground lg:hidden">{label}</span>
       <span title={flagged ? `Ten wallets hold ${CONCENTRATION_FLAG_PCT}% or more of the supply` : undefined}>
         {value}
-        {flagged ? " ⚑" : ""}
+        {flagged ? <span className="sr-only"> (flagged)</span> : null}
       </span>
     </p>
   );
@@ -353,7 +317,7 @@ function Cell({ label, value, flagged = false }: { label: string; value: string;
  * quoted price, and what the whole supply could fetch. The same numbers the API returns.
  */
 function ExitPanel({ row, note, edition }: { row: RatedTokenRow; note: TokenNote | undefined; edition: Edition }) {
-  const [, , priceUsd, backingUsd, grade, marketCap] = row;
+  const [, , priceUsd, backingUsd, grade, marketCap, top10, holders] = row;
   const pro = isRunning(useProPass().status);
   const backed = backingUsd > 0;
   const wholeSupply = !backed ? 0 : marketCap === null ? null : saleProceeds(backingUsd, marketCap);
@@ -368,46 +332,56 @@ function ExitPanel({ row, note, edition }: { row: RatedTokenRow; note: TokenNote
   ];
 
   return (
-    <div className="grid gap-4 border-t border-border px-5 py-4">
-      <p className="text-sm text-mutedForeground">
-        Liquidity grade <span className={cn("font-mono font-medium", gradeTone[grade])}>{grade}</span> in the edition of {editionTime(edition.generatedAt)} UTC
-        (<span className="font-mono text-xs">{edition.methodology}</span>). It measures how much a sale would lose, not whether the project is good.
+    <div className="grid gap-5 border-t border-border pb-8 pt-4">
+      <p className="max-w-[50em] text-sm text-mutedForeground">
+        Liquidity grade <span className={gradeTone[grade]}>{grade}</span> in the edition of {editionTime(edition.generatedAt)} UTC (<span className="font-mono text-xs">{edition.methodology}</span>). It measures how much a sale
+        would lose, not whether the project is good.
       </p>
       {note?.selfDeclaredTest ? (
-        <p className="text-sm text-riskMedium">
-          Its own on-chain name{note.name ? <> is “{note.name}”</> : " says it is a test"}. Test tokens often trade under a real project’s ticker; check the
-          contract address.
+        <p className="max-w-[50em] text-sm text-riskMedium">
+          Its own on-chain name{note.name ? <> is “{note.name}”</> : " says it is a test"}. Test tokens often trade under a real project’s ticker; check the contract address.
         </p>
       ) : null}
-      <p className="eyebrow">Exit prices</p>
-      <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
+      <dl className="border-b border-border lg:hidden">
+        <div className="line">
+          <dt className="text-mutedForeground">Market cap</dt>
+          <dd>{marketCap === null ? "—" : formatCompactUsd(marketCap)}</dd>
+        </div>
+        <div className="line">
+          <dt className="text-mutedForeground">Top 10 own</dt>
+          <dd className={top10 !== null && top10 >= CONCENTRATION_FLAG_PCT ? "text-riskMedium" : undefined}>{top10 === null ? "—" : `${top10.toFixed(top10 < 10 ? 1 : 0)}%`}</dd>
+        </div>
+        <div className="line">
+          <dt className="text-mutedForeground">Holders</dt>
+          <dd>{!holders ? "—" : `${holders.toLocaleString("en-US")}${note?.holdersAtLeast ? "+" : ""}`}</dd>
+        </div>
+      </dl>
+      <h3 className="subtitle">Exit prices</h3>
+      <div className="grid gap-x-[var(--gap)] gap-y-4 sm:grid-cols-3">
         {EXIT_SALE_SIZES_USD.map((saleUsd) => {
           const loss = saleLoss(backingUsd, saleUsd);
           return (
-            <div className="grid content-start gap-0.5 bg-surface p-3" key={saleUsd}>
-              <p className="text-xs text-mutedForeground">Selling {formatCompactUsd(saleUsd)} fetches</p>
-              <p className="font-mono text-lg tracking-tight">{backed ? formatUsd(saleProceeds(backingUsd, saleUsd)) : "nothing"}</p>
-              <p className="font-mono text-xs text-subtleForeground">
-                {backed ? `${lossLabel(loss)} below the price, ${formatPrice(priceUsd * (1 - loss))} a token` : "no real money in its pools"}
-              </p>
+            <div className="grid content-start gap-0.5 border-t border-foreground pt-2" key={saleUsd}>
+              <p className="text-sm text-mutedForeground">Selling {formatCompactUsd(saleUsd)} fetches</p>
+              <p className="text-lg">{backed ? formatUsd(saleProceeds(backingUsd, saleUsd)) : "nothing"}</p>
+              <p className="text-sm text-mutedForeground">{backed ? `${lossLabel(loss)} below the price, ${formatPrice(priceUsd * (1 - loss))} a token` : "no real money in its pools"}</p>
             </div>
           );
         })}
       </div>
       {pro && backed ? <OwnSaleSize backingUsd={backingUsd} priceUsd={priceUsd} /> : null}
-      <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-3">
+      <dl className="grid gap-x-[var(--gap)] gap-y-4 sm:grid-cols-3">
         {capacity.map((item) => (
-          <div className="grid content-start gap-0.5" key={item.label}>
-            <dt className="text-xs text-mutedForeground">{item.label}</dt>
-            <dd className="font-mono text-sm">{item.value}</dd>
-            {item.sub ? <dd className="font-mono text-xs text-subtleForeground">{item.sub}</dd> : null}
+          <div className="grid content-start gap-0.5 border-t border-border pt-2" key={item.label}>
+            <dt className="text-sm text-mutedForeground">{item.label}</dt>
+            <dd>{item.value}</dd>
+            {item.sub ? <dd className="text-sm text-mutedForeground">{item.sub}</dd> : null}
           </div>
         ))}
       </dl>
-      <p className="text-xs leading-5 text-subtleForeground">
-        Estimated from the real money held for 24 hours in its Ref Finance pools. Real fills depend on routing, and a token that also trades outside
-        NEAR could fetch more there.{" "}
-        <Link className="text-mutedForeground underline decoration-border underline-offset-4 hover:text-foreground" href="/docs">
+      <p className="max-w-[50em] text-sm text-mutedForeground">
+        Estimated from the real money held for 24 hours in its Ref Finance pools. Real fills depend on routing, and a token that also trades outside NEAR could fetch more there.{" "}
+        <Link className="link text-foreground" href="/docs">
           Use it in your app
         </Link>
       </p>
@@ -422,25 +396,20 @@ function OwnSaleSize({ backingUsd, priceUsd }: { backingUsd: number; priceUsd: n
   const valid = Number.isFinite(saleUsd) && saleUsd > 0 && saleUsd <= 1e12;
   const loss = valid ? saleLoss(backingUsd, saleUsd) : 0;
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-      <label className="text-xs text-mutedForeground" htmlFor="own-sale">
-        Your sale size (Pro)
-      </label>
-      <input
-        className="w-36 rounded-md border border-border bg-transparent px-3 py-1.5 font-mono text-sm outline-none focus:border-borderStrong"
-        id="own-sale"
-        inputMode="decimal"
-        onChange={(event) => setValue(event.target.value)}
-        placeholder="$25,000"
-        value={value}
-      />
+    <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+      <div className="grid w-44 gap-0.5">
+        <label className="text-sm text-mutedForeground" htmlFor="own-sale">
+          Your sale size (Pro)
+        </label>
+        <input className="field" id="own-sale" inputMode="decimal" onChange={(event) => setValue(event.target.value)} placeholder="$25,000" value={value} />
+      </div>
       {valid ? (
-        <span className="font-mono">
+        <p className="pb-3">
           fetches {formatUsd(saleProceeds(backingUsd, saleUsd))}{" "}
-          <span className="text-xs text-subtleForeground">
+          <span className="text-sm text-mutedForeground">
             {lossLabel(loss)} below the price, {formatPrice(priceUsd * (1 - loss))} a token
           </span>
-        </span>
+        </p>
       ) : null}
     </div>
   );

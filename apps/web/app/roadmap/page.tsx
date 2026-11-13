@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { DocPage } from "@/components/doc-page";
-import { cn } from "@/lib/utils/cn";
 
 export const metadata: Metadata = {
   title: "Roadmap — Svalin",
@@ -56,10 +55,10 @@ const phases: Phase[] = [
         title: "Real USDC",
         body: "Payments, Pro and keys move to real USDC chain by chain (Solana first, NEAR next), and svalin-mcp goes on npm.",
       },
-      { title: "Svalin Registry", body: "Token grades published on NEAR, so any contract or agent can read them on-chain." },
+      { title: "Svalin Registry on mainnet", body: "Token grades sealed on NEAR, so any contract can check them. It runs on NEAR’s test network today." },
       {
-        title: "Svalin Guard",
-        body: "Spending rules for an agent that the chain enforces: limits, approved payees, owner approval, and no tokens it could not sell back.",
+        title: "Svalin Guard on mainnet",
+        body: "Spending rules for an agent that the chain enforces, on NEAR and Solana. It runs on test networks today.",
       },
     ],
   },
@@ -83,7 +82,6 @@ const phases: Phase[] = [
     status: "research",
     items: [
       { title: "Agent ratings", body: "Grades for AI agents and the paid services they use, not only tokens and wallets." },
-      { title: "One guard for both chains", body: "A Guard on NEAR that protects a Solana wallet too, using NEAR Chain Signatures." },
     ],
   },
 ];
@@ -91,40 +89,29 @@ const phases: Phase[] = [
 export default function RoadmapPage() {
   return (
     <DocPage
+      contents={phases.map((phase) => [phase.name.toLowerCase(), phase.name])}
+      path="/roadmap"
       lede="Svalin starts with ratings an agent can read, then puts them on-chain where contracts can enforce them, then brings the same method to more chains."
       title="What is live, and what comes next"
     >
-      <ol className="!mb-0 mt-10 grid !gap-0 !pl-0" style={{ listStyle: "none" }}>
-        {phases.map((phase, index) => (
-          <li className="relative grid gap-4 pb-10 pl-8" key={phase.name}>
-            <span
-              aria-hidden="true"
-              className={cn(
-                "absolute left-[5px] top-2 h-2.5 w-2.5 rounded-full border",
-                phase.status === "live" && "border-riskLow bg-riskLow",
-                phase.status === "planned" && "border-riskMedium bg-background",
-                phase.status === "research" && "border-borderStrong bg-background",
-              )}
-            />
-            {index < phases.length - 1 ? <span aria-hidden="true" className="absolute bottom-0 left-[9px] top-5 w-px bg-border" /> : null}
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h2 className="!m-0 !text-lg">{phase.name}</h2>
-              <span className="text-sm text-subtleForeground">{phase.when}</span>
-            </div>
-            <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
-              {phase.items.map((item) => (
-                <div className="grid content-start gap-1 bg-surface p-4" key={item.title}>
-                  <p className="!m-0 text-sm font-medium text-foreground">{item.title}</p>
-                  <p className="!m-0 text-sm leading-6">{item.body}</p>
-                </div>
-              ))}
-            </div>
-          </li>
-        ))}
-      </ol>
-      <p>
+      {phases.map((phase) => (
+        <section key={phase.name}>
+          <h2 id={phase.name.toLowerCase()}>
+            {phase.name} <span className="dim">{phase.when}</span>
+          </h2>
+          <div className="mb-4 grid gap-x-[var(--gap)] sm:grid-cols-2">
+            {phase.items.map((item) => (
+              <div className="grid content-start gap-1 border-t border-border py-4" key={item.title}>
+                <h3 className="!m-0 !text-lg">{item.title}</h3>
+                <p className="!m-0 text-sm text-mutedForeground">{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+      <p className="mt-10">
         Dates are targets, not promises, and the order can change as we learn from the people using Svalin. Svalin stays read-only throughout: the
-        Guard belongs to its owner, and Svalin never holds a key to anyone&apos;s funds.
+        Guard belongs to its owner, and Svalin never holds a key to anyone’s funds.
       </p>
     </DocPage>
   );

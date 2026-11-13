@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Inline scripts are allowed because the wallets' own code (run by NEAR Connect in a sandboxed
+         frame that inherits this policy) needs them; Meteor's never starts under a nonce. This page
+         itself has no inline script and builds every value from the chain as text, never as HTML. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; connect-src 'self' https: wss:; img-src 'self' data: https:; frame-src 'self' https:; base-uri 'none'; form-action 'self'"
+    />
+    <title>Svalin Guard vault</title>
+    <meta name="description" content="What a Svalin Guard vault on NEAR paid, held and refused, read live from the chain." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap" />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <script src="theme.js"></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap top-row">
+        <a class="brand" href="https://svalin.noobshole.workers.dev/guard" aria-label="Svalin Guard on the Svalin website">
+          <svg aria-hidden="true" viewBox="0 0 32 32">
+            <circle cx="16" cy="16" fill="none" r="14.5" stroke="currentColor" stroke-dasharray="1.9 1.25" stroke-width="2" />
+            <circle cx="16" cy="16" fill="currentColor" r="8.5" />
+          </svg>
+          <span>svalin <span class="dim">guard</span></span>
+        </a>
+        <div class="top-tools">
+          <form id="pick" class="pick" role="search">
+            <label for="vault" class="sr-only">Vault account</label>
+            <input id="vault" name="vault" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="A vault account on NEAR" />
+            <button type="submit">Show</button>
+          </form>
+          <button id="theme" class="theme" type="button" aria-label="Switch between white and dark" title="Switch between white and dark">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" fill="none" r="9.5" stroke="currentColor" stroke-width="1.6" />
+              <path d="M12 2.5a9.5 9.5 0 0 1 0 19z" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <section class="intro" id="start-block" hidden>
+        <h1><span class="dim">Open your vault.</span> Or make a new one.</h1>
+        <p class="lede">A vault holds your AI agent's money and decides every payment it asks for. You own it from your wallet, and Svalin has no key to it.</p>
+        <p class="note">On NEAR's test network, with test money.</p>
+        <p class="note" id="open-unfinished" hidden>A vault you started was not finished. <a class="link" href="?create=1">Finish setting it up</a></p>
+        <form class="open" id="open">
+          <label class="form-field">
+            <span>Your vault's account</span>
+            <input id="open-name" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="vault.yourname.testnet" />
+          </label>
+          <button type="submit">Open</button>
+        </form>
+        <p class="note tone-refused" id="open-error"></p>
+        <a class="button-primary" href="?create=1">Create a vault</a>
+        <p class="note"><a class="link" href="?vault=noobshole-vault.testnet">See a vault that faced a scam exam</a></p>
+      </section>
+
+      <section class="intro" id="create-block" hidden>
+        <h1 id="create-title">Create a vault</h1>
+        <p class="lede" id="create-lede">It holds your agent's money and decides every payment the agent asks for. Once it is set up, no key can replace its code or empty it.</p>
+        <p class="note" id="create-terms">On NEAR's test network, with test money.</p>
+        <div class="create" id="create-form"></div>
+      </section>
+
+      <section class="intro" id="vault-intro">
+        <p class="eyebrow" id="network">NEAR</p>
+        <h1 id="title">Svalin Guard vault</h1>
+        <p class="lede" id="summary">Reading the vault from NEAR…</p>
+        <div class="fund" id="fund" hidden></div>
+        <p class="updated" id="updated"></p>
+      </section>
+
+      <section class="numbers" id="numbers" hidden></section>
+
+      <section class="block" id="owner-block" hidden>
+        <h2>The owner's controls</h2>
+        <div class="wallet" id="wallet"></div>
+      </section>
+
+      <section class="block" id="change-block" hidden>
+        <h2>Change the rules</h2>
+        <p class="note" id="change-note"></p>
+        <div class="changes" id="changes"></div>
+      </section>
+
+      <section class="block" id="held-block" hidden>
+        <h2>Waiting for the owner</h2>
+        <p class="note">
+          The agent cannot approve these. The owner approves or rejects each one from their own wallet; above the per-payment limit the guardian
+          has to approve too.
+        </p>
+        <div class="held-list" id="held"></div>
+      </section>
+
+      <section class="block" id="decisions-block" hidden>
+        <h2>Every decision</h2>
+        <p class="note" id="decisions-note">Newest first. Each row links to its transaction.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">When</th>
+                <th scope="col">Who</th>
+                <th scope="col">What</th>
+                <th scope="col">The vault</th>
+                <th scope="col">Transaction</th>
+              </tr>
+            </thead>
+            <tbody id="decisions"></tbody>
+          </table>
+        </div>
+        <p class="note"><a class="link" id="csv" href="#">Download every event as CSV</a></p>
+      </section>
+
+      <section class="block" id="terms-block" hidden>
+        <h2>Locked terms</h2>
+        <p class="note">
+          The first payment to a service locks who it pays and the price a call. A higher price or another payee is held for the owner.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Service</th>
+                <th scope="col">Payee</th>
+                <th scope="col">Price a call</th>
+                <th scope="col">Locked</th>
+              </tr>
+            </thead>
+            <tbody id="terms"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="block" id="rules-block" hidden>
+        <h2>The rules</h2>
+        <dl class="rules" id="rules"></dl>
+      </section>
+    </main>
+
+    <footer class="wrap foot">
+      Read live from NEAR through FastNEAR's public RPC and transactions API. This page has no server, and your wallet's key never reaches it.
+    </footer>
+  </body>
+</html>

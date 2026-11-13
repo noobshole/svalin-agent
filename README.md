@@ -1,68 +1,136 @@
-<div align="center">
-
 # Svalin
-
-**Read-only portfolio risk intelligence for AI agents.**
-
-Give Svalin a Solana wallet or a NEAR account. Get back a priced portfolio and a deterministic
-portfolio risk report: a 0-100 score, an A-F grade, exposure metrics, and findings with concrete next
-steps. Agents pay per call in USDC over [x402](https://x402.org) on Solana or NEAR, or with a
-monthly pass. No accounts, and no way to move funds.
 
 [![CI](https://github.com/noobshole/svalin-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/noobshole/svalin-agent/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-![Node 22.23.4+](https://img.shields.io/badge/node-22.23.4%2B-339933)
-![x402 v2](https://img.shields.io/badge/payments-x402%20v2-0052FF)
-![MCP](https://img.shields.io/badge/MCP-server-6E56CF)
 
-[Free scan](https://svalin.noobshole.workers.dev) · [Features](#features) · [How it works](#how-it-works) · [Use cases](#use-cases) · [Endpoints](#endpoints) · [Use it from an agent](#use-it-from-an-agent) · [Run locally](#run-locally) · [Trust and safety](#trust-and-safety) · [Docs](#documentation)
+Svalin grades wallets, tokens and payments on NEAR and Solana for AI agents, and Svalin Guard is a
+vault on NEAR that enforces those grades before an agent's money moves.
 
-</div>
+Live on testnet: [website](https://svalin.noobshole.workers.dev) ·
+[API](https://svalin-api.noobshole.workers.dev) ·
+[a vault after its exam](https://svalin-guard.noobshole.workers.dev/?vault=noobshole-vault.testnet)
 
-## Features
+## The problem
 
-- **Portfolio risk reports.** A 0-100 score and A-F grade from concentration, stablecoin buffer and long-tail
-  exposure, with findings that explain each risk in plain English and suggest a next step. A
-  wallet with nothing priced is not rated, so a fresh or spam-only wallet never shows as an A.
-- **Exit value.** On NEAR, a report also says what the wallet would actually fetch if everything
-  were sold now, given the real money in each token's pools, and flags a large gap.
-- **Solana and NEAR.** Solana wallets (`7xKX…`) and NEAR accounts (`alice.near`) go through the
-  same engine and the same endpoints.
-- **Priced portfolios.** Live balances and USD prices, with each token placed in a risk category:
-  stablecoin, native, liquid staking, major, meme or long-tail. Staked SOL and NEAR count as staked.
-- **Briefs.** A headline, a short summary and up to three actions for explaining a wallet to a
-  person, written by Claude when configured and by a template otherwise.
-- **Check before paying.** Before an agent sends money, `GET /v1/check/{address}` answers allow,
-  caution or block: token, program and non-existent addresses, brand-new or barely used wallets,
-  NEAR names imitating well-known accounts (intent5.near for intents.near), and, given the payer,
-  an address or NEAR name imitating one the payer paid recently (address poisoning) or a large
-  first payment. If the payer's history cannot be read, it says so instead of guessing.
+AI agents now pay for things themselves, often per call over [x402](https://x402.org). An agent
+that holds a wallet key can be talked into one bad payment, and that is enough.
+
+- In the [Agent Money Benchmark](https://agentmoneybench.com), 9 of 12 AI models paid a cheating
+  seller at least once, and 7 paid twice for the same data.
+- Address poisoning, paying a look-alike of an address you paid before, is a theft method measured
+  at scale on Ethereum and BNB Chain (Tsuchiya, Dong, Soska and Christin, USENIX Security 2025).
+- A token's quoted price says little. In the Svalin Index of 13 November 2026, 4,921 of 5,002
+  priced NEAR tokens failed a $1,000 sale: selling that much would lose more than a quarter.
+- In our own exam, a real model on NEAR AI Cloud fell for 6 of a cheating seller's 9 tricks and
+  asked a vault to pay 1.50 USDC.
+
+Telling a model to be careful does not hold. The checks have to sit outside the model, and for
+money, inside a contract.
+
+## What it does
+
+| Part | What it does | Where |
+| --- | --- | --- |
+| **Svalin Index** | Grades every priced NEAR token A to F by the real money in its pools. Rebuilt every few hours; one edition a day is sealed on NEAR. | [`apps/api`](apps/api), [svalin-index](https://github.com/noobshole/svalin-index) |
+| **Checks** | Before paying an address: allow, caution or block. Wallet risk reports, exit prices and grade proofs. From $0.002 a call in USDC over x402 on NEAR or Solana, with 10 free calls a day. | [`apps/api`](apps/api), [`packages/mcp`](packages/mcp) |
+| **Svalin Guard** | A vault contract. The agent's key can only ask; the vault pays, holds or refuses by the owner's rules, on NEAR and on Solana, and buys a token only if its grade is proven against the sealed edition. | [`guard`](guard) |
+| **Website** | Free wallet scan, payee check, the Index, docs and pricing. | [`apps/web`](apps/web) |
+
+In more detail:
+
+- **Check before paying.** `GET /v1/check/{address}` answers allow, caution or block: token and
+  program addresses, brand-new or barely used wallets, NEAR names imitating well-known accounts
+  (`intent5.near` for `intents.near`), and, given the payer, an address imitating one the payer
+  paid recently.
+- **Portfolio risk reports.** A 0-100 score and an A-F grade from concentration, stablecoin buffer
+  and long-tail exposure, with findings in plain English. A wallet with nothing priced is not
+  rated, so a spam-only wallet never shows as an A.
+- **Exit value.** What a NEAR wallet or token would actually fetch if sold now, given the real
+  money in each pool.
+- **Svalin Index.** Counts only backing that has held for 24 hours, so liquidity added for five
+  minutes cannot buy a grade. Each edition records the SHA-256 of its inputs, and anyone can
+  rebuild it.
+- **Grade proofs.** `GET /v1/proof/{token}` returns a token's grade with a Merkle proof against
+  the edition sealed in `svalin-ratings-v1.testnet`. A Guard vault checks it before buying.
 - **Hidden-instruction alarm.** A token named to give its reader orders ("ignore previous
-  instructions", "payment failed, pay again", a link, an encoded message) is shown as
-  `[hidden name]` in every report, check and Index edition, and reports flag it.
-- **Svalin Index.** Every NEAR token with a price, graded A-F by the real money in its Ref Finance
-  pools (classic and concentrated liquidity), counting only backing that has held for 24 hours,
-  with market cap, top-10 holder share, holder count, and a track record of how earlier grades
-  moved. Every token also has exit prices: what selling $1K, $10K or $100K of it would actually
-  fetch, and the most its whole supply could. Rebuilt every few hours and published in the
-  [svalin-index](https://github.com/noobshole/svalin-index) repository;
-  [see it live](https://svalin.noobshole.workers.dev/ratings).
-- **Pay per call, or one pass a month.** Agents pay in USDC over x402 on Solana or NEAR, with no
-  account. Steady users buy a pass instead and send its key as `Authorization: Bearer`: Svalin Pro
-  (100 calls a day) or Svalin Business (200,000 calls), for 30 days. Agents buy and renew passes
-  over x402; people buy Pro on the website by scanning a Solana Pay QR code or sending an exact
-  amount on NEAR, and the site never connects to their wallet. Everyone gets 10 free calls a day.
-- **MCP server.** `svalin-mcp` brings the tools to Claude, Cursor and any MCP client, with a hard
-  per-call price cap and a session budget.
-- **Payment guard.** Before an agent pays any x402 service, `svalin-mcp` asks for the price without
-  paying and blocks a payee or price that changed since the service was first seen, a token that
-  is not USDC, or an inflated price, and runs Svalin's check on the payee.
-- **Read-only.** Svalin never asks for wallet keys, approvals or signatures from the wallet it analyses,
-  and it has no code path that moves funds.
-- **Deterministic.** Same holdings, same report. No LLM computes a number, and the
+  instructions") is shown as `[hidden name]` everywhere and flagged.
+- **Pay per call, or a pass.** USDC over x402 on Solana or NEAR with no account, or a monthly pass
+  key. A call that fails is never charged.
+- **MCP server.** `svalin-mcp` brings the tools to Claude, Cursor and any MCP client, with a
+  per-call price cap, a session budget, and a payment guard that blocks a payee or price that
+  changed since a service was first seen.
+- **Read-only and deterministic.** The API never asks for keys, approvals or signatures and has no
+  code path that moves funds. No LLM computes a number; the
   [methodology](docs/RISK_METHODOLOGY.md) is public and versioned.
+- **Svalin Guard.** Look-alike payees refused in the contract, new payees checked in a TEE, sellers
+  held to their first price and payee, repeat charges held, Solana payments with no Solana key,
+  and a freeze after three strikes. Details and results: [guard/README.md](guard/README.md).
+
+## Check it in five minutes
+
+Each step needs no account and no key.
+
+1. **A look-alike is blocked.**
+
+   ```bash
+   curl -s https://svalin-api.noobshole.workers.dev/v1/demo/check/intent5.near
+   ```
+
+   You should see `"verdict":"block"` and `"lookalikeOf":"intents.near"`.
+
+2. **Every NEAR token has a grade.**
+
+   ```bash
+   curl -s https://svalin-api.noobshole.workers.dev/v1/index/near-tokens
+   ```
+
+   You should see `counts` (how many tokens hold each grade) and one row per token.
+
+3. **A grade comes with a proof.**
+
+   ```bash
+   curl -s https://svalin-api.noobshole.workers.dev/v1/demo/proof/token.rhealab.near
+   ```
+
+   You should see the token's grade, the edition's day and a Merkle proof. The registry contract
+   `svalin-ratings-v1.testnet` holds that edition's root.
+
+4. **Agents pay per call.**
+
+   ```bash
+   curl -si https://svalin-api.noobshole.workers.dev/v1/risk/root.near
+   ```
+
+   You should see `402 Payment Required` and a `PAYMENT-REQUIRED` header offering 0.002 USDC on
+   `near:testnet` or Solana devnet.
+
+5. **A vault stopped a cheating seller.** Open
+   [the vault page](https://svalin-guard.noobshole.workers.dev/?vault=noobshole-vault.testnet). You
+   should see that an AI agent asked `noobshole-vault.testnet` to pay 1.506 USDC, that the vault
+   paid 0.252 and stopped 1.254, and that it then froze itself. Every decision links to its
+   transaction, and [guard/README.md](guard/README.md#the-exams-on-noobshole-vaulttestnet) explains
+   each one.
+
+6. **The tests pass.**
+
+   ```bash
+   pnpm install && pnpm build && pnpm test    # 194 API tests and 34 MCP tests
+   cd guard && cargo test                     # 183 tests: the vault, the registry, the check program
+   ```
 
 ## How it works
+
+```mermaid
+flowchart LR
+  I["Svalin Index<br/>grades NEAR tokens"] -- "one edition a day" --> R["svalin-ratings-v1<br/>registry on NEAR"]
+  A["AI agent"] -- "check, risk, proof<br/>$0.002 over x402" --> S["Svalin API"]
+  A -- "its key can only ask" --> V{"Svalin Guard vault"}
+  V -- "is this grade real?" --> R
+  V -- "paid" --> P["Seller on NEAR or Solana"]
+  V -- "held" --> O["Owner"]
+```
+
+A paid call:
 
 ```text
 agent ── GET /v1/risk/{wallet} ──────────────▶ Svalin API
@@ -71,141 +139,34 @@ agent ── retry with PAYMENT-SIGNATURE ───────▶ paywall ─�
 agent ◀── 200 risk report ───────────────────── engine ◀── Helius (Solana) · FastNEAR + Ref Finance (NEAR)
 ```
 
-Invalid addresses are rejected *before* the paywall, and failed responses (4xx/5xx), such as a
-NEAR account that does not exist, are never settled, so a caller is never charged for an error.
-A token address is not a wallet, so it gets `422` with code `token_address` instead of a score,
-free of charge. For a NEAR token the answer carries its liquidity grade from the Svalin Index,
-with the edition it comes from:
-
-```json
-{
-  "error": "This is the JAMBO token, not a wallet. Send the address of a wallet that holds it.",
-  "code": "token_address",
-  "token": {
-    "chain": "near", "address": "jambo-1679.meme-cooking.near", "symbol": "JAMBO", "grade": "C", "backingUsd": 44430,
-    "edition": { "generatedAt": "2026-11-04T01:20:45.746Z", "methodology": "near-token-backing-v1" }
-  }
-}
-```
-
-A liquidity grade (how much a sale of one token would lose) is not the same as a wallet's
-portfolio risk grade below (how risky the whole wallet is); see the
-[methodology](docs/RISK_METHODOLOGY.md).
-
-A trimmed risk report:
-
-```json
-{
-  "wallet": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
-  "chain": "solana",
-  "score": 49,
-  "grade": "C",
-  "level": "moderate",
-  "metrics": { "totalValueUsd": 17071.37, "stablecoinPct": 7.26, "memePct": 13.47, "effectivePositions": 3.54 },
-  "findings": [
-    {
-      "severity": "medium",
-      "title": "SOL (incl. staked) is 59.8% of the portfolio",
-      "summary": "A single volatile exposure above 40% means one price move dominates the outcome.",
-      "action": "Consider capping SOL exposure near 40% by rotating part into stablecoins or a second, uncorrelated major.",
-      "confidence": 64
-    }
-  ],
-  "methodologyVersion": "2026-11.1"
-}
-```
-
-## Use cases
-
-Svalin is the read-only risk step in an agent workflow. Agents and people ask it how risky a
-wallet is before they act, and act somewhere else.
-
-```mermaid
-flowchart TB
-    S(("Svalin"))
-    S --> G & W & T & R & C
-
-    subgraph G["Agent guardrails"]
-        direction TB
-        G1["Check risk before<br/>a swap or rebalance"] ~~~ G2["Ask a human<br/>on a poor grade"] ~~~ G3["Spend caps per call<br/>and per session"]
-    end
-    subgraph W["Wallet copilots"]
-        direction TB
-        W1["Explain a wallet<br/>in plain English"] ~~~ W2["Scheduled<br/>risk briefs"] ~~~ W3["Staking and<br/>stablecoin tips"]
-    end
-    subgraph T["Treasuries and DAOs"]
-        direction TB
-        T1["Concentration<br/>limits"] ~~~ T2["Stablecoin<br/>buffer checks"] ~~~ T3["One report per<br/>treasury wallet"]
-    end
-    subgraph R["Research and analytics"]
-        direction TB
-        R1["Score wallets<br/>in a batch"] ~~~ R2["Spot spam and<br/>long-tail tokens"] ~~~ R3["Solana and NEAR<br/>in one format"]
-    end
-    subgraph C["Agent tool catalogs"]
-        direction TB
-        C1["Pay per call<br/>over x402"] ~~~ C2["OpenAPI and<br/>llms.txt"] ~~~ C3["MCP server with<br/>spend caps"]
-    end
-```
-
-### Orchestration pattern: the risk gate
-
-An orchestrator agent checks the wallet with Svalin before it hands a plan to an executor. Svalin
-only reads. Execution stays with a separate tool that you control, and you choose the grade
-thresholds.
-
-```mermaid
-flowchart LR
-    O["Orchestrator agent<br/>(on a request or a schedule)"] -->|"svalin_risk_report<br/>$0.002"| G{"Grade?"}
-    G -->|"A or B"| X["Executor agent<br/>(your own wallet tools)"]
-    G -->|"C to F"| B["svalin_brief · $0.02<br/>headline and up to 3 actions"]
-    B --> H{"Human<br/>approves?"}
-    H -->|"yes"| X
-    H -->|"no"| S(["Stop and report"])
-    X -.->|"re-check the new grade"| O
-```
-
-| Pattern | Svalin calls | Cost per wallet (default prices) |
-| --- | --- | --- |
-| Risk gate before an action | `risk`, then `brief` when the grade is poor | $0.002 to $0.022 |
-| Scheduled treasury check | `risk` for each wallet on each run | $0.002 per run |
-| Wallet explainer in chat | `brief` | $0.02 |
-| Batch research | `portfolio` or `risk` for each wallet | $0.002 each |
-| Trying it out | free scan | Free, 10 calls a day |
-
-Any orchestrator that can call MCP tools or make HTTP requests can use these patterns.
+Invalid addresses are rejected before the paywall, and failed responses are never settled. The API
+only reads public data and cannot move anyone's funds. The vault moves only the money its owner put
+in it, by rules the owner set.
 
 ## Endpoints
 
 | Endpoint | Price | Returns |
 | --- | --- | --- |
-| `GET /v1/demo/risk/{address}` | Free, 10 calls a day per visitor (back at 00:00 UTC) | Risk report; its next steps can be switched to paid-only |
-| `GET /v1/demo/check/{address}` | Free, shares the 10 a day | Recipient check, without the payer's history (no look-alike check) |
-| `GET /v1/index/near-tokens` | Free | The Svalin Index: every NEAR token graded A-F by the real money behind its price |
-| `GET /v1/demo/exit/{contract}` | Free, shares the 10 a day | Exit prices at $1K, $10K and $100K |
-| `GET /v1/portfolio/{address}` | $0.002 | Priced holdings, allocation and a risk category per token |
-| `GET /v1/risk/{address}` | $0.002 | Score, grade, exposure metrics and findings with actions |
-| `GET /v1/brief/{address}` | $0.02 | Headline, summary and up to 3 actions, plus the full report |
-| `GET /v1/check/{address}?payer=&amountUsd=` | $0.002 | Before paying someone: allow, caution or block, with reasons |
-| `GET /v1/exit/{contract}?amountUsd=` | $0.002 | A NEAR token's grade and exit prices, at your own sale size too: what selling it would actually fetch |
-| `GET /v1/proof/{contract}` | $0.002 | A NEAR token's liquidity grade with a Merkle proof against the newest edition sealed on NEAR (Svalin Ratings registry): the `grade` object goes straight into a Svalin Guard vault, or into the registry's free `verify` |
-| `GET /v1/demo/proof/{contract}` | Free, shares the 10 a day | The same proof as a free trial |
-| `POST /v1/keys/{pro,business}` | $9 · $79 | A pass for 30 days on every paid route: Svalin Pro (100 calls a day) or Svalin Business (200,000 calls). The key is shown once; send it in `Authorization` to renew |
-| `GET /v1/keys/me` | Free | What is left on the key sent as `Authorization: Bearer` |
-| `GET /v1/pro` · `POST /v1/pro/near` · `POST /v1/pro/activate` | Free | Svalin Pro checkout: prices, an exact NEAR amount for a code, and finding a code's payment on-chain |
-| `GET /` · `/openapi.json` · `/llms.txt` | Free | Machine-readable service description for agents |
+| `GET /v1/demo/risk/{address}` | Free, 10 calls a day | Risk report |
+| `GET /v1/demo/check/{address}` | Free, shares the 10 | Recipient check, without the payer's history |
+| `GET /v1/index/near-tokens` | Free | The Svalin Index |
+| `GET /v1/demo/exit/{contract}` · `/v1/demo/proof/{contract}` | Free, shares the 10 | Exit prices; a grade with its proof |
+| `GET /v1/portfolio/{address}` | $0.002 | Priced holdings and a risk category per token |
+| `GET /v1/risk/{address}` | $0.002 | Score, grade, exposure metrics and findings |
+| `GET /v1/brief/{address}` | $0.02 | Headline, summary and up to 3 actions |
+| `GET /v1/check/{address}?payer=&amountUsd=` | $0.002 | Allow, caution or block, with reasons |
+| `GET /v1/exit/{contract}?amountUsd=` | $0.002 | What selling a NEAR token would actually fetch |
+| `GET /v1/proof/{contract}` | $0.002 | A grade with a Merkle proof against the sealed edition |
+| `POST /v1/keys/{pro,business}` | $9 · $79 | A pass for 30 days on every paid route |
+| `GET /` · `/openapi.json` · `/llms.txt` | Free | Machine-readable service description |
 
-`{address}` is a Solana address or a NEAR account ID. Prices are the defaults and can be changed
-per deployment with the `PRICE_*` and `PRO_PRICE_*` environment variables. A pass key in an
-`Authorization: Bearer` header pays for a paid call instead of x402; a call that fails is not
-counted.
+`{address}` is a Solana address or a NEAR account ID.
 
 ## Use it from an agent
 
-**MCP (Claude Code, Claude Desktop, Cursor and any MCP client).** The free scan works with no
-setup. Add a dedicated hot wallet holding a few dollars of USDC, on Solana or NEAR, or a pass key
-(`SVALIN_API_KEY`), to unlock the paid tools. `svalin-mcp` is not on npm yet, so run it
-[from source](packages/mcp#from-source) for now. Tools, configuration and spend limits are
-documented in [packages/mcp](packages/mcp#readme).
+**MCP.** `svalin-mcp` is not on npm yet, so run it [from source](packages/mcp#from-source). The
+free scan needs no setup; a hot wallet with a few dollars of USDC, or a pass key, unlocks the paid
+tools.
 
 **Any x402 client (TypeScript):**
 
@@ -217,106 +178,119 @@ const pay = wrapFetchWithPayment(fetch, new x402Client().register("solana:*", ne
 const report = await (await pay(`https://YOUR-SVALIN-API/v1/risk/${wallet}`)).json();
 ```
 
-## Run locally
+**A vault.** Make one on [the vault page](https://svalin-guard.noobshole.workers.dev) and give the
+agent its key; see [guard/README.md](guard/README.md#try-it).
 
-Requires Node.js 22.23.4+ or 24.22.1+ (the October 2026 security releases) and pnpm 10.
+## Run it locally
+
+Needs Node.js 22.23.4+, 24.22.1+ or 26.12.1+, and pnpm 10.
 
 ```bash
 pnpm install
-cp .env.example .env      # works as-is: sample data, payments off
+cp .env.example .env      # works as it is: sample data, payments off
 pnpm build
 pnpm dev                  # API on :4000, website on :3000
 ```
 
-Open http://localhost:3000 and scan any Solana address or NEAR account. Without
-`HELIUS_API_KEY` the API serves clearly labelled sample data, and it refuses to start in production
-that way. Add a free [Helius](https://dashboard.helius.dev) key to `.env` for live data; NEAR data
-needs no key.
-
-To try the paywall, set `PAY_TO_SOLANA` and/or `PAY_TO_NEAR` with `X402_ENV=testnet` and call a
-paid endpoint: you get a `402` with a `PAYMENT-REQUIRED` header offering Solana devnet and NEAR
-testnet USDC.
-
-```bash
-pnpm test        # risk engine, recipient check, exit prices, Helius and NEAR mapping, paywall, facilitators, rate limiting, narrator, payment guard, MCP end-to-end payment
-pnpm typecheck
-```
-
-The MCP end-to-end test runs the whole payment path offline: MCP tool call, x402 client signing a
-real NEAR USDC transfer, API paywall, facilitator verify and settle, handler, ledger entry.
+Open http://localhost:3000 and scan a wallet. NEAR data needs no key; Solana data needs a free
+[Helius](https://dashboard.helius.dev) key in `.env`. Without it the API serves clearly labelled
+sample data, and it refuses to start in production that way.
 
 ## Project structure
 
 | Path | What it is |
 | --- | --- |
-| `apps/api` | Hono API: Solana portfolios (Helius) and NEAR portfolios (FastNEAR, Ref Finance), deterministic risk engine, x402 paywall (Solana and NEAR USDC), payments ledger, OpenAPI and `llms.txt` |
-| `apps/web` | Next.js website: Wallet Scan, Check Before Paying, the Svalin Index, and the Pricing page with the Svalin Pro checkout |
+| `apps/api` | Hono API: portfolios, the deterministic risk engine, the Index, the x402 paywall, OpenAPI |
+| `apps/web` | Next.js website: wallet scan, check before paying, the Index, Guard, docs and pricing |
 | `packages/mcp` | `svalin-mcp`: MCP server with an auto-paying x402 client and hard spend caps |
-| `packages/shared` | Zod schemas: the single contract shared by the API, the website and the MCP server |
-| `packages/chain-config` | Chains, x402 networks (CAIP-2), facilitators, curated token registry |
-| `supabase/migrations` | Database schema, including the `api_payments` ledger |
+| `packages/shared` | Zod schemas shared by the API, the website and the MCP server |
+| `packages/chain-config` | Chains, x402 networks, facilitators, curated token registry |
+| `guard` | Svalin Guard: the vault, the ratings registry, the check program, the vault page, the exams |
 | `docs/` | Risk methodology and deployment guide |
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the request pipeline and module boundaries.
 
 ## Trust and safety
 
 | Guarantee | How it is enforced |
 | --- | --- |
-| Cannot move funds | No signing, approval or transfer code for analysed wallets; the manifest declares `canMoveFunds: false` |
-| Never charged for errors | Address validation runs before the paywall; payments settle only on a successful response |
+| The API cannot move funds | No signing, approval or transfer code for analysed wallets |
+| Never charged for errors | Address validation runs before the paywall; payments settle only on success |
 | No fake data in production | The API refuses to start in production without a live data source |
-| Bounded agent spending | `svalin-mcp` enforces a per-call price cap and a per-session budget |
-| Pass keys cannot leak from storage | Keys are stored as SHA-256 fingerprints and shown once; Pro payments are checked on-chain by the API |
-| Free tier cannot be abused | Per-visitor and global daily limits, keyed on addresses the caller cannot forge |
-| No surprise scripts on the website | Each page's policy allows only the scripts it was built with |
-| Broken data is not published | The Index refuses an edition that swings far more than a market can in a few hours |
-| Problems are noticed | An hourly check of the live API, payees, Index freshness and website headers |
-| Deterministic scoring | The risk engine has no I/O and no LLM; methodology changes bump a version number |
+| Bounded agent spending | `svalin-mcp` enforces a per-call price cap and a session budget |
+| Broken data is not published | The Index refuses an edition that swings more than a market can in a few hours |
+| Grades cannot be forged | A vault asks the registry on NEAR to confirm each grade's proof |
+| No master key to a vault | Setting a vault up deletes the key that deployed it |
+| Deterministic scoring | The risk engine has no I/O and no LLM; methodology changes bump a version |
 
-Found a security issue? Please report it privately through a
-[security advisory](https://github.com/noobshole/svalin-agent/security/advisories/new) rather than a
-public issue; see [SECURITY.md](SECURITY.md).
+Found a security issue? Report it privately: see [SECURITY.md](SECURITY.md).
 
-## Deploy
+## Built at NEAR HACKATHON
 
-- **API:** Cloudflare Workers (using [`apps/api/wrangler.toml`](apps/api/wrangler.toml)), Render
-  (New → Blueprint, using [`render.yaml`](render.yaml)) or any container host using the root
-  `Dockerfile`.
-- **Website:** a static site (`apps/web`), deployed to Cloudflare with
-  [`apps/web/wrangler.toml`](apps/web/wrangler.toml) or to any static host.
-- **MCP server:** npm and the official MCP Registry (not published yet).
+Tracks: AI Security & Defense, and Agent Economy.
 
-Step-by-step instructions, with a test after each step, are in
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Svalin existed before the hackathon as a wallet risk API. Two tags separate the work:
 
-## Limitations
+- [`pre-hackathon`](https://github.com/noobshole/svalin-agent/tree/pre-hackathon): the last commit
+  before the announcement on 19 October 2026.
+- [`hackathon-submission`](https://github.com/noobshole/svalin-agent/tree/hackathon-submission): the
+  submitted code.
+- [The diff between them](https://github.com/noobshole/svalin-agent/compare/pre-hackathon...hackathon-submission)
+  is the hackathon work.
 
-- Wallet analysis covers Solana and NEAR.
-- On NEAR, a token outside the curated registry is valued at no more than its Ref Finance pools
-  could pay out, and never above the backing it has held for 24 hours in the latest Index edition.
-  One with no real pool, or too new for the Index, counts as unpriced, so an account full of airdropped
-  junk shows low data coverage rather than a fake fortune. Solana prices come from Helius as
-  quoted.
-- The cache, the free-tier limits and the passes are held in memory, so a container deployment
-  runs as a single instance and loses its passes on a restart. On Cloudflare Workers the limits
-  and the passes live in Durable Objects instead.
-- Reports describe current holdings only.
+What that diff contains:
+
+- The Svalin Index, its daily editions and the registry on NEAR that seals them.
+- Check Before Paying, exit prices, grade proofs, passes, and x402 payments on NEAR.
+- Svalin Guard: everything in [`guard`](guard), started on 3 November 2026.
+- The website as it is now.
+
+How NEAR is used:
+
+- The vault is a NEAR contract, and the agent holds a function-call key that can only ask.
+- A payee the vault has never paid is checked in a TEE through [OutLayer](https://outlayer.ai).
+- The vault pays Solana sellers through NEAR Chain Signatures, so no Solana key exists.
+- The exam's agent is a model on NEAR AI Cloud whose hardware is attested and whose answers are
+  signed.
+- Editions are sealed in a NEAR contract, and paid calls settle in USDC on NEAR.
+
+## Libraries, services and AI assistance
+
+- **API and MCP server:** [Hono](https://hono.dev), [Zod](https://zod.dev), the x402 packages
+  (`@x402/core`, `@x402/hono`, `@x402/fetch`, `@x402/extensions`, `@x402/near`, `@x402/svm`,
+  `@coinbase/x402`), `@solana/kit`, and the
+  [MCP SDK](https://github.com/modelcontextprotocol/typescript-sdk).
+- **Website:** Next.js, React, Tailwind CSS, lucide-react, clsx, tailwind-merge and uqr.
+- **Guard:** near-sdk 5.30.0, serde, sha2, wasi-http-client, p256 (tests only), and a pinned copy
+  of NEAR Connect (MIT) on the vault page. The demo agent uses only Node's own modules.
+- **Services:** Helius, FastNEAR, Ref Finance, the FastNEAR and x402.org facilitators, OutLayer,
+  NEAR Chain Signatures, NEAR AI Cloud, Cloudflare Workers and GitHub Actions.
+- **AI assistance:** Svalin is built with an AI coding assistant (Claude Code), directed by its
+  founder, and checked by the tests above and by live runs on testnet. When an Anthropic API key
+  is configured, `/v1/brief` uses Claude to word its summary; no model computes a score, a grade
+  or a vault decision.
+
+## Limits
+
+- Testnet only, and no outside audit yet.
+- The vault cannot judge what a seller delivered: wrong data and paid-but-not-delivered get through.
+- Solana payments trust NEAR's signing network.
+- On testnet the token market is a stand-in, because the graded tokens trade only on mainnet.
+- On NEAR, a token with no real pool counts as unpriced, so an account full of airdropped junk
+  shows low data coverage, not a fake fortune.
+- More in [guard/README.md](guard/README.md#what-it-does-not-do) and
+  [docs/RISK_METHODOLOGY.md](docs/RISK_METHODOLOGY.md).
 
 ## Documentation
 
-This README covers the code and running your own copy. To call the hosted API, start with the
-[website docs](https://svalin.noobshole.workers.dev/docs).
-
 | Document | For |
 | --- | --- |
-| [Website docs](https://svalin.noobshole.workers.dev/docs) | Calling the hosted API from code or an agent: routes, prices, passes, MCP |
-| [Risk methodology](docs/RISK_METHODOLOGY.md) | How scores, grades and findings are computed |
-| [Architecture](ARCHITECTURE.md) | Request pipeline, boundaries and configuration guards |
-| [Deployment](docs/DEPLOYMENT.md) | Running your own API, website and MCP server |
+| [Website docs](https://svalin.noobshole.workers.dev/docs) | Calling the hosted API: routes, prices, passes, MCP |
+| [guard/README.md](guard/README.md) | The vault: rules, exam results, how to run it |
+| [Risk methodology](docs/RISK_METHODOLOGY.md) | How scores and grades are computed |
+| [Architecture](ARCHITECTURE.md) | The API's request pipeline |
+| [Deployment](docs/DEPLOYMENT.md) | Running your own copy |
 | [MCP server](packages/mcp#readme) | Installing and configuring `svalin-mcp` |
 
 ## License
 
-[Apache License 2.0](LICENSE); see [NOTICE](NOTICE). Svalin reports exposures; it is not
-financial advice and does not tell anyone what to buy.
+[Apache License 2.0](LICENSE); see [NOTICE](NOTICE). Svalin reports exposures. It is not financial
+advice.

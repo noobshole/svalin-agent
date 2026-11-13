@@ -12,8 +12,6 @@ export const metadata: Metadata = {
   description: "Free to try. Svalin Pro is $9 a month. Agents pay $0.002 a call in USDC, or $79 a month for 200,000 calls.",
 };
 
-const linkClass = "text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground";
-
 export default async function PricingPage() {
   const info = await getServiceInfo();
   const price = (path: string, fallback: string) => info?.endpoints.find((endpoint) => endpoint.path === path)?.price ?? fallback;
@@ -23,52 +21,58 @@ export default async function PricingPage() {
   const businessPrice = price("/v1/keys/business", "$79");
 
   return (
-    <main className="mx-auto grid w-full max-w-6xl gap-14 px-4 pb-24 pt-14 md:px-8 md:pt-20">
-      <header className="grid max-w-2xl gap-4">
-        <h1 className="text-4xl font-medium leading-tight tracking-tight md:text-5xl">Pricing</h1>
-        <p className="text-lg leading-8 text-mutedForeground">Free to try. One pass for people, one price per call for agents.</p>
-      </header>
+    <main className="page main grid gap-16 lg:gap-24">
+      <section className="grid4">
+        <header className="grid content-start gap-4">
+          <h1 className="display">Pricing</h1>
+          <p className="lede">Free to try. One pass for people, one price per call for agents.</p>
+        </header>
+        <div className="grid gap-y-10 lg:col-span-3 lg:grid-cols-3 lg:gap-x-[var(--gap)] lg:gap-y-3">
+          <Plan link={{ href: "/scan", label: "Scan a wallet" }} name="Free" price="$0">
+            <li>10 scans or checks a day</li>
+            <li>Every warning, always</li>
+            <li>The Svalin Index</li>
+          </Plan>
+          <Plan highlight link={{ href: "#checkout", label: "Get Pro" }} name="Svalin Pro" note="or $90 a year" price={`${proPrice} a month`}>
+            <li>100 calls a day, on the website and in your agent</li>
+            <li>Every next step, and exit prices at any sale size</li>
+            <li>The look-alike check against your own wallet</li>
+          </Plan>
+          <Plan link={{ href: "/docs", label: "Read the docs" }} name="For agents" note={`or ${businessPrice} a month for 200,000 calls`} price={`${callPrice} a call`}>
+            <li>
+              Every call {callPrice}; the written brief {briefPrice}
+            </li>
+            <li>Paid in USDC over x402, no account</li>
+            <li>A call that fails is never charged</li>
+          </Plan>
+          <PaymentNetworks className="lg:col-span-3" />
+        </div>
+      </section>
 
-      <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
-        <Plan link={{ href: "/scan", label: "Scan a wallet" }} name="Free" price="$0">
-          <li>10 scans or checks a day</li>
-          <li>Every safety warning, always</li>
-          <li>The Svalin Index</li>
-        </Plan>
-        <Plan highlight link={{ href: "#checkout", label: "Get Pro" }} name="Svalin Pro" note="or $90 a year" price={`${proPrice} a month`}>
-          <li>100 calls a day, on the website and in your agent</li>
-          <li>Every next step, and exit prices at any sale size</li>
-          <li>The look-alike check against your own wallet</li>
-        </Plan>
-        <Plan link={{ href: "/docs", label: "Read the docs" }} name="For agents" note={`or ${businessPrice} a month for 200,000 calls`} price={`${callPrice} a call`}>
-          <li>
-            Every call {callPrice}; the written brief {briefPrice}
-          </li>
-          <li>Paid in USDC over x402, no account</li>
-          <li>A call that fails is never charged</li>
-        </Plan>
-      </div>
-      <PaymentNetworks className="-mt-8" />
-
-      <section className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start">
-        <ProCheckout />
-        <div className="grid gap-8 text-sm leading-6 text-mutedForeground">
+      <section className="grid4 items-start">
+        <div className="order-2 border-b border-border lg:order-none lg:col-span-2">
           <Answer title="How you pay for Pro">
-            In USDC from your own wallet. On Solana you scan a QR code with your wallet app; on NEAR you send an exact amount. Svalin never connects
-            to your wallet and never asks you to sign anything: it finds your payment on the blockchain. Card payments come in early 2027.
+            In USDC from your own wallet. On Solana you scan a QR code with your wallet app; on NEAR you send an exact amount. Svalin never connects to your wallet and never asks you to sign
+            anything: it finds your payment on the blockchain. Card payments are planned for early 2027.
           </Answer>
           <Answer title="Your Pro code">
-            The code is your pass. It stays in your browser, and you can copy it to another device or into your agent&apos;s settings. Svalin keeps
-            only a fingerprint of it, so a lost code cannot be recovered.
+            The code is your pass. It stays in your browser, and you can copy it to another device or into your agent’s settings. Svalin keeps only a fingerprint of it, so a lost code
+            cannot be recovered.
           </Answer>
           <Answer title="Renewing">
-            Crypto payments do not renew by themselves. The site reminds you three days before your pass ends, and paying again with the same code
-            adds the new days after the current end. Agents renew by buying again with their key; see the <Link className={linkClass} href="/docs#keys">docs</Link>.
+            Crypto payments do not renew by themselves. The site reminds you three days before your pass ends, and paying again with the same code adds the new days after the current end.
+            Agents renew by buying again with their key; see the{" "}
+            <Link className="link text-foreground" href="/docs/passes">
+              docs
+            </Link>
+            .
           </Answer>
           <Answer title="What stays free">
-            Every check shows every safety warning, with or without a pass: Svalin never hides &quot;don&apos;t pay this address&quot; behind a
-            paywall.
+            Every check shows every warning, with or without a pass: Svalin never hides “don’t pay this address” behind a paywall.
           </Answer>
+        </div>
+        <div className="order-1 lg:order-none lg:col-span-2">
+          <ProCheckout />
         </div>
       </section>
     </main>
@@ -90,26 +94,25 @@ function Plan({
   highlight?: boolean;
   children: ReactNode;
 }) {
+  // Every plan uses the same five rows of the parent grid, so names, prices, lists and links line up across plans.
   return (
-    <div className={cn("grid content-start gap-4 bg-surface p-6", highlight && "bg-surface2")}>
-      <div className="grid gap-1">
-        <h2 className="font-medium">{name}</h2>
-        <p className="text-2xl tracking-tight">{price}</p>
-        <p className="text-sm text-subtleForeground md:h-5">{note}</p>
-      </div>
-      <ul className="grid gap-2 text-sm leading-6 text-mutedForeground">{children}</ul>
-      <Link className={cn(linkClass, "w-fit text-sm")} href={link.href}>
+    <article className={cn("grid content-start gap-y-3 border-t-2 pt-3 lg:row-span-5 lg:grid-rows-subgrid", highlight ? "border-accent" : "border-foreground")}>
+      <h2 className="text-lg font-normal">{name}</h2>
+      <p className="title">{price}</p>
+      <p className="text-sm text-mutedForeground">{note}</p>
+      <ul className="grid content-start gap-2 text-mutedForeground">{children}</ul>
+      <Link className="link w-fit" href={link.href}>
         {link.label}
       </Link>
-    </div>
+    </article>
   );
 }
 
 function Answer({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="grid gap-2">
-      <h2 className="text-base font-medium text-foreground">{title}</h2>
-      <p>{children}</p>
+    <div className="grid gap-2 border-t border-border py-5">
+      <h2 className="subtitle">{title}</h2>
+      <p className="max-w-[34em] text-mutedForeground">{children}</p>
     </div>
   );
 }

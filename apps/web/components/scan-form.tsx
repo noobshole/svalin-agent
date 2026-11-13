@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -24,7 +23,15 @@ export function normaliseAddress(input: string): string | null {
   return near.length >= 2 && near.length <= 64 && NEAR_ACCOUNT_ID.test(near) ? near : null;
 }
 
-export function ScanForm({ initialValue = "", showExamples = false }: { initialValue?: string; showExamples?: boolean }) {
+export function ScanForm({
+  initialValue = "",
+  showExamples = false,
+  onValue,
+}: {
+  initialValue?: string;
+  showExamples?: boolean;
+  onValue?: (value: string) => void;
+}) {
   const router = useRouter();
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +48,7 @@ export function ScanForm({ initialValue = "", showExamples = false }: { initialV
     event.preventDefault();
     const address = normaliseAddress(value);
     if (!address) {
-      setError("That doesn't look like a Solana wallet address or a NEAR account.");
+      setError("That doesn’t look like a Solana wallet address or a NEAR account.");
       return;
     }
     scan(address);
@@ -49,40 +56,33 @@ export function ScanForm({ initialValue = "", showExamples = false }: { initialV
 
   return (
     <form className="grid w-full gap-3" onSubmit={onSubmit}>
-      <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-1.5 focus-within:border-borderStrong sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <label className="sr-only" htmlFor="address">
           Solana wallet address or NEAR account
         </label>
         <input
+          autoCapitalize="off"
           autoComplete="off"
-          className="min-w-0 flex-1 bg-transparent px-3 py-2 font-mono text-sm outline-none placeholder:text-subtleForeground"
+          className="field flex-1"
           id="address"
-          onChange={(event) => setValue(event.target.value)}
+          onChange={(event) => {
+            setValue(event.target.value);
+            onValue?.(event.target.value);
+          }}
           placeholder="alice.near or a Solana address"
           spellCheck={false}
           value={value}
         />
-        <button
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primaryForeground transition-opacity hover:opacity-90 disabled:opacity-60"
-          disabled={pending}
-          type="submit"
-        >
+        <button className="btn" disabled={pending} type="submit">
           {pending ? "Scanning…" : pro ? "Scan" : "Scan free"}
-          <ArrowRight aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>
       {error ? <p className="text-sm text-riskHigh">{error}</p> : null}
       {showExamples ? (
-        <p className="flex flex-wrap items-center gap-2 text-xs text-mutedForeground">
+        <p className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm text-mutedForeground">
           Try
           {EXAMPLES.map((example) => (
-            <button
-              className="rounded-md border border-border px-2 py-1 font-mono text-foreground transition-colors hover:border-borderStrong"
-              disabled={pending}
-              key={example.address}
-              onClick={() => scan(example.address)}
-              type="button"
-            >
+            <button className="link text-foreground" disabled={pending} key={example.address} onClick={() => scan(example.address)} type="button">
               {example.label}
             </button>
           ))}

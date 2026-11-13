@@ -1,0 +1,17 @@
+[package]
+name = "svalin-demo-market"
+description = "A testnet stand-in for a market: takes a swap order in Ref Finance's message format, records it and keeps what it was sent."
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/noobshole/svalin-guard"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { version = "=5.30.0", default-features = false }
+
+[dev-dependencies]
+near-sdk = { version = "=5.30.0", default-features = false, features = ["unit-testing"] }

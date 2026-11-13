@@ -39,6 +39,11 @@ const usageOf = (response: Response): Usage => ({
   proLeft: headerCount(response, "X-Calls-Left"),
 });
 
+/** What a visitor reads when the API refuses. A data provider's own status code would mean nothing to them. */
+function visitorMessage(code: string, message: string) {
+  return code.startsWith("upstream_") ? "This address could not be read right now. Try again in a minute." : message;
+}
+
 export type DemoResult =
   | ({ ok: true; report: RiskReport } & Usage)
   | ({ ok: false; status: number; message: string; hint?: string; token?: TokenNotice } & Partial<Usage>);
@@ -57,7 +62,7 @@ export async function getDemoRisk(address: string, signal?: AbortSignal): Promis
     return {
       ok: false,
       status: response.status,
-      message: error.success ? error.data.error : `API returned ${response.status}.`,
+      message: error.success ? visitorMessage(error.data.code, error.data.error) : `API returned ${response.status}.`,
       hint: error.success ? error.data.hint : undefined,
       token: error.success ? error.data.token : undefined,
       ...usageOf(response),
@@ -87,7 +92,7 @@ export async function getDemoCheck(address: string, signal?: AbortSignal, payer?
     return {
       ok: false,
       status: response.status,
-      message: error.success ? error.data.error : `API returned ${response.status}.`,
+      message: error.success ? visitorMessage(error.data.code, error.data.error) : `API returned ${response.status}.`,
       hint: error.success ? error.data.hint : undefined,
       ...usageOf(response),
     };
