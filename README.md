@@ -263,7 +263,6 @@ How NEAR is used:
 - **Services:** Helius, FastNEAR, Ref Finance, the FastNEAR and x402.org
   facilitators, OutLayer, NEAR Chain Signatures, NEAR AI Cloud, Cloudflare Workers and GitHub
   Actions.
-- **Templates:** none.
 - **AI assistance:** Svalin is built with an AI coding assistant (Claude Code), directed by its
   founder, and checked by the tests above and by live runs on testnet. When an Anthropic API key is configured, `/v1/brief` uses Claude to
   word its summary; no model computes a score, a grade or a vault decision.

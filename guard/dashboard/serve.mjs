@@ -1,5 +1,5 @@
 // Serves the dashboard on this machine only: node dashboard/serve.mjs, then open
-// http://127.0.0.1:8410/?vault=vault5.svalin-demo.testnet. Plain Node, no packages.
+// http://127.0.0.1:8410/?vault=noobshole-vault.testnet. Plain Node, no packages.
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 

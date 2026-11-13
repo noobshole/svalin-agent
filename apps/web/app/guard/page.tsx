@@ -48,7 +48,7 @@ export default function GuardPage() {
           </p>
           <p className="text-mutedForeground">On NEAR’s test network and Solana devnet, with test money.</p>
           <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
-            <a className="btn" href={`${VAULT_PAGE}/?vault=${VAULT}`}>
+            <a className="btn" href={VAULT_PAGE}>
               Open a vault
             </a>
             <Link className="link" href="/docs/guard">
@@ -73,7 +73,10 @@ export default function GuardPage() {
           </h2>
           <p className="max-w-[34em] text-mutedForeground lg:col-span-2">
             The agent was a real AI model on NEAR AI Cloud, and it was not told the vault’s rules. Each row is a real transaction on NEAR’s test network, on{" "}
-            <code className="font-mono text-[0.85em]">{VAULT}</code>.
+            <a className="link" href={`${VAULT_PAGE}/?vault=${VAULT}`}>
+              <code className="font-mono text-[0.85em]">{VAULT}</code>
+            </a>
+            .
           </p>
         </div>
         <div className="doc">
