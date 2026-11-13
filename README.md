@@ -15,14 +15,14 @@ Live on testnet: [website](https://svalin.noobshole.workers.dev) ·
 AI agents now pay for things themselves, often per call over [x402](https://x402.org). An agent
 that holds a wallet key can be talked into one bad payment, and that is enough.
 
-- In the [Agent Money Benchmark](https://agentmoneybench.com), 7 of 10 AI models paid a cheating
-  seller and 6 paid twice.
+- In the [Agent Money Benchmark](https://agentmoneybench.com), 9 of 12 AI models paid a cheating
+  seller at least once, and 7 paid twice for the same data.
 - Address poisoning, paying a look-alike of an address you paid before, is a theft method measured
   at scale on Ethereum and BNB Chain (Tsuchiya, Dong, Soska and Christin, USENIX Security 2025).
 - A token's quoted price says little. In the Svalin Index of 13 November 2026, 4,921 of 5,002
   priced NEAR tokens failed a $1,000 sale: selling that much would lose more than a quarter.
-- In our own exam, a real model on NEAR AI Cloud asked a vault to pay 1.50 USDC to a cheating
-  seller. 1.25 of it was a trick.
+- In our own exam, a real model on NEAR AI Cloud fell for 6 of a cheating seller's 9 tricks and
+  asked a vault to pay 1.50 USDC.
 
 Telling a model to be careful does not hold. The checks have to sit outside the model, and for
 money, inside a contract.
@@ -32,7 +32,7 @@ money, inside a contract.
 | Part | What it does | Where |
 | --- | --- | --- |
 | **Svalin Index** | Grades every priced NEAR token A to F by the real money in its pools. Rebuilt every few hours; one edition a day is sealed on NEAR. | [`apps/api`](apps/api), [svalin-index](https://github.com/noobshole/svalin-index) |
-| **Checks** | Before paying an address: allow, caution or block. Wallet risk reports, exit prices and grade proofs. $0.002 a call in USDC over x402 on NEAR or Solana, with 10 free calls a day. | [`apps/api`](apps/api), [`packages/mcp`](packages/mcp) |
+| **Checks** | Before paying an address: allow, caution or block. Wallet risk reports, exit prices and grade proofs. From $0.002 a call in USDC over x402 on NEAR or Solana, with 10 free calls a day. | [`apps/api`](apps/api), [`packages/mcp`](packages/mcp) |
 | **Svalin Guard** | A vault contract. The agent's key can only ask; the vault pays, holds or refuses by the owner's rules, on NEAR and on Solana, and buys a token only if its grade is proven against the sealed edition. | [`guard`](guard) |
 | **Website** | Free wallet scan, payee check, the Index, docs and pricing. | [`apps/web`](apps/web) |
 
@@ -183,7 +183,7 @@ agent its key; see [guard/README.md](guard/README.md#try-it).
 
 ## Run it locally
 
-Needs Node.js 22.23.4+ or 24.22.1+ and pnpm 10.
+Needs Node.js 22.23.4+, 24.22.1+ or 26.12.1+, and pnpm 10.
 
 ```bash
 pnpm install
@@ -240,7 +240,7 @@ What that diff contains:
 
 - The Svalin Index, its daily editions and the registry on NEAR that seals them.
 - Check Before Paying, exit prices, grade proofs, passes, and x402 payments on NEAR.
-- Svalin Guard: everything in [`guard`](guard), started on 2 November 2026.
+- Svalin Guard: everything in [`guard`](guard), started on 3 November 2026.
 - The website as it is now.
 
 How NEAR is used:
@@ -255,17 +255,18 @@ How NEAR is used:
 ## Libraries, services and AI assistance
 
 - **API and MCP server:** [Hono](https://hono.dev), [Zod](https://zod.dev), the x402 packages
-  (`@x402/core`, `@x402/hono`, `@x402/fetch`, `@x402/near`, `@x402/svm`, `@coinbase/x402`),
-  `@solana/kit`, and the [MCP SDK](https://github.com/modelcontextprotocol/typescript-sdk).
-- **Website:** Next.js, React, Tailwind CSS, lucide-react and uqr.
+  (`@x402/core`, `@x402/hono`, `@x402/fetch`, `@x402/extensions`, `@x402/near`, `@x402/svm`,
+  `@coinbase/x402`), `@solana/kit`, and the
+  [MCP SDK](https://github.com/modelcontextprotocol/typescript-sdk).
+- **Website:** Next.js, React, Tailwind CSS, lucide-react, clsx, tailwind-merge and uqr.
 - **Guard:** near-sdk 5.30.0, serde, sha2, wasi-http-client, p256 (tests only), and a pinned copy
   of NEAR Connect (MIT) on the vault page. The demo agent uses only Node's own modules.
-- **Services:** Helius, FastNEAR, Ref Finance, the FastNEAR and x402.org
-  facilitators, OutLayer, NEAR Chain Signatures, NEAR AI Cloud, Cloudflare Workers and GitHub
-  Actions.
+- **Services:** Helius, FastNEAR, Ref Finance, the FastNEAR and x402.org facilitators, OutLayer,
+  NEAR Chain Signatures, NEAR AI Cloud, Cloudflare Workers and GitHub Actions.
 - **AI assistance:** Svalin is built with an AI coding assistant (Claude Code), directed by its
-  founder, and checked by the tests above and by live runs on testnet. When an Anthropic API key is configured, `/v1/brief` uses Claude to
-  word its summary; no model computes a score, a grade or a vault decision.
+  founder, and checked by the tests above and by live runs on testnet. When an Anthropic API key
+  is configured, `/v1/brief` uses Claude to word its summary; no model computes a score, a grade
+  or a vault decision.
 
 ## Limits
 

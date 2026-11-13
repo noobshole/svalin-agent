@@ -30,8 +30,8 @@ Everything here runs on NEAR testnet and Solana devnet, and every result links t
 AI agents now pay for things themselves, often per call over x402. Telling a model to be careful
 does not hold up:
 
-- In the [Agent Money Benchmark](https://agentmoneybench.com), 7 of 10 AI models paid a cheating
-  seller and 6 paid twice.
+- In the [Agent Money Benchmark](https://agentmoneybench.com), 9 of 12 AI models paid a cheating
+  seller at least once, and 7 paid twice for the same data.
 - Red-teaming of Google's agent payments protocol found that signed payment mandates still fall to
   prompt injection ([arXiv 2601.22569](https://arxiv.org/abs/2601.22569)), and
   [Five Attacks on x402](https://arxiv.org/abs/2605.11781) steers agents to malicious paid
@@ -232,8 +232,9 @@ VAULT=<your vault> AGENT_KEY=<agent key file> node buy-exam.mjs results-buy.json
 ```
 
 Add `MODEL=z-ai/glm-5.3-flash` and a [NEAR AI Cloud](https://near.ai) key in `NEAR_AI_API_KEY` to
-let a model make the agent's choices in `exam.mjs`. Each exam's first lines say what the vault needs.
-Three look-alikes or forged grades within an hour freeze the vault, and each exam makes one.
+let a model make the agent's choices in `exam.mjs`. Each exam's first lines say what the vault
+needs. Three look-alikes or forged grades within an hour freeze the vault, and each exam makes
+one.
 
 ## What it does not do
 
@@ -256,9 +257,8 @@ Three look-alikes or forged grades within an hour freeze the vault, and each exa
 [OutLayer](https://outlayer.ai), FastNEAR RPC, NEAR Chain Signatures (`v1.signer-prod.testnet`),
 NEAR AI Cloud, and x402.org's facilitator on Solana devnet. The vault page is plain HTML, CSS and
 JavaScript with a pinned copy of NEAR Connect (MIT). The demo agent uses only Node's own modules.
-Built with an AI coding assistant (Claude Code), directed by Svalin's founder,
-and tested as described above.
-The look-alike rules are ported from Svalin's API (`apps/api/src/risk/check.ts`), and shared test
-cases keep the two in step.
+Built with an AI coding assistant (Claude Code), directed by Svalin's founder, and tested as
+described above. The look-alike rules are ported from Svalin's API
+(`apps/api/src/risk/check.ts`), and shared test cases keep the two in step.
 
 Licensed under [Apache 2.0](../LICENSE); see [NOTICE](NOTICE).
