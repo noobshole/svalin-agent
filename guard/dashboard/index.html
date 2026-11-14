@@ -31,11 +31,7 @@
           <span>svalin <span class="dim">guard</span></span>
         </a>
         <div class="top-tools">
-          <form id="pick" class="pick" role="search">
-            <label for="vault" class="sr-only">Vault account</label>
-            <input id="vault" name="vault" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="A vault account on NEAR" />
-            <button type="submit">Show</button>
-          </form>
+          <a id="pick" class="link pick-link" href="./">Your vaults</a>
           <button id="theme" class="theme" type="button" aria-label="Switch between white and dark" title="Switch between white and dark">
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <circle cx="12" cy="12" fill="none" r="9.5" stroke="currentColor" stroke-width="1.6" />
@@ -49,19 +45,18 @@
     <main class="wrap">
       <section class="intro" id="start-block" hidden>
         <h1><span class="dim">Open your vault.</span> Or make a new one.</h1>
-        <p class="lede">A vault holds your AI agent's money and decides every payment it asks for. You own it from your wallet, and Svalin has no key to it.</p>
-        <p class="note">On NEAR's test network, with test money.</p>
+        <p class="lede">A vault holds your AI agent's money and decides every payment it asks for. On NEAR testnet.</p>
         <p class="note" id="open-unfinished" hidden>A vault you started was not finished. <a class="link" href="?create=1">Finish setting it up</a></p>
-        <form class="open" id="open">
-          <label class="form-field">
-            <span>Your vault's account</span>
-            <input id="open-name" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="vault.yourname.testnet" />
-          </label>
-          <button type="submit">Open</button>
-        </form>
+        <div class="mine" id="mine" hidden></div>
+        <div class="start-row">
+          <div id="start-action"></div>
+          <form class="open" id="open">
+            <span class="or">or</span>
+            <input id="open-name" aria-label="Open a vault by its name" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="yourname-vault.testnet" />
+            <button type="submit">Open</button>
+          </form>
+        </div>
         <p class="note tone-refused" id="open-error"></p>
-        <a class="button-primary" href="?create=1">Create a vault</a>
-        <p class="note"><a class="link" href="?vault=noobshole-vault.testnet">See a vault that faced a scam exam</a></p>
       </section>
 
       <section class="intro" id="create-block" hidden>

@@ -14,6 +14,7 @@ export default function GuardDocsPage() {
       contents={[
         ["open", "Open or create a vault"],
         ["keys", "Who holds which key"],
+        ["agent-key", "Give your agent a key"],
         ["decisions", "How a payment is decided"],
         ["limits", "Limits"],
         ["buying", "Buying tokens"],
@@ -32,15 +33,16 @@ export default function GuardDocsPage() {
     >
       <h2 id="open">Open or create a vault</h2>
       <p>
-        Both happen on the <a className="link" href="https://svalin-guard.noobshole.workers.dev">vault page</a>, from your own wallet.
+        Both happen on the <a className="link" href="https://svalin-guard.noobshole.workers.dev">vault page</a>, from your own wallet. Step by
+        step, with pictures: <Link href="/docs/guard/walkthrough">Make your first vault</Link>.
       </p>
       <ul>
         <li>
-          <strong>To create one,</strong> connect your wallet, choose a name and your limits, and approve once. Your wallet only sends 6 test NEAR; it is
-          never asked for a key. The page makes the vault, then the key that set it up is deleted. The NEAR stays in the vault to store its code.
+          <strong>To create one,</strong> connect your wallet, choose a name and your limits, paste your agent’s public key (see{" "}
+          <a href="#agent-key">Give your agent a key</a>), and approve 6 test NEAR once. The NEAR stays in the vault to store its code.
         </li>
         <li>
-          <strong>To open one,</strong> type its account name. Anyone can read a vault. Connect the owner’s wallet to approve payments and change the rules.
+          <strong>To open yours,</strong> connect your wallet: it lists the vaults you own. Anyone can open a vault by its name to read it.
         </li>
       </ul>
 
@@ -55,13 +57,31 @@ export default function GuardDocsPage() {
         </li>
         <li>
           <strong>The guardian</strong> is a second device, or someone the owner trusts. It can freeze the vault, cancel a waiting change and reject a
-          held payment. It approves a large payment together with the owner, never alone.
+          held payment. It approves a large payment together with the owner, never alone. If the owner’s wallet is lost, it can start a recovery
+          to a new owner; that waits, and the owner can cancel it.
         </li>
         <li>
           <strong>Svalin</strong> has no key to any vault. It publishes the grades the vault checks.
         </li>
       </ul>
       <p>Setting up a vault deletes the key that deployed it, so from then on only the code decides.</p>
+
+      <h2 id="agent-key">Give your agent a key</h2>
+      <p>
+        The agent signs its requests with a key of its own. With Node 22 or newer, in the repository’s <code>guard/examples/demo-agent</code>{" "}
+        folder:
+      </p>
+      <pre>
+        <code>node new-key.mjs ~/.svalin/my-agent.json</code>
+      </pre>
+      <p>
+        Paste the public key it prints into the vault page. Give the agent the file and the vault’s name. The file holds the private key: never
+        paste it anywhere. The vault page only takes the public one.
+      </p>
+      <p>
+        Any agent can hold the key, built on any model; Svalin runs no one’s agent. The key can only ask.{" "}
+        <Link href="/docs/guard/walkthrough#agent">Connect your agent</Link> shows the call it makes.
+      </p>
 
       <h2 id="decisions">How a payment is decided</h2>
       <p>Every request ends in one of three answers, recorded on NEAR with a reason: paid, held for the owner, or refused. No model takes part.</p>

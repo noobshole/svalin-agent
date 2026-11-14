@@ -505,6 +505,21 @@ summary::-webkit-details-marker {
     margin-bottom: 24px;
     overflow-x: auto;
   }
+  .doc figure {
+    margin: 8px 0 28px;
+  }
+  .doc figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid hsl(var(--border));
+  }
+  .doc figcaption {
+    margin-top: 10px;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
   .doc table {
     width: 100%;
     border-collapse: collapse;
