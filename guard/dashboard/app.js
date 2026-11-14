@@ -25,6 +25,18 @@
       explorer: "https://nearblocks.io/txns/",
     },
   };
+  /**
+   * The code hashes of the Svalin Guard builds this page trusts: 0.2.0, the build it deploys
+   * itself (guard.wasm), and three earlier testnet builds that run the project's own demo vaults.
+   * Any contract can answer `status()` with your name as its owner, so a vault is only treated as
+   * one when it runs a build listed here and no key has full access to it. Add each new build.
+   */
+  const RELEASES = new Set([
+    "2u1jejWMHwgMU2fX8GW3ut5CkirJU4jF5MwvRKyxve6F", // 0.2.0
+    "5Tov3TB3osJJjSqZutVywo8NpBUuQ8PaRhtgGNckED2B", // earlier testnet build (vault7.svalin-demo.testnet)
+    "EwBww6PpXguimG1ijW8cGBbKo2v5FoJ93M3AwktSRdoH", // earlier testnet build (vault5.svalin-demo.testnet)
+    "8imaKox7WUecR9YeUvS2BRGagB4L48ayE2XxZCqyfKz7", // earlier testnet build (vault2.svalin-demo.testnet)
+  ]);
   const ACCOUNT = /^(?=.{2,64}$)(?:(?:[a-z\d]+[-_])*[a-z\d]+\.)*(?:[a-z\d]+[-_])*[a-z\d]+$/;
   const TX_HASH = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
   const REFRESH_MS = 20_000;
@@ -97,7 +109,7 @@
     recover: "hand the vault to a new owner",
   };
 
-  const state = { run: 0, vault: "", net: NETWORKS.testnet, token: null, status: null, held: [], cleared: [], pending: [], txs: new Map(), timer: 0, solanaBalance: null, device: null, knownPayees: new Set() };
+  const state = { run: 0, vault: "", net: NETWORKS.testnet, token: null, status: null, genuine: null, held: [], cleared: [], pending: [], txs: new Map(), timer: 0, solanaBalance: null, device: null, knownPayees: new Set() };
   /** The owner's or guardian's wallet, once connected; nothing about it is loaded before that. */
   const wallet = { connector: null, account: "", busy: false, message: "", messagePlace: "wallet", confirmFreeze: false, confirmRevoke: false, forms: {}, open: new Set() };
   const WALLET_FLAG = "svalin-guard-wallet-connected";
@@ -137,6 +149,12 @@
   async function accessKeys(account) {
     const result = await rpc("query", { request_type: "view_access_key_list", finality: "final", account_id: account });
     return result.keys ?? [];
+  }
+
+  /** Whether `account` runs a trusted Svalin Guard build and no key could replace that code. */
+  async function isGenuine(account) {
+    const [info, list] = await Promise.all([rpc("query", { request_type: "view_account", finality: "final", account_id: account }), accessKeys(account)]);
+    return RELEASES.has(info.code_hash) && !list.some((key) => key.access_key?.permission === "FullAccess");
   }
 
   /** The vault's USDC on Solana, summed over its token accounts for the mint; null if unreadable. */
@@ -338,6 +356,25 @@
 
   const mono = (text) => el("span", { class: "mono" }, text);
   const sub = (...children) => el("span", { class: "sub" }, ...children);
+  /** Where an agent's key comes from: the public half goes here, the private half stays with the agent. */
+  const agentKeyHint = () => [
+    "The public key only. The private key stays with the agent. ",
+    el("a", { class: "link", href: "https://svalin.noobshole.workers.dev/docs/guard#agent-key", target: "_blank", rel: "noreferrer" }, "How to make one"),
+  ];
+  /** A long key as its start and end, e.g. ed25519:49tb…xk2V; the whole key is one click away. */
+  const shortKey = (key) => (key.length > 24 ? `${key.slice(0, 12)}…${key.slice(-4)}` : key);
+  function keyWithCopy(key) {
+    const button = el("button", { class: "copy", type: "button", title: "Copy the whole key" }, "Copy");
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(key);
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = key;
+      }
+    });
+    return el("span", { class: "key" }, el("span", { class: "mono", title: key }, shortKey(key)), " ", button);
+  }
   const txLink = (hash) => el("a", { class: "mono", href: `${state.net.explorer}${hash}`, target: "_blank", rel: "noreferrer" }, `${hash.slice(0, 8)}…`);
 
   /** The calls the agent's key can make; anything else the vault's own account signs is its setup. */
@@ -584,6 +621,13 @@
     summary.replaceChildren();
     const fund = $("fund");
     fund.hidden = true;
+    // A contract that is not a trusted vault says so before anything else, and asks for no money.
+    if (state.genuine === false) {
+      summary.append(
+        el("strong", { class: "tone-refused" }, "This is not a Svalin Guard vault this page can vouch for."),
+        " Its code is not a released build, or a key can still replace it. Do not send it money. ",
+      );
+    }
     // A frozen vault says so before anything else.
     if (state.status?.frozen) summary.append(el("strong", { class: "tone-refused" }, "This vault is frozen."), " It pays nothing until the owner unfreezes it. ");
     if (totals.requests === 0 && totals.buys + totals.refusedBuys === 0) {
@@ -593,7 +637,7 @@
       const noneOnNear = state.balance !== null && big(state.balance) === 0n;
       // A balance that could not be read is not an empty one.
       const noneOnSolana = !state.status?.solana || (state.solanaBalance !== null && big(state.solanaBalance) === 0n);
-      if (noneOnNear && noneOnSolana) {
+      if (noneOnNear && noneOnSolana && state.genuine) {
         fund.replaceChildren(
           el("p", { class: "fund__lead" }, "It holds no USDC yet. To use it, send USDC to the vault:"),
           el("dl", { class: "fund__list" }, el("dt", {}, "On NEAR"), el("dd", {}, mono(state.vault)), ...(address ? [el("dt", {}, "On Solana"), el("dd", {}, mono(address))] : [])),
@@ -816,7 +860,8 @@
   /** The connected account's role in this vault. */
   function role() {
     const status = state.status;
-    if (!wallet.account || !status) return "";
+    // No owner's controls on a contract that is not a trusted vault.
+    if (!wallet.account || !status || state.genuine === false) return "";
     if (wallet.account === status.owner) return "owner";
     if (status.guardian && wallet.account === status.guardian) return "guardian";
     return "";
@@ -943,11 +988,13 @@
   const formValue = (key, start = "") => wallet.forms[key] ?? start;
 
   /** A labelled input whose value survives the page's refresh every 20 seconds. */
-  function formField(key, label, { start = "", mode, placeholder } = {}) {
+  function formField(key, label, { start = "", mode, placeholder, help } = {}) {
     const node = el("input", { autocomplete: "off", autocapitalize: "off", spellcheck: "false", inputmode: mode, placeholder });
     node.value = formValue(key, start);
     node.addEventListener("input", () => (wallet.forms[key] = node.value.trim()));
-    return el("label", { class: "form-field" }, el("span", {}, label), node);
+    const field = el("label", { class: "form-field" }, el("span", {}, label), node);
+    // The help sits outside the label, so its link does not move the focus into the input.
+    return help ? el("div", { class: "form-field-wrap" }, field, el("small", { class: "field-help" }, ...help)) : field;
   }
 
   function changeSection(id, title, ...body) {
@@ -1041,7 +1088,7 @@
       "The agent",
       ...remove,
       sub(`Removing the agent happens at once. A new key waits ${wait}.`),
-      el("div", { class: "form-row" }, formField("agentKey", "New agent public key", { placeholder: "ed25519:…" })),
+      el("div", { class: "form-row" }, formField("agentKey", "New agent public key", { placeholder: "ed25519:…", help: agentKeyHint() })),
       el("div", { class: "actions" }, walletButton("Set the new key", replace)),
     );
   }
@@ -1649,19 +1696,146 @@
         { class: "form-row" },
         formField("createHours", "Riskier changes wait, in hours", { start: "24", mode: "decimal" }),
         formField("createGuardian", "Guardian account, if you have one"),
-        formField("createAgent", "Your agent's public key, or add it later", { placeholder: "ed25519:…" }),
-      ),
-      el(
-        "p",
-        { class: "note" },
-        `Your wallet is asked for one thing: to send ${CREATE_DEPOSIT_NEAR} test NEAR to a long address of letters and numbers. That is this page's one-time setup account. It makes your vault and closes itself, and the NEAR stays in the vault to pay for storing its code.`,
+        formField("createAgent", "Your agent's public key, or add it later", { placeholder: "ed25519:…", help: agentKeyHint() }),
       ),
       error,
       walletButton("Create the vault", startCreate, "primary"),
+      el(
+        "p",
+        { class: "note create-fine" },
+        `Your wallet asks you to approve one thing: ${CREATE_DEPOSIT_NEAR} test NEAR to a long address of letters and numbers.`,
+        el("br"),
+        "That is this page's one-time setup account. It makes your vault and closes itself, and the NEAR stays in the vault to pay for storing its code.",
+      ),
     );
   }
 
+  /* ------------------------------- your vaults ------------------------------- */
+
+  const mine = { active: false, account: "", loading: false, list: null, error: "" };
+
+  /** An account's own transactions, newest first, as FastNEAR returns them. */
+  async function transactionsOf(account, pages = 2) {
+    const hashes = [];
+    let resume;
+    for (let page = 0; page < pages; page += 1) {
+      const result = await postJson(`${state.net.history}/v0/account`, { account_id: account, limit: PAGE, ...(resume ? { resume_token: resume } : {}) });
+      const entries = result.account_txs ?? [];
+      for (const entry of entries) if (typeof entry.transaction_hash === "string" && TX_HASH.test(entry.transaction_hash)) hashes.push(entry.transaction_hash);
+      resume = result.resume_token;
+      if (!resume || entries.length < PAGE) break;
+    }
+    const out = [];
+    for (let start = 0; start < hashes.length; start += BATCH) {
+      const { transactions = [] } = await postJson(`${state.net.history}/v0/transactions`, { tx_hashes: hashes.slice(start, start + BATCH) });
+      for (const record of transactions) if (record?.transaction) out.push(record.transaction);
+    }
+    return out;
+  }
+
+  const actionName = (action) => (typeof action === "string" ? action : (Object.keys(action ?? {})[0] ?? ""));
+
+  /**
+   * The vaults an account owns, from public chain data only: the ones this page made for it (its
+   * wallet paid a one-time setup account, which created the vault) and the ones its wallet has
+   * used. Each must name this owner in its status and run a trusted build no key can replace.
+   */
+  async function findVaults(owner) {
+    const candidates = new Set();
+    const setups = new Set();
+    for (const tx of await transactionsOf(owner)) {
+      const to = tx.receiver_id;
+      if (tx.signer_id !== owner || typeof to !== "string" || to === owner || !ACCOUNT.test(to)) continue;
+      for (const action of tx.actions ?? []) {
+        if (actionName(action) === "Transfer" && /^[0-9a-f]{64}$/.test(to)) setups.add(to);
+        else candidates.add(to);
+      }
+    }
+    for (const setup of [...setups].slice(0, 20)) {
+      for (const tx of await transactionsOf(setup, 1).catch(() => [])) {
+        // Only the vault the setup account itself asked the registrar to create.
+        if (tx.signer_id !== setup || tx.receiver_id !== REGISTRAR) continue;
+        for (const action of tx.actions ?? []) {
+          const call = action?.FunctionCall;
+          if (call?.method_name !== "create_account" || typeof call.args !== "string") continue;
+          try {
+            const name = JSON.parse(atob(call.args)).new_account_id;
+            if (typeof name === "string" && ACCOUNT.test(name)) candidates.add(name);
+          } catch {
+            // Not the creation of a vault.
+          }
+        }
+      }
+    }
+    const names = [...candidates].slice(0, 60);
+    const found = [];
+    for (let start = 0; start < names.length; start += 8) {
+      const answers = await Promise.all(
+        names.slice(start, start + 8).map((name) =>
+          view(name, "status")
+            .then((status) => ({ name, status }))
+            .catch(() => null),
+        ),
+      );
+      const claimed = answers.filter((answer) => answer?.status?.owner === owner);
+      // Any contract can claim you as its owner: keep only trusted builds that no key can replace.
+      const trusted = await Promise.all(claimed.map((answer) => isGenuine(answer.name).catch(() => false)));
+      claimed.forEach((answer, index) => trusted[index] && found.push({ vault: answer.name, frozen: Boolean(answer.status.frozen) }));
+    }
+    return found.sort((a, b) => a.vault.localeCompare(b.vault));
+  }
+
+  async function loadMine(account) {
+    mine.account = account;
+    mine.loading = true;
+    mine.error = "";
+    mine.list = null;
+    renderMine();
+    try {
+      const list = await findVaults(account);
+      if (mine.account === account) mine.list = list;
+    } catch (error) {
+      if (mine.account === account) mine.error = error?.message ?? String(error);
+    }
+    if (mine.account !== account) return;
+    mine.loading = false;
+    renderMine();
+  }
+
+  /** The start page's list of the connected wallet's vaults. */
+  function renderMine() {
+    const box = $("mine");
+    const action = $("start-action");
+    if (!box || !action || !mine.active) return;
+    if (!wallet.account) {
+      mine.account = "";
+      box.hidden = true;
+      box.replaceChildren();
+      const connect = el("button", { class: "button-primary", type: "button" }, "Connect your wallet");
+      connect.addEventListener("click", () => connectWallet());
+      action.replaceChildren(connect);
+      return;
+    }
+    if (mine.account !== wallet.account) return void loadMine(wallet.account);
+    let body;
+    if (mine.loading) body = el("p", { class: "note" }, "Looking for your vaults on NEAR…");
+    else if (mine.error) body = el("p", { class: "note tone-refused" }, `They could not be listed: ${mine.error}. `, walletButton("Try again", () => loadMine(wallet.account)));
+    else if (!mine.list?.length) body = el("p", { class: "note" }, "No vault yet.");
+    else
+      body = el(
+        "ul",
+        { class: "mine-list" },
+        ...mine.list.map(({ vault, frozen }) =>
+          el("li", {}, el("a", { class: "link mono", href: `?vault=${vault}` }, vault), el("span", { class: frozen ? "tone-refused" : "tone-paid" }, frozen ? "Frozen" : "Open")),
+        ),
+      );
+    box.hidden = false;
+    box.replaceChildren(el("p", { class: "note" }, mono(wallet.account), walletButton("Disconnect", disconnectWallet)), body);
+    action.replaceChildren(el("a", { class: "button-primary", href: "?create=1" }, "Create a vault"));
+  }
+
   function renderWallet() {
+    renderMine();
     renderChanges();
     renderCreate();
     const box = $("wallet");
@@ -1687,7 +1861,7 @@
     parts.push(...fingerprintControls(role()));
     if (wallet.message && wallet.messagePlace === "wallet") parts.push(sub(wallet.message));
     box.replaceChildren(...parts.filter((part) => part !== null));
-    if (state.status) $("owner-block").hidden = false;
+    if (state.status) $("owner-block").hidden = state.genuine === false;
   }
 
   /* ----------------------------- the fingerprint ----------------------------- */
@@ -2034,8 +2208,8 @@
     const fullAccess = keys.filter((key) => key.access_key?.permission === "FullAccess");
     const permission = agentKey?.access_key?.permission?.FunctionCall;
     add(
-      "The agent's key",
-      status.agent ? mono(status.agent) : "None: the agent was revoked.",
+      "The agent's public key",
+      status.agent ? keyWithCopy(status.agent) : "None: the agent was revoked.",
       permission
         ? sub(
             `It can call only ${(permission.method_names ?? []).join(", ") || "any method"} on ${permission.receiver_id}`,
@@ -2047,7 +2221,9 @@
       "Keys on the vault",
       fullAccess.length
         ? el("span", { class: "tone-refused" }, `${fullAccess.length} full-access key${fullAccess.length === 1 ? "" : "s"}: whoever holds one can redeploy or empty the vault.`)
-        : `${keys.length} key${keys.length === 1 ? "" : "s"}, none with full access, so no key can redeploy or empty the vault.`,
+        : state.genuine === false
+          ? el("span", { class: "tone-refused" }, `${keys.length} key${keys.length === 1 ? "" : "s"}, none with full access. But its code is not a released Svalin Guard build, so that code could pay anyone.`)
+          : `${keys.length} key${keys.length === 1 ? "" : "s"}, none with full access, so no key can redeploy or empty the vault.`,
     );
     add("Owner", mono(status.owner), sub("Approves held payments, and makes changes: safer ones at once, riskier ones after a wait."));
     add("Guardian", status.guardian ? mono(status.guardian) : "None", status.guardian ? sub("Can freeze, cancel a change, reject a payment, and approve a large one together with the owner.") : null);
@@ -2189,6 +2365,8 @@
         "cleared" in status ? view(vault, "cleared_payments").catch(() => []) : [],
         status.solana ? solanaBalance(status).catch(() => null) : null,
       ]);
+      // Checked until it passes: a trusted build with no full-access key cannot change.
+      if (state.genuine !== true) state.genuine = await isGenuine(vault).catch(() => null);
       await readHistory(vault, status.token);
       if (run !== state.run) return;
       state.balance = balance;
@@ -2234,6 +2412,7 @@
     state.net = vault.endsWith(".testnet") ? NETWORKS.testnet : NETWORKS.mainnet;
     state.token = null;
     state.status = null;
+    state.genuine = null;
     state.balance = null;
     state.solanaBalance = null;
     state.pending = [];
@@ -2248,7 +2427,6 @@
       })
       .catch(() => {});
     document.title = `${vault}: Svalin Guard`;
-    $("vault").value = vault;
     $("network").textContent = `A Svalin Guard vault on ${state.net.label}`;
     $("title").textContent = vault;
     $("summary").textContent = "Reading the vault from NEAR…";
@@ -2290,8 +2468,10 @@
   }
 
   function showStart() {
-    document.title = "Open a vault: Svalin Guard";
+    document.title = "Your vaults: Svalin Guard";
     showWithoutVault("start-block");
+    mine.active = true;
+    renderMine();
     $("open").addEventListener("submit", (event) => {
       event.preventDefault();
       const vault = $("open-name").value.trim().toLowerCase();
@@ -2314,18 +2494,6 @@
     if (asked && ACCOUNT.test(asked)) show(asked);
     else if (params.has("create")) showCreate();
     else showStart();
-    $("pick").addEventListener("submit", (event) => {
-      event.preventDefault();
-      const vault = $("vault").value.trim().toLowerCase();
-      if (!ACCOUNT.test(vault)) {
-        $("summary").textContent = "That is not a NEAR account name.";
-        return;
-      }
-      const url = new URL(location.href);
-      url.searchParams.set("vault", vault);
-      history.replaceState(null, "", url);
-      show(vault);
-    });
     $("csv").addEventListener("click", downloadCsv);
     renderWallet();
     let connectedBefore = false;

@@ -203,8 +203,8 @@ returns its answer to the vault, for example
 | `contracts/demo-market` | A stand-in market for testnet |
 | `checker` | The check program OutLayer runs in a TEE |
 | `crates/svalin-proof`, `tools/svalin-roots` | The proof format, and a tool that rebuilds an edition's root |
-| `dashboard` | The vault page: read a vault, create one, change its rules |
-| `examples/demo-agent` | The agent and the three exams |
+| `dashboard` | The vault page: list your vaults, read one, create one, change its rules |
+| `examples/demo-agent` | The agent, the three exams, and `new-key.mjs`, which makes an agent's key |
 | `examples/proofs` | Real grade proofs, and one forged |
 
 ## Try it
@@ -220,21 +220,48 @@ You should see 183 tests pass: 8 (the check program), 2 (the testnet market), 14
 (the proof format), 21 (the registry) and 3 (the root tool). On Windows, set
 `AWS_LC_SYS_PREBUILT_NASM=1` first.
 
-Make your own vault on [the vault page](https://svalin-guard.noobshole.workers.dev): choose
-**Create a vault**. Your wallet is asked for one thing, to send 6 test NEAR. Then run the exams
-against it (Node 22 or newer, no packages to install):
+### Give your agent a key
+
+The agent signs its requests with its own key pair, made on the computer that runs it (Node 22 or
+newer, no packages to install):
+
+```bash
+node examples/demo-agent/new-key.mjs ~/.svalin/my-agent.json
+```
+
+It prints the agent's public key, to paste into the vault page. The file keeps the private key and
+stays with the agent; the vault page only takes a public key. Any ed25519 key pair works, such as
+one made by near-cli.
+
+### Make a vault and run the exams
+
+Step by step, with pictures:
+[Make your first vault](https://svalin.noobshole.workers.dev/docs/guard/walkthrough).
+
+On [the vault page](https://svalin-guard.noobshole.workers.dev), connect your wallet, choose
+**Create a vault** and paste the agent's public key into **Your agent's public key** (or add it
+later under **Change the rules**, **The agent**; a new key waits for the vault's delay). Your
+wallet is asked for one thing, to send 6 test NEAR. Then run the exams against the vault with the
+agent's key file:
 
 ```bash
 cd examples/demo-agent
-VAULT=<your vault> AGENT_KEY=<agent key file> SELLER=<seller account> node exam.mjs results.json
-VAULT=<your vault> AGENT_KEY=<agent key file> node solana-exam.mjs results-solana.json
-VAULT=<your vault> AGENT_KEY=<agent key file> node buy-exam.mjs results-buy.json
+VAULT=<your vault> AGENT_KEY=~/.svalin/my-agent.json SELLER=<seller account> node exam.mjs results.json
+VAULT=<your vault> AGENT_KEY=~/.svalin/my-agent.json node solana-exam.mjs results-solana.json
+VAULT=<your vault> AGENT_KEY=~/.svalin/my-agent.json node buy-exam.mjs results-buy.json
 ```
 
-Add `MODEL=z-ai/glm-5.3-flash` and a [NEAR AI Cloud](https://near.ai) key in `NEAR_AI_API_KEY` to
-let a model make the agent's choices in `exam.mjs`. Each exam's first lines say what the vault
-needs. Three look-alikes or forged grades within an hour freeze the vault, and each exam makes
-one.
+The exams' agent is a script, so no model or AI account is needed. To let a model make the agent's
+choices in `exam.mjs`, add `MODEL=z-ai/glm-5.3-flash` and your own [NEAR AI Cloud](https://near.ai)
+key in `NEAR_AI_API_KEY`, or `PROVIDER=openrouter` with an OpenRouter key in `OPENROUTER_API_KEY` and
+any model's OpenRouter name, such as a Claude, GPT, Grok or Hermes model. Each exam's first lines
+say what the vault needs. Three look-alikes or forged grades within an hour freeze the vault, and
+each exam makes one.
+
+Your own agent, built on any model and run from your code, a framework or an AI coding assistant,
+signs `request_payment`, `request_solana_payment` or `request_buy` as the vault's account with its
+key, as [`agent.mjs`](examples/demo-agent/agent.mjs) does in plain Node. The vault never calls a
+model, and Svalin runs no one's agent.
 
 ## What it does not do
 
@@ -245,7 +272,8 @@ one.
   attestation itself.
 - Solana payments trust NEAR's signing network, and a new Solana payee is not checked in a TEE.
 - A Solana payment counts toward the day's limit when it is signed, not when it lands.
-- A guardian who turns hostile can keep the vault frozen. It can never take the money.
+- A guardian who turns hostile can keep the vault frozen, or start a recovery to an account it
+  picks. The owner has to cancel that recovery within its wait.
 - A stolen owner key with no guardian can still take the money once the wait is over.
 - On testnet the market is a stand-in, since the graded tokens trade only on mainnet.
 

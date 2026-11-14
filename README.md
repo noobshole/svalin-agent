@@ -179,7 +179,8 @@ const report = await (await pay(`https://YOUR-SVALIN-API/v1/risk/${wallet}`)).js
 ```
 
 **A vault.** Make one on [the vault page](https://svalin-guard.noobshole.workers.dev) and give the
-agent its key; see [guard/README.md](guard/README.md#try-it).
+agent its key; see [Make your first vault](https://svalin.noobshole.workers.dev/docs/guard/walkthrough)
+(step by step, with pictures) or [guard/README.md](guard/README.md#try-it).
 
 ## Run it locally
 
