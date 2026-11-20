@@ -6,6 +6,10 @@ const SITE = process.env.SVALIN_SITE ?? "https://svalin.noobshole.workers.dev";
 // is not on this list means someone may be redirecting payments.
 const PAYEES = new Set((process.env.SVALIN_PAYEES ?? "").split(",").map((payee) => payee.trim()).filter(Boolean));
 const MAX_INDEX_AGE_HOURS = 12;
+// Where vaults check the grades they buy by, and where the Index robot seals each day's edition.
+const REGISTRY = process.env.SVALIN_RATINGS_REGISTRY ?? "svalin-ratings-v1.testnet";
+const NEAR_RPC = process.env.SVALIN_NEAR_RPC ?? "https://rpc.testnet.fastnear.com";
+const SEALED = process.env.SVALIN_SEALED_EDITIONS ?? "https://raw.githubusercontent.com/noobshole/svalin-index/main/editions";
 
 const failures = [];
 
@@ -33,6 +37,23 @@ async function check(name, run) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+/** A NEAR view call, read at finality. */
+async function view(account, method, args = {}) {
+  const response = await get(NEAR_RPC, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "monitor",
+      method: "query",
+      params: { request_type: "call_function", finality: "final", account_id: account, method_name: method, args_base64: Buffer.from(JSON.stringify(args)).toString("base64") },
+    }),
+  });
+  const body = await response.json();
+  assert(Array.isArray(body.result?.result), `NEAR answered ${JSON.stringify(body.error ?? body.result?.error ?? response.status).slice(0, 160)}`);
+  return JSON.parse(Buffer.from(body.result.result).toString("utf8"));
 }
 
 await check("API answers", async () => {
@@ -64,6 +85,22 @@ await check(`Svalin Index is fresh (under ${MAX_INDEX_AGE_HOURS} hours)`, async 
   const hours = (Date.now() - Date.parse(index.generatedAt)) / 3_600_000;
   assert(hours < MAX_INDEX_AGE_HOURS, `the latest edition is ${hours.toFixed(1)} hours old`);
   assert(Array.isArray(index.rows) && index.rows.length > 1_000, `only ${index.rows?.length ?? 0} tokens in the edition`);
+});
+
+// A stolen publishing key could put a forged edition on NEAR before the robot does. Vaults trust an
+// edition once its challenge window passes, so anything on NEAR that the robot did not seal must
+// raise the alarm within the hour, in time to retract it.
+await check("The grades on NEAR are the ones the Index robot sealed", async () => {
+  const { editions } = await view(REGISTRY, "status");
+  const recent = await view(REGISTRY, "editions", { from: Math.max(0, editions - 3), limit: 3 });
+  assert(recent.length > 0, "the registry has no editions");
+  for (const edition of recent.filter((entry) => !entry.retracted)) {
+    const response = await get(`${SEALED}/${edition.day}/near-token-root.json`);
+    assert(response.status === 200, `NEAR has an edition for ${edition.day} that the robot never sealed (${response.status}): retract it`);
+    const sealed = await response.json();
+    const differs = ["root", "fingerprint", "index_sha256", "methodology"].filter((field) => sealed[field] !== edition[field]);
+    assert(differs.length === 0, `NEAR's edition for ${edition.day} differs from the sealed one (${differs.join(", ")}): retract it`);
+  }
 });
 
 await check("Website answers with its security headers", async () => {

@@ -26,12 +26,14 @@
     },
   };
   /**
-   * The code hashes of the Svalin Guard builds this page trusts: 0.2.0, the build it deploys
-   * itself (guard.wasm), and three earlier testnet builds that run the project's own demo vaults.
+   * The code hashes of the Svalin Guard builds this page trusts: 0.2.1, the build it deploys
+   * itself (guard.wasm); 0.2.0, the exam build; and three earlier testnet builds that run the
+   * project's own demo vaults.
    * Any contract can answer `status()` with your name as its owner, so a vault is only treated as
    * one when it runs a build listed here and no key has full access to it. Add each new build.
    */
   const RELEASES = new Set([
+    "HcevYaP1gbeLcFB1z67pW3t9fLj1QD6xrxRgfecpGdnq", // 0.2.1
     "2u1jejWMHwgMU2fX8GW3ut5CkirJU4jF5MwvRKyxve6F", // 0.2.0
     "5Tov3TB3osJJjSqZutVywo8NpBUuQ8PaRhtgGNckED2B", // earlier testnet build (vault7.svalin-demo.testnet)
     "EwBww6PpXguimG1ijW8cGBbKo2v5FoJ93M3AwktSRdoH", // earlier testnet build (vault5.svalin-demo.testnet)
@@ -107,6 +109,14 @@
     withdraw: "send funds to another account",
     withdraw_token: "send a bought token to another account",
     recover: "hand the vault to a new owner",
+    leave_guardian: "leave the guardian",
+  };
+  /** Whether a vault's build is `version` or later; builds before 0.2.0 do not say. */
+  const atLeast = (status, version) => {
+    const have = String(status?.version ?? "0").split(".").map(Number);
+    const want = version.split(".").map(Number);
+    for (let i = 0; i < want.length; i++) if ((have[i] || 0) !== want[i]) return (have[i] || 0) > want[i];
+    return true;
   };
 
   const state = { run: 0, vault: "", net: NETWORKS.testnet, token: null, status: null, genuine: null, held: [], cleared: [], pending: [], txs: new Map(), timer: 0, solanaBalance: null, device: null, knownPayees: new Set() };
@@ -429,6 +439,7 @@
       const bought = tx.events.some((event) => ["buy_sent", "buy_refused"].includes(event.event));
       const signed = find("solana_signed");
       const collected = find("cleared_payment_collected");
+      const heldAgain = find("cleared_payment_held_again");
 
       for (const { event, data } of tx.events) {
         const what = data.payee ? [money(data.amount), " to ", account(data.payee)] : null;
@@ -475,6 +486,7 @@
           case "payment_held": {
             totals.requests += 1;
             totals.held += big(data.amount);
+            if (heldAgain) notes.push(`The owner approved it as #${heldAgain.data.id}, but it no longer fits the limits, so the guardian must approve it too.`);
             if (check) notes.push(checkNote(check));
             if (tx.memo) notes.push(`Memo: ${tx.memo}`);
             add({
@@ -733,6 +745,9 @@
     const open = new Set([...list.querySelectorAll("details[open]")].map((details) => details.dataset.id));
     const cli = (method, id, signer) =>
       `near contract call-function as-transaction ${state.vault} ${method} json-args '{"id":${id}}' prepaid-gas '100 Tgas' attached-deposit '1 yoctoNEAR' sign-as ${signer} network-config ${state.net.name}`;
+    // The command is pasted into a shell, so it is offered only when every part of it is a plain
+    // account name or number, whatever the chain or the address bar said.
+    const safeForShell = (id) => Number.isSafeInteger(Number(id)) && String(Number(id)) === String(id) && ACCOUNT.test(state.vault) && ACCOUNT.test(String(status.owner));
     list.replaceChildren(
       ...held
         .slice()
@@ -767,13 +782,15 @@
               : null,
             walletActions(id, payment, status, now < expires),
             fingerprintActions(id, payment, status, now < expires),
-            el(
-              "details",
-              { "data-id": id, open: open.has(String(id)) },
-              el("summary", {}, "Approve or reject it with near-cli"),
-              now < expires ? command("Approve, from the owner's device", cli("approve", id, status.owner)) : null,
-              command("Reject", cli("reject", id, status.owner)),
-            ),
+            safeForShell(id)
+              ? el(
+                  "details",
+                  { "data-id": id, open: open.has(String(id)) },
+                  el("summary", {}, "Approve or reject it with near-cli"),
+                  now < expires ? command("Approve, from the owner's device", cli("approve", id, status.owner)) : null,
+                  command("Reject", cli("reject", id, status.owner)),
+                )
+              : null,
           );
         }),
       ...state.cleared
@@ -1117,6 +1134,14 @@
       sub(`The guardian can freeze the vault and cancel a change, and never take money. Changing either of these waits ${wait}.`),
       el("div", { class: "form-row" }, formField("guardian", "Guardian account, or empty for none", { start: status.guardian ?? "" })),
       el("div", { class: "actions" }, walletButton("Change the guardian", saveGuardian)),
+      status.guardian && atLeast(status, "0.2.1")
+        ? el(
+            "div",
+            {},
+            sub(`If the guardian blocks every change, leave it. That waits ${duration(2 * Number(status.delays.recovery_ms))}, the guardian cannot cancel it, and it unfreezes the vault.`),
+            el("div", { class: "actions" }, walletButton("Leave the guardian", () => proposeChange({ kind: "leave_guardian" }, "leave the guardian", []))),
+          )
+        : null,
       el(
         "div",
         { class: "form-row" },
@@ -1279,7 +1304,9 @@
   function waitingChanges(who) {
     if (state.pending.length === 0) return [];
     // A recovery is the guardian's to finish; the owner's answer to one is Cancel.
-    const canFinish = (kind) => (kind === "recover" ? who === "guardian" : who === "owner" && !FINISHED_ELSEWHERE.has(kind) && !state.status.frozen);
+    // Leaving the guardian is the owner's to finish, frozen or not, and the guardian cannot cancel it.
+    const canFinish = (kind) =>
+      kind === "recover" ? who === "guardian" : kind === "leave_guardian" ? who === "owner" : who === "owner" && !FINISHED_ELSEWHERE.has(kind) && !state.status.frozen;
     return [
       el(
         "div",
@@ -1298,7 +1325,7 @@
               ready && canFinish(kind)
                 ? walletButton("Finish", () => sign("execute", { id }, `finish change #${id}`, { deposit: "0", place: "changes" }), "primary")
                 : null,
-              walletButton("Cancel", () => sign("cancel", { id }, `cancel change #${id}`, { place: "changes" })),
+              kind === "leave_guardian" && who !== "owner" ? null : walletButton("Cancel", () => sign("cancel", { id }, `cancel change #${id}`, { place: "changes" })),
             ),
           );
         }),

@@ -43,7 +43,7 @@ fn as_anyone(ms: u64) {
 }
 
 fn new_registry() -> Ratings {
-    call(owner(), other_key(), 0, START_MS);
+    call(registry(), other_key(), 0, START_MS);
     Ratings::new(owner(), Some(publisher()), Some(false), None)
 }
 
@@ -224,6 +224,14 @@ fn editions_are_listed_in_order() {
 }
 
 #[test]
+#[should_panic(expected = "Only the registry's own account can set it up")]
+fn nobody_else_can_set_up_a_deployed_registry() {
+    // Deployed but not set up: someone else tries to make themselves its owner and publisher.
+    call(id("anyone.near"), other_key(), 0, START_MS);
+    Ratings::new(id("anyone.near"), Some(publisher()), Some(false), None);
+}
+
+#[test]
 fn locking_deletes_the_deploy_key_and_adds_the_publishing_key() {
     call(registry(), other_key(), 0, START_MS);
     Ratings::new(owner(), Some(publisher()), None, None);
@@ -253,11 +261,11 @@ fn the_owner_replaces_the_publishing_key() {
 
 #[test]
 fn a_registry_can_be_set_up_with_a_shorter_window_but_not_none() {
-    call(owner(), other_key(), 0, START_MS);
+    call(registry(), other_key(), 0, START_MS);
     let mut ratings = Ratings::new(owner(), Some(publisher()), Some(false), Some(HOUR_MS));
     publish(&mut ratings, "2026-11-02", START_MS);
     assert!(verify(&ratings, "2026-11-02", 0, START_MS + HOUR_MS).valid);
-    call(owner(), other_key(), 0, START_MS);
+    call(registry(), other_key(), 0, START_MS);
     let too_short = std::panic::catch_unwind(|| Ratings::new(owner(), None, Some(false), Some(60_000)));
     assert!(too_short.is_err());
 }

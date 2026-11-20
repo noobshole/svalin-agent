@@ -291,6 +291,44 @@ describe("svalin-mcp end to end", () => {
     expect(settled).toHaveLength(1);
   });
 
+  it("keeps the session budget when calls are paid at the same time", async () => {
+    const { apiFetch, settled } = harness();
+    const { client } = await connect(apiFetch, { ...nearWallet, SVALIN_BUDGET_USD: "0.03" });
+
+    const results = await Promise.all(Array.from({ length: 3 }, () => client.callTool({ name: "svalin_brief", arguments: { address: WALLET } })));
+    expect(results.filter((result) => !result.isError)).toHaveLength(1);
+    expect(results.filter((result) => result.isError && /session budget/.test(textOf(result)))).toHaveLength(2);
+    expect(settled).toHaveLength(1);
+  });
+
+  it("checks each payee once, and at most two payees for one request", async () => {
+    const { apiFetch } = harness();
+    const checks: string[] = [];
+    const counting = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("/check/")) checks.push(url);
+      return apiFetch(input, init);
+    }) as typeof fetch;
+    const option = (payTo: string) => ({ scheme: "exact", network: "near:mainnet", asset: NEAR_USDC, amount: "10000", payTo, maxTimeoutSeconds: 60, extra: {} });
+    const shop = (async () => {
+      const header = encodePaymentRequiredHeader({
+        x402Version: 2,
+        resource: { url: "https://shop.test/report" },
+        accepts: [...Array.from({ length: 5 }, () => option("good-shop.near")), option("shop-two.near"), option("shop-three.near"), option("shop-four.near")],
+      });
+      return new Response(null, { status: 402, headers: { "PAYMENT-REQUIRED": header } });
+    }) as typeof fetch;
+    const routed = ((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input instanceof Request ? input.url : input).startsWith("https://shop.test") ? shop(input, init) : counting(input, init)) as typeof fetch;
+    const { client } = await connect(routed, {});
+
+    const result = JSON.parse(textOf(await client.callTool({ name: "svalin_check_x402_payment", arguments: { url: "https://shop.test/report" } })));
+    expect(checks).toHaveLength(2);
+    const unchecked = result.options.filter((entry: { reasons: { code: string }[] }) => entry.reasons.some((reason) => reason.code === "payee-not-checked"));
+    expect(unchecked.map((entry: { payTo: string }) => entry.payTo)).toEqual(["shop-three.near", "shop-four.near"]);
+    expect(result.verdict).not.toBe("allow");
+  });
+
   it("checks an x402 payment before paying: remembers the payee, then blocks a changed one", async () => {
     const { apiFetch } = harness();
     let payTo = "good-shop.near";

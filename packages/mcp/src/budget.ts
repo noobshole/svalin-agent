@@ -42,6 +42,22 @@ export class SpendBudget {
     this.calls += 1;
   }
 
+  /**
+   * Checks and commits in one step, so payments made at the same time cannot all pass the cap
+   * before any of them counts. Returns a reason to refuse, or null once the amount is set aside.
+   */
+  reserve(amount: bigint): string | null {
+    const reason = this.check(amount);
+    if (reason === null) this.commit(amount);
+    return reason;
+  }
+
+  /** Gives back a reservation for a payment that was never made. */
+  release(amount: bigint) {
+    this.spent = this.spent >= amount ? this.spent - amount : 0n;
+    this.calls = Math.max(0, this.calls - 1);
+  }
+
   status() {
     return {
       paidCalls: this.calls,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { nearPaymentsReceived, nearUsdcReceived, solanaPaymentsByReference, usdcAtomic, usdcDecimal, usdcReceived } from "../src/payments/pro-payments.js";
 import nearPayment from "./fixtures/near-testnet-usdc-payment.json" with { type: "json" };
@@ -9,6 +9,14 @@ const SVALIN_SOLANA = "AzfdbWXPC3BiPJqaeHsGqzZw8NoxYSZkZMob1VNivGBo";
 const DEVNET_USDC = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 const TESTNET_USDC = "3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af";
 const DEVNET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
+const PAYER = "2Z174bRdxeQWow5bamH9UE8kdsmC4cbEwUYVVufq36ES";
+/** Any account whose USDC did not move, as an x402 facilitator's does not. */
+const FACILITATOR = "FacilitatorFeePayer111111111111111111111111";
+
+// The fixture keeps only the balances. A wallet paying for Pro pays its own fee; in x402 the
+// facilitator pays it.
+const paidBy = (feePayer: string) => ({ ...solanaPayment, transaction: { message: { accountKeys: [{ pubkey: feePayer, signer: true }] } } });
+const walletPayment = paidBy(PAYER);
 
 type Receipts = Parameters<typeof nearUsdcReceived>[0];
 
@@ -29,7 +37,7 @@ describe("Solana Pay payments", () => {
         expect(params[0]).toBe("ref111");
         return Response.json({ result: [{ signature: "good", err: null }, { signature: "failed", err: { InstructionError: [0, "Custom"] } }] });
       }
-      return Response.json({ result: solanaPayment });
+      return Response.json({ result: walletPayment });
     }) as typeof fetch;
 
     const found = await solanaPaymentsByReference({ rpcUrl: "https://rpc", network: DEVNET, reference: "ref111", payTo: SVALIN_SOLANA, mint: DEVNET_USDC, fetchImpl });
@@ -47,9 +55,9 @@ describe("Solana Pay payments", () => {
       const signature = params[0] as string;
       fetched.push(signature);
       if (signature === "late") return Response.json({ result: null });
-      if (signature === "partial") return Response.json({ result: { ...solanaPayment, meta: { ...solanaPayment.meta, postTokenBalances: undefined } } });
-      if (signature === "junk") return Response.json({ result: { ...solanaPayment, meta: { ...solanaPayment.meta, err: { InstructionError: [0, "Custom"] } } } });
-      return Response.json({ result: solanaPayment });
+      if (signature === "partial") return Response.json({ result: { ...walletPayment, meta: { ...solanaPayment.meta, postTokenBalances: undefined } } });
+      if (signature === "junk") return Response.json({ result: { ...walletPayment, meta: { ...solanaPayment.meta, err: { InstructionError: [0, "Custom"] } } } });
+      return Response.json({ result: walletPayment });
     }) as typeof fetch;
 
     const found = await solanaPaymentsByReference({
@@ -68,6 +76,23 @@ describe("Solana Pay payments", () => {
       ["junk", "0"],
       ["good", "4000"],
     ]);
+  });
+
+  it("never counts an x402 payment toward Pro: its fee was paid by the facilitator, not the buyer", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      const { method, params } = JSON.parse(String(init.body)) as { method: string; params: unknown[] };
+      if (method === "getSignaturesForAddress") {
+        return Response.json({ result: ["x402", "unlisted"].map((signature) => ({ signature, err: null })) });
+      }
+      return Response.json({ result: params[0] === "x402" ? paidBy(FACILITATOR) : solanaPayment });
+    }) as typeof fetch;
+
+    const found = await solanaPaymentsByReference({ rpcUrl: "https://rpc", network: DEVNET, reference: "ref", payTo: SVALIN_SOLANA, mint: DEVNET_USDC, fetchImpl });
+    // The x402 one is read and pays nothing toward Pro; one without its account list waits for the next lookup.
+    expect(found.map((payment) => [payment.tx, payment.atomic])).toEqual([["x402", "0"]]);
+    expect(logged.mock.calls.map(([line]) => String(line))).toEqual([expect.stringContaining("pro_payment_fee_paid_by_other")]);
+    logged.mockRestore();
   });
 
   it("reports an unreadable chain as a 502, so the buyer can retry", async () => {

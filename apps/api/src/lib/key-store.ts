@@ -22,7 +22,10 @@ export const NEAR_RESERVATIONS_PER_DAY = 1000;
 const NEAR_SUFFIXES = 9999;
 
 export type PassPayment = {
-  /** The transaction that paid: a Solana signature or NEAR hash, or "x402" for a key bought over x402. */
+  /**
+   * The transaction that paid: a Solana signature or NEAR hash (renewals over x402 record the
+   * settled one), or "x402-<random id>" for a new key bought over x402.
+   */
   tx: string;
   /** CAIP-2 network it was paid on. */
   network: string;
@@ -69,10 +72,19 @@ export interface KeyStore {
   status(id: string, now: number, rules: PassRules): Promise<KeyStatus | null>;
   /** Stores a new pass; false if the id is taken. */
   issue(id: string, record: PassRecord): Promise<boolean>;
-  /** Renews a pass of this plan with one more payment, and for Business its calls; false if there is none. */
+  /**
+   * Renews a pass of this plan with one more settled payment, and for Business its calls; false if
+   * there is no such pass, or the transaction already renewed another one. A transaction renews
+   * once: the same one again changes nothing and still answers true.
+   */
   extend(id: string, plan: KeyPlan, payment: PassPayment, calls?: number): Promise<boolean>;
   /** Adds payments to a Pro code; returns how many were new. A transaction counts for one code only. */
   claim(id: string, payments: PassPayment[]): Promise<number>;
+  /**
+   * Names the settled x402 transaction that bought the new pass `id`, so that transaction can never
+   * count for another pass or a Pro code too. False if another one already has it.
+   */
+  settled(id: string, network: string, tx: string): Promise<boolean>;
   /** Reserves an exact NEAR amount for a Pro code (the same one again while it lasts). */
   reserveNear(id: string, plan: ProPlan, network: string, priceAtomic: string, now: number): Promise<NearReservation | null>;
   /** The code's NEAR amounts still waiting for a payment. */
@@ -174,6 +186,9 @@ export class KeyStoreCore implements KeyStore {
   async extend(id: string, plan: KeyPlan, payment: PassPayment, calls?: number): Promise<boolean> {
     const record = await this.storage.get<PassRecord>(passKey(id));
     if (!record || record.plan !== plan) return false;
+    const owner = await this.storage.get<string>(claimKey(payment.network, payment.tx));
+    if (owner) return owner === id;
+    await this.storage.put(claimKey(payment.network, payment.tx), id);
     await this.storage.put(passKey(id), {
       ...record,
       payments: [...record.payments, payment],
@@ -197,6 +212,20 @@ export class KeyStoreCore implements KeyStore {
     }
     if (added > 0) await this.storage.put(passKey(id), record);
     return added;
+  }
+
+  async settled(id: string, network: string, tx: string): Promise<boolean> {
+    const owner = await this.storage.get<string>(claimKey(network, tx));
+    if (owner) return owner === id;
+    await this.storage.put(claimKey(network, tx), id);
+    const record = await this.storage.get<PassRecord>(passKey(id));
+    // The pass was stored before its payment settled, under a stand-in id: name the real one.
+    const placeholder = record?.payments.findIndex((payment) => payment.tx.startsWith("x402-")) ?? -1;
+    if (record && placeholder >= 0) {
+      const payments = record.payments.map((payment, index) => (index === placeholder ? { ...payment, tx, network } : payment));
+      await this.storage.put(passKey(id), { ...record, payments });
+    }
+    return true;
   }
 
   async reserveNear(id: string, plan: ProPlan, network: string, priceAtomic: string, now: number): Promise<NearReservation | null> {

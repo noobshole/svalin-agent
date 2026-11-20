@@ -26,6 +26,12 @@ class_name = "DemoLimiterObject"
 name = "KEY_STORE"
 class_name = "KeyStoreObject"
 
+# Usage counts: route and outcome per request, never addresses, IPs or keys (src/lib/usage.ts).
+# The dataset is made on the first write; reading it is in docs/DEPLOYMENT.md.
+[[analytics_engine_datasets]]
+binding = "USAGE"
+dataset = "svalin_usage"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DemoLimiterObject"]

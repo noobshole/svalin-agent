@@ -7,6 +7,7 @@ import { loadConfig } from "./env.js";
 import { createClientIpResolver } from "./lib/client-ip.js";
 import { DurableDemoLimiter, type DemoLimiterNamespace } from "./lib/durable-demo-limiter.js";
 import { DurableKeyStore } from "./lib/durable-key-store.js";
+import { AnalyticsUsage, type AnalyticsDataset } from "./lib/usage.js";
 import { startupSummary } from "./startup-log.js";
 
 export { DemoLimiterObject } from "./lib/durable-demo-limiter.js";
@@ -31,6 +32,8 @@ export default {
         console.error(JSON.stringify({ level: "error", msg: "demo_limiter_binding_missing" }));
       }
       const keyNamespace = env.KEY_STORE as DemoLimiterNamespace | undefined;
+      // Usage counts (counts only, see lib/usage.ts); without the binding nothing is counted.
+      const usageDataset = env.USAGE as AnalyticsDataset | undefined;
       if (!keyNamespace) {
         console.error(JSON.stringify({ level: "error", msg: "key_store_binding_missing" }));
       }
@@ -46,6 +49,7 @@ export default {
           : undefined,
         // Without the binding, every key route answers 503: keys kept in one isolate's memory would be lost.
         keyStore: new DurableKeyStore(keyNamespace),
+        usage: usageDataset ? new AnalyticsUsage(usageDataset) : undefined,
         paymentInitialization: "first-paid-request",
         paymentDiscovery: false,
       });
@@ -57,6 +61,7 @@ export default {
           runtime: "cloudflare-workers",
           demoLimiter: namespace ? "durable-object" : "memory",
           keyStore: keyNamespace ? "durable-object" : "memory",
+          usage: usageDataset ? "analytics-engine" : "off",
           ...startupSummary(config),
         }),
       );

@@ -58,7 +58,8 @@ export default function GuardDocsPage() {
         <li>
           <strong>The guardian</strong> is a second device, or someone the owner trusts. It can freeze the vault, cancel a waiting change and reject a
           held payment. It approves a large payment together with the owner, never alone. If the owner’s wallet is lost, it can start a recovery
-          to a new owner; that waits, and the owner can cancel it.
+          to a new owner; that waits, and the owner can cancel it. If the guardian turns against the owner, the owner can leave it; that waits twice
+          as long as a recovery, and the guardian cannot cancel it.
         </li>
         <li>
           <strong>Svalin</strong> has no key to any vault. It publishes the grades the vault checks.
@@ -174,6 +175,7 @@ export default function GuardDocsPage() {
         <li>Payments on Solana trust NEAR’s signing network.</li>
         <li>There is no sanctions screening yet.</li>
         <li>A stolen owner key can still take the money once the wait is over if no one is watching, so set a guardian.</li>
+        <li>A guardian who turns against the owner can keep the vault frozen until the owner leaves it, which takes twice the recovery wait.</li>
       </ul>
     </DocPage>
   );

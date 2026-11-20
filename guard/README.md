@@ -23,7 +23,7 @@ Everything here runs on NEAR testnet and Solana devnet, and every result links t
    `near contract call-function as-read-only svalin-ratings-v1.testnet verify file-args examples/proofs/2026-11-03-dai.json network-config testnet now`
    shows `"valid": true`. The forged proof beside it, `2026-11-03-alphaai-forged-as-A.json`, shows
    `"problem": "BAD_PROOF"`.
-4. **The tests.** `cargo test` runs 183 tests ([details](#try-it)).
+4. **The tests.** `cargo test` runs 201 tests ([details](#try-it)).
 
 ## Why
 
@@ -71,12 +71,14 @@ No model takes part in a decision.
 - **A new payee is checked in a TEE first.** For a payee it has never paid, the vault asks
   [OutLayer](https://outlayer.ai) to run Svalin's check program in Intel TDX hardware. The vault
   pins the program by its SHA-256. An account that does not exist is refused, one younger than a
-  day is held, and if the check cannot run the payment is held.
+  day is held, and if the check cannot run the payment is held. The check runs before a payment
+  is held for another reason too, so the owner sees what it found before approving.
 - **Sellers are held to their terms.** The first payment to a service locks its payee and price.
   After that, a higher price or another payee is held, and an expired quote is refused.
 - **A second charge is held.** The same item again within 15 minutes waits for the owner.
 - **Limits follow trust.** A payee paid before gets the per-payment limit, a new one a smaller
-  limit, and one daily limit covers NEAR and Solana together.
+  limit, and one daily limit covers NEAR and Solana together. An approved Solana payment counts
+  toward the day from the moment it is approved.
 - **It pays on Solana with no Solana key.** The vault's Solana address is derived from its NEAR
   account by [NEAR Chain Signatures](https://docs.near.org/chain-abstraction/chain-signatures). The
   vault writes the payment itself, NEAR's signing network signs it, and the agent hands the seller
@@ -88,7 +90,10 @@ No model takes part in a decision.
 - **A circuit breaker.** Three look-alikes or forged grades within an hour freeze the vault.
 - **The owner's key is protected too.** Making the vault safer is instant. Making it riskier
   (raising a limit, unfreezing, taking money out) waits and can be cancelled. A guardian can
-  freeze, cancel and reject, and a payment past the limits needs both owner and guardian.
+  freeze, cancel and reject, and a payment past the limits needs both owner and guardian. A
+  recovery cancels every change the old owner key had queued. If the guardian turns against the
+  owner, the owner can leave it: that waits twice the recovery wait, and the guardian cannot
+  cancel it, so a real guardian answering a stolen owner key with a recovery still comes first.
 - **No master key.** Setting the vault up deletes the key that deployed it.
 
 Every decision is a NEP-297 event with a fixed reason code, such as `PRICE_CHANGED` or
@@ -96,9 +101,9 @@ Every decision is a NEP-297 event with a fixed reason code, such as `PRICE_CHANG
 
 ## The exams, on noobshole-vault.testnet
 
-Run on 12 November 2026. The vault runs the code in this folder (version 0.2.0, code hash
+Run on 12 November 2026, on version 0.2.0 of the vault (code hash
 `2u1jejWMHwgMU2fX8GW3ut5CkirJU4jF5MwvRKyxve6F`). The owner made it from their own wallet on the
-vault page.
+vault page. This folder now holds 0.2.1 ([versions](#versions)).
 
 ### The scam exam
 
@@ -216,8 +221,8 @@ Needs Rust (stable) with the `wasm32-unknown-unknown` and `wasm32-wasip2` target
 cargo test
 ```
 
-You should see 183 tests pass: 8 (the check program), 2 (the testnet market), 144 (the vault), 5
-(the proof format), 21 (the registry) and 3 (the root tool). On Windows, set
+You should see 201 tests pass: 8 (the check program), 2 (the testnet market), 161 (the vault), 5
+(the proof format), 22 (the registry) and 3 (the root tool). On Windows, set
 `AWS_LC_SYS_PREBUILT_NASM=1` first.
 
 ### Give your agent a key
@@ -263,6 +268,17 @@ signs `request_payment`, `request_solana_payment` or `request_buy` as the vault'
 key, as [`agent.mjs`](examples/demo-agent/agent.mjs) does in plain Node. The vault never calls a
 model, and Svalin runs no one's agent.
 
+## Versions
+
+Build the vault with `cargo near build non-reproducible-wasm --no-abi` in `contracts/guard`. The
+code hash is the file's SHA-256 in base58. Built this way with Rust 1.96.0, 0.2.0 comes out byte
+for byte as released.
+
+| Version | Code hash | What changed |
+| --- | --- | --- |
+| 0.2.1 | `HcevYaP1gbeLcFB1z67pW3t9fLj1QD6xrxRgfecpGdnq` | An approved Solana payment counts toward the day's limit from its approval, and one that no longer fits the limits is held again unless the guardian approved it too. A recovery cancels the old owner key's queued changes and Solana approvals, and a change runs only while whoever proposed it still holds that role. A new NEAR payee is checked before a payment to it is held, too. The owner can leave a guardian who blocks everything (`leave_guardian`). |
+| 0.2.0 | `2u1jejWMHwgMU2fX8GW3ut5CkirJU4jF5MwvRKyxve6F` | The exam build. noobshole-vault.testnet runs it, and keeps its rules until it is replaced. |
+
 ## What it does not do
 
 - Testnet only, and no outside audit yet.
@@ -272,8 +288,9 @@ model, and Svalin runs no one's agent.
   attestation itself.
 - Solana payments trust NEAR's signing network, and a new Solana payee is not checked in a TEE.
 - A Solana payment counts toward the day's limit when it is signed, not when it lands.
-- A guardian who turns hostile can keep the vault frozen, or start a recovery to an account it
-  picks. The owner has to cancel that recovery within its wait.
+- A guardian who turns hostile can keep the vault frozen until the owner leaves it, which takes
+  twice the recovery wait (14 days by default; 0.2.0 vaults have no way to leave). It can also
+  start a recovery to an account it picks, and the owner has to cancel that within its wait.
 - A stolen owner key with no guardian can still take the money once the wait is over.
 - On testnet the market is a stand-in, since the graded tokens trade only on mainnet.
 

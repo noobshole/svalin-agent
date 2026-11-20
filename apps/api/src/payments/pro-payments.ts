@@ -34,13 +34,18 @@ type TokenBalance = { mint?: string; owner?: string; uiTokenAmount?: { amount?: 
 type SolanaTransaction = {
   blockTime?: number | null;
   meta?: { err?: unknown; preTokenBalances?: TokenBalance[]; postTokenBalances?: TokenBalance[] } | null;
+  /** jsonParsed lists each account as `{ pubkey }`; the first one pays the fee. */
+  transaction?: { message?: { accountKeys?: (string | { pubkey?: string })[] } } | null;
 };
 
 /**
  * Transactions made with a Solana Pay reference, each with what it paid. A payment counts by how
  * much USDC Svalin's own token accounts gained in it, read from the balances before and after, so
- * it does not matter how the wallet built the transfer. A transaction the RPC cannot return yet is
- * left out, to be read on the next lookup.
+ * it does not matter how the wallet built the transfer. It counts only when the account that paid
+ * the fee is the one whose USDC went down by at least that much: a wallet paying for Pro pays its
+ * own fee, while an x402 payment's fee is paid by the facilitator, so one transfer can never buy
+ * an x402 call or pass and Pro too. A transaction the RPC cannot return yet is left out, to be
+ * read on the next lookup.
  */
 export async function solanaPaymentsByReference(options: {
   rpcUrl: string;
@@ -66,10 +71,23 @@ export async function solanaPaymentsByReference(options: {
   return fresh.flatMap((signature, index) => {
     const transaction = transactions[index];
     // Read once means read in full: without its balances, a transaction waits for the next lookup.
-    if (!transaction?.meta || !transaction.blockTime || !Array.isArray(transaction.meta.postTokenBalances)) return [];
+    const feePayer = feePayerOf(transaction);
+    if (!transaction?.meta || !transaction.blockTime || !Array.isArray(transaction.meta.postTokenBalances) || !feePayer) return [];
     const received = transaction.meta.err === null ? usdcReceived(transaction.meta, options.payTo, options.mint) : 0n;
-    return [{ tx: signature, network: options.network, atomic: (received > 0n ? received : 0n).toString(), at: transaction.blockTime * 1000 }];
+    const paidByFeePayer = received > 0n && -usdcReceived(transaction.meta, feePayer, options.mint) >= received;
+    if (received > 0n && !paidByFeePayer) {
+      // Logged with its transaction, so a wallet that has someone else pay its fees can be credited by hand.
+      console.error(JSON.stringify({ level: "error", msg: "pro_payment_fee_paid_by_other", network: options.network, transaction: signature }));
+    }
+    return [{ tx: signature, network: options.network, atomic: (paidByFeePayer ? received : 0n).toString(), at: transaction.blockTime * 1000 }];
   });
+}
+
+/** The account that paid a transaction's fee: the first in its list. */
+function feePayerOf(transaction: SolanaTransaction | null | undefined): string | null {
+  const first = transaction?.transaction?.message?.accountKeys?.[0];
+  const key = typeof first === "string" ? first : first?.pubkey;
+  return typeof key === "string" && key.length > 0 ? key : null;
 }
 
 /** USDC that token accounts owned by `owner` gained in one transaction. */

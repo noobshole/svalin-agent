@@ -1,7 +1,7 @@
 [package]
 name = "svalin-guard"
 description = "A vault for an AI agent's money: the agent can only ask to pay, Svalin's look-alike checks run inside the contract, and the owner's key is protected by two-speed rules."
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/noobshole/svalin-guard"
