@@ -56,7 +56,7 @@ export default function GuardPage() {
             </Link>
           </div>
         </div>
-        <div className="w-full max-w-[min(100%,58vh)] lg:col-span-2 lg:justify-self-end">
+        <div className="w-full max-w-[min(100%,58vh)] lg:col-span-2 lg:justify-self-center">
           <Seal address={VAULT} tone="blue">
             <span className="grid gap-1">
               <span className="text-[9cqw] leading-none">Held</span>

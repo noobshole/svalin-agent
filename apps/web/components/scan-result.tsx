@@ -74,7 +74,7 @@ export function ScanResult() {
   return (
     <main className="page main">
       <div className="grid4 items-start">
-        <div className="contents lg:sticky lg:top-8 lg:col-span-2 lg:grid lg:content-start lg:gap-8">
+        <div className="contents lg:sticky lg:top-8 lg:col-span-2 lg:grid lg:content-start lg:justify-items-center lg:gap-8">
           <div className={cn("order-1 lg:order-none", SEAL_WIDTH)}>
             <Seal address={address} tone={verdict?.tone ?? "soft"}>
               {verdict ? (
@@ -188,7 +188,7 @@ function ScanIntro() {
           <ProReminder />
           <ScanForm onValue={setTyped} showExamples />
         </div>
-        <div className={cn("lg:col-span-2 lg:justify-self-end", SEAL_WIDTH)}>
+        <div className={cn("lg:col-span-2 lg:justify-self-center", SEAL_WIDTH)}>
           <Seal address={shown} tone="blue">
             <span className="text-[3.6cqw] leading-tight [overflow-wrap:anywhere]">{shortAddress(shown)}</span>
           </Seal>

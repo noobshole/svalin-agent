@@ -80,7 +80,7 @@ export function TokenIndex({ intro, story }: { intro: ReactNode; story: ReactNod
             <p className="text-sm text-mutedForeground">{failed ? "The index could not be loaded. Refresh to try again." : "Loading the latest edition…"}</p>
           )}
         </div>
-        <div className="w-full max-w-[min(100%,58vh)] lg:col-span-2 lg:justify-self-end">
+        <div className="w-full max-w-[min(100%,58vh)] lg:col-span-2 lg:justify-self-center">
           <IndexDisc counts={index ? indexCounts(index.counts) : INDEX_COUNTS_FALLBACK} />
         </div>
       </section>

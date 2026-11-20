@@ -95,6 +95,7 @@ export function SealStage({ children }: { children: ReactNode }) {
     let pixelRatio = 1;
     let R = 0;
     let startY = 0;
+    let sideX = 0;
     let anchors: number[] = [];
     let images: HTMLCanvasElement[] = [];
     let typed = FIRST_ADDRESS;
@@ -179,7 +180,6 @@ export function SealStage({ children }: { children: ReactNode }) {
         }
       }
       const w = smooth(0.3, 0.72, t);
-      const sideX = width * 0.7;
       const sideY = height * 0.5;
       const moved = segment === 0 ? smooth(0, 0.6, t) : 1;
       const x = mix(width * 0.5, sideX, moved);
@@ -219,6 +219,16 @@ export function SealStage({ children }: { children: ReactNode }) {
           return box.top + window.scrollY + box.height / 2;
         }),
       ];
+      // Centred in the space right of the words, between their column and the page's inner edge.
+      // Until the words column stops growing this is 70% across.
+      const words = blocks[0];
+      const page = words?.closest<HTMLElement>(".page");
+      if (words && page) {
+        const edge = page.getBoundingClientRect().right - parseFloat(getComputedStyle(page).paddingRight);
+        sideX = (words.getBoundingClientRect().right + edge) / 2;
+      } else {
+        sideX = width * 0.7;
+      }
     }
 
     function layout(force: boolean) {
