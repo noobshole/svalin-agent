@@ -5,7 +5,7 @@ import { DocPage, Status } from "@/components/doc-page";
 
 export const metadata: Metadata = {
   title: "What is Svalin? — Svalin docs",
-  description: "Svalin is an independent, read-only rating service for agent money on NEAR and Solana: what it does, how it works, and how to use it.",
+  description: "What Svalin checks, how it works, and how to use it on the website, over HTTP or inside an AI agent.",
 };
 
 export default function DocsPage() {
@@ -20,15 +20,15 @@ export default function DocsPage() {
         ["chains", "Chains and data"],
         ["next", "Where to go next"],
       ]}
-      lede="Svalin is an independent, read-only rating service for agent money on NEAR and Solana. It tells AI agents, and the people behind them, what is real before they spend."
+      lede="Svalin rates wallets, tokens and payments on NEAR and Solana. These pages explain what it checks and how to use it on the website, over HTTP or inside an AI agent."
       path="/docs"
       title="What is Svalin?"
     >
       <h2 id="why">Why it exists</h2>
       <p>
-        AI agents now hold and spend money, and they can be talked into bad decisions. The data they read can be wrong too: anyone can create a token, put a
+        AI agents now hold and spend money, and they can be talked into bad decisions. The data they read can be wrong too. Anyone can create a token, put a
         price on it and send it to a wallet, and a look-alike address can be planted in a wallet’s history so the next payment goes to a thief. Svalin checks
-        these things before the money moves.
+        for these things before the money moves.
       </p>
 
       <h2 id="products">What Svalin does</h2>
@@ -43,14 +43,14 @@ export default function DocsPage() {
           <tbody>
             <tr>
               <td>
-                <Link href="/docs/wallet-scan">Wallet Scan</Link>
+                <Link href="/docs/wallet-scan">Risk report</Link>
                 <Status kind="live" />
               </td>
               <td>How risky is this wallet’s mix of holdings?</td>
             </tr>
             <tr>
               <td>
-                <Link href="/docs/check">Check Before Paying</Link>
+                <Link href="/docs/check">Payee check</Link>
                 <Status kind="live" />
               </td>
               <td>What is known about this address before you pay it?</td>
@@ -75,44 +75,35 @@ export default function DocsPage() {
 
       <h2 id="how">How it works</h2>
       <p>
-        You send an address: a Solana wallet or a NEAR account. Svalin reads the chain, meaning the balances, the prices and, on NEAR, how much real money
-        stands behind each token, without ever asking for a key, a signature or a wallet connection. You get a grade from A to F, what is wrong in plain
-        words, and a next step.
+        You send a Solana address or a NEAR account. Svalin reads its balances and prices from the chain, and on NEAR it also checks how much real money
+        stands behind each token. It never asks for a key, a signature or a wallet connection. You get allow, caution or block for paying the address, a
+        grade from A to F for the money it holds, and each problem in plain words.
       </p>
       <p>An AI agent does the same over plain HTTP or through the MCP server, and gets JSON back.</p>
 
       <h2 id="promises">What you can count on</h2>
       <ul>
-        <li>
-          <strong>Read-only.</strong> The rating service has no code path that signs for, approves or moves the funds of a wallet it analyses.
-        </li>
-        <li>
-          <strong>Deterministic.</strong> The same inputs always give the same output. No language model computes a number.
-        </li>
-        <li>
-          <strong>Verifiable.</strong> Index editions archive their inputs and fingerprints, so anyone can recompute every grade.
-        </li>
-        <li>
-          <strong>Never charged for errors.</strong> Bad input is rejected before payment, and failed calls are never settled.
-        </li>
+        <li>Svalin has no code that signs for, approves or moves the funds of a wallet it checks.</li>
+        <li>The same inputs always give the same output. No language model computes a number.</li>
+        <li>Index editions keep their inputs and fingerprints, so anyone can recompute every grade.</li>
+        <li>You are never charged for an error. Bad input is refused before payment, and a call that fails is never settled.</li>
       </ul>
 
       <h2 id="ways">Ways to use it</h2>
       <ul>
         <li>
-          <strong>On the website.</strong> <Link href="/scan">Scan</Link>, <Link href="/check">Check</Link> and the <Link href="/ratings">Index</Link>: 10 free
-          checks a day, with no account and no wallet to connect.
+          On the website, you can <Link href="/scan">scan</Link> 10 addresses a day for free and browse the <Link href="/ratings">Index</Link>, with no account
+          and nothing to connect. A scan tells you whether an address is safe to pay and how risky the money it holds is.
         </li>
         <li>
-          <strong>Over HTTP.</strong> Plain JSON <Link href="/docs/routes">routes</Link>, <Link href="/docs/paying">paid per call</Link> in USDC over x402, with
+          Over HTTP, the <Link href="/docs/routes">routes</Link> return plain JSON and are <Link href="/docs/paying">paid per call</Link> in USDC over x402, with
           no account.
         </li>
         <li>
-          <strong>In an AI agent.</strong> The <Link href="/docs/mcp">MCP server</Link> gives Claude, Cursor or any MCP client the same checks as tools, with
-          spend limits.
+          In an AI agent, the <Link href="/docs/mcp">MCP server</Link> gives Claude, Cursor or any MCP client the same checks as tools, with spend limits.
         </li>
         <li>
-          <strong>With a pass.</strong> <Link href="/docs/plans">Svalin Pro or Business</Link>, for steady use.
+          For steady use there are two passes, <Link href="/docs/plans">Svalin Pro and Business</Link>.
         </li>
       </ul>
 

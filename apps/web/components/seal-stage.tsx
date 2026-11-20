@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import { normaliseAddress } from "@/components/scan-form";
+import { normaliseAddress, scanHref } from "@/components/scan-form";
 import { IndexDisc, Seal } from "@/components/seal";
 import { API_BASE_URL } from "@/lib/api";
 import { INDEX_COUNTS_FALLBACK, indexCounts, offscreen, paintDots, paintSeal, type IndexCounts } from "@/lib/seal";
@@ -21,7 +21,7 @@ export function IndexDots() {
   return <IndexDisc counts={useContext(CountsContext)} onBand />;
 }
 
-/** The first seal on phones: type in its centre and it redraws. Enter checks the address. */
+/** The first seal on phones: type in its centre and it redraws. Enter scans the address. */
 export function HeroSeal() {
   const router = useRouter();
   const [address, setAddress] = useState(FIRST_ADDRESS);
@@ -29,14 +29,14 @@ export function HeroSeal() {
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     const valid = normaliseAddress(address);
-    if (valid) router.push(`/check?address=${encodeURIComponent(valid)}`);
+    if (valid) router.push(scanHref(valid));
   }
 
   return (
     <Seal address={address.trim() || "svalin"}>
       <form className="grid w-full gap-0.5" onSubmit={onSubmit}>
         <input
-          aria-label="Type an address to draw its seal. Press Enter to check it."
+          aria-label="Type an address to draw its seal. Press Enter to scan it."
           autoCapitalize="off"
           autoComplete="off"
           className="seal-stage__input"
@@ -345,7 +345,7 @@ export function SealStage({ children }: { children: ReactNode }) {
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     const address = normaliseAddress(input.current?.value ?? "");
-    if (address) router.push(`/check?address=${encodeURIComponent(address)}`);
+    if (address) router.push(scanHref(address));
   }
 
   return (
@@ -354,7 +354,7 @@ export function SealStage({ children }: { children: ReactNode }) {
       <div className="seal-stage__mid" ref={middle}>
         <form onSubmit={onSubmit} ref={paneInput}>
           <input
-            aria-label="Type an address to draw its seal. Press Enter to check it."
+            aria-label="Type an address to draw its seal. Press Enter to scan it."
             autoCapitalize="off"
             autoComplete="off"
             className="seal-stage__input"

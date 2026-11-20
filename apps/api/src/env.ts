@@ -64,6 +64,8 @@ const envSchema = z.object({
   PRICE_RISK_USD: usdPrice.default("$0.002"),
   PRICE_BRIEF_USD: usdPrice.default("$0.02"),
   PRICE_CHECK_USD: usdPrice.default("$0.002"),
+  // The check and the risk report together: their two prices for agents paying per call, one call with a pass.
+  PRICE_SCAN_USD: usdPrice.default("$0.004"),
   PRICE_EXIT_USD: usdPrice.default("$0.002"),
   PRICE_PROOF_USD: usdPrice.default("$0.002"),
 
@@ -182,6 +184,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
         risk: env.PRICE_RISK_USD,
         brief: env.PRICE_BRIEF_USD,
         check: env.PRICE_CHECK_USD,
+        scan: env.PRICE_SCAN_USD,
         exit: env.PRICE_EXIT_USD,
         proof: env.PRICE_PROOF_USD,
       },

@@ -30,7 +30,7 @@ const STATUSES: { status: string; codes: string[]; meaning: ReactNode }[] = [
   { status: "404", codes: ["not_found", "unknown_plan", "trusted_token", "near_not_accepted"], meaning: "There is no such route or pass, or the token is one Svalin values others against, so it has no grade." },
   { status: "409", codes: ["other_plan"], meaning: "This key is on another plan. Renew it on its own plan." },
   { status: "422", codes: ["token_address"], meaning: "This is a token, not a wallet. For a NEAR token, the answer carries its grade." },
-  { status: "429", codes: ["demo_limit_reached", "pro_daily_limit", "key_used_up", "too_many_requests", "too_many_refused_keys"], meaning: "A limit was reached. Daily calls come back at 00:00 UTC; Retry-After says when to try a free route again." },
+  { status: "429", codes: ["demo_limit_reached", "pro_daily_limit", "key_used_up", "too_many_requests", "too_many_refused_keys"], meaning: "A limit was reached. Daily calls come back at 00:00 UTC. Retry-After says when to try a free route again." },
   { status: "500", codes: ["internal_error"], meaning: "Something failed on Svalin’s side." },
   { status: "501", codes: ["chain_not_supported"], meaning: "This instance does not cover that chain." },
   { status: "502", codes: ["upstream_unavailable", "upstream_error"], meaning: "A data provider did not answer. Try again in a minute." },

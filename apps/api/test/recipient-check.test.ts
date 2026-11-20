@@ -31,7 +31,7 @@ describe("recipient check rules", () => {
     const check = assessRecipient(base, 50, NOW);
     expect(check.verdict).toBe("allow");
     expect(codes(check)).toEqual(["established"]);
-    expect(check.reasons[0].message).toBe("An established address: 300 days old, 250 transactions.");
+    expect(check.reasons[0].message).toBe("Nothing unusual. It is 300 days old and has 250 transactions.");
   });
 
   it("blocks an address that imitates one the payer paid, the address-poisoning pattern", () => {

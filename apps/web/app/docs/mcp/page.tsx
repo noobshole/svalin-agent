@@ -25,7 +25,7 @@ export default function McpPage() {
     >
       <h2 id="setup">Setting it up</h2>
       <p>
-        It pays per call from a wallet you control, with a hard per-call limit and a session budget. It is not on npm yet: run it from the repository,
+        It pays per call from a wallet you control, with a hard per-call limit and a session budget. It is not on npm yet, so run it from the repository,
         following the <a href="https://github.com/noobshole/svalin-agent/tree/main/packages/mcp">setup guide</a>.
       </p>
 

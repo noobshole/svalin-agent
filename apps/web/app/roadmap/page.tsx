@@ -20,26 +20,25 @@ const phases: Phase[] = [
     when: "Today",
     status: "live",
     items: [
-      { title: "Wallet risk reports", body: "A score, a grade and plain findings for any Solana wallet or NEAR account." },
       {
-        title: "Check Before Paying",
-        body: "Allow, caution or block for a payee, including addresses and NEAR names made to look like ones you paid.",
+        title: "Scan",
+        body: "One scan says whether a Solana address or NEAR account is safe to pay and grades the money it holds from A to F. With Pro it also catches look-alikes of addresses you paid.",
       },
       {
         title: "Svalin Index",
         body: "Every NEAR token graded by the real money behind its price, in editions anyone can verify, with a public track record.",
       },
       { title: "Exit prices", body: "What selling any NEAR token, or everything in a NEAR wallet, would actually fetch now." },
-      { title: "Pay per call and MCP", body: "USDC over x402, and an MCP server with spend caps. Each chain moves to real USDC on its own." },
+      { title: "Pay per call and MCP", body: "Pay per call in USDC over x402, or use the MCP server with spend caps. Each chain moves to real USDC on its own." },
       {
         title: "Payment guard",
-        body: "Before an agent pays any x402 service: blocks a changed payee or price, and warns before paying the same request twice.",
+        body: "Before an agent pays any x402 service, it blocks a changed payee or price and warns before the same request is paid twice.",
       },
-      { title: "Famous-name check", body: "Check Before Paying catches look-alikes of well-known NEAR accounts, even on a first payment." },
+      { title: "Famous-name check", body: "A scan catches look-alikes of well-known NEAR accounts, even on a first payment." },
       { title: "Hidden-instruction alarm", body: "Token names written to give an AI agent orders are hidden and flagged, never passed on." },
       {
         title: "Svalin Pro and Business",
-        body: "One pass for people and agents: Pro by QR code, an exact amount on NEAR or over x402, and Business for heavy agent use. On test USDC until each chain takes real USDC.",
+        body: "Pro is one pass for people and agents, paid by QR code, by an exact amount on NEAR or over x402. Business is for heavy agent use. Both use test USDC until each chain takes real USDC.",
       },
     ],
   },
@@ -49,7 +48,7 @@ const phases: Phase[] = [
     status: "planned",
     items: [
       { title: "Early warnings", body: "The Index flags tokens whose real money is leaving their pools, before the price moves." },
-      { title: "Who can move this money", body: "Wallet reports show the keys that could move its funds, and warn when a new one appears." },
+      { title: "Who can move this money", body: "Reports show which keys could move a wallet’s funds, and warn when a new one appears." },
       { title: "Stress test", body: "What a wallet would still fetch if prices fell and pools thinned." },
       {
         title: "Real USDC",
@@ -91,8 +90,8 @@ export default function RoadmapPage() {
     <DocPage
       contents={phases.map((phase) => [phase.name.toLowerCase(), phase.name])}
       path="/roadmap"
-      lede="Svalin starts with ratings an agent can read, then puts them on-chain where contracts can enforce them, then brings the same method to more chains."
-      title="What is live, and what comes next"
+      lede="Today Svalin rates addresses and tokens for agents to read. Next the grades go on-chain, where contracts can enforce them, and after that to more chains."
+      title="Roadmap"
     >
       {phases.map((phase) => (
         <section key={phase.name}>
@@ -110,8 +109,8 @@ export default function RoadmapPage() {
         </section>
       ))}
       <p className="mt-10">
-        Dates are targets, not promises, and the order can change as we learn from the people using Svalin. Svalin stays read-only throughout: the
-        Guard belongs to its owner, and Svalin never holds a key to anyone’s funds.
+        Dates are targets, and the order can change as we learn from the people using Svalin. Svalin stays read-only the whole way. Each Guard vault
+        belongs to its owner, and Svalin never holds a key to anyone’s funds.
       </p>
     </DocPage>
   );

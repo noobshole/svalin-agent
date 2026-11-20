@@ -18,7 +18,7 @@ export default function NotFound() {
             </Link>
             , or{" "}
             <Link className="link" href="/scan">
-              scan a wallet
+              scan an address
             </Link>
             .
           </p>

@@ -1,7 +1,6 @@
 import {
+  addressScanSchema,
   apiErrorSchema,
-  recipientCheckSchema,
-  riskReportSchema,
   serviceInfoSchema,
   type RecipientCheck,
   type RiskReport,
@@ -31,7 +30,7 @@ function headerCount(response: Response, name: "X-Free-Remaining" | "X-Calls-Lef
   return value !== null && /^\d+$/.test(value) ? Number(value) : null;
 }
 
-/** What a scan or check used: one of today's free calls, or one of the Pro code's. */
+/** What a scan used: one of today's free calls, or the Pro code's calls. */
 export type Usage = { freeLeft: number | null; proLeft: number | null };
 
 const usageOf = (response: Response): Usage => ({
@@ -44,78 +43,63 @@ function visitorMessage(code: string, message: string) {
   return code.startsWith("upstream_") ? "This address could not be read right now. Try again in a minute." : message;
 }
 
-export type DemoResult =
-  | ({ ok: true; report: RiskReport } & Usage)
-  | ({ ok: false; status: number; message: string; hint?: string; token?: TokenNotice } & Partial<Usage>);
+/** Why an address has no risk report (a token, a program, an empty wallet), in words for a visitor. */
+export type ReportProblem = { status: number; message: string; hint?: string; token?: TokenNotice };
 
-/**
- * Runs in the browser, so the API applies the free limit to the visitor's own address. With a
- * running Pro code it asks the full route instead: every next step, and no daily limit of 10.
- */
-export async function getDemoRisk(address: string, signal?: AbortSignal): Promise<DemoResult> {
-  const path = encodeURIComponent(address);
-  try {
-    const response = await viaPro(`/v1/risk/${path}`, `/v1/demo/risk/${path}`, signal);
-    const body = await response.json();
-    if (response.ok) return { ok: true, report: riskReportSchema.parse(body), ...usageOf(response) };
-    const error = apiErrorSchema.safeParse(body);
-    return {
-      ok: false,
-      status: response.status,
-      message: error.success ? visitorMessage(error.data.code, error.data.error) : `API returned ${response.status}.`,
-      hint: error.success ? error.data.hint : undefined,
-      token: error.success ? error.data.token : undefined,
-      ...usageOf(response),
-    };
-  } catch (error) {
-    if (signal?.aborted) throw error;
-    return { ok: false, status: 503, message: "The Svalin API is unreachable right now. Try again in a minute." };
-  }
-}
-
-export type CheckResult =
-  | ({ ok: true; check: RecipientCheck } & Usage)
+export type ScanResult =
+  | ({ ok: true; check: RecipientCheck; report: RiskReport | null; reportProblem: ReportProblem | null } & Usage)
   | ({ ok: false; status: number; message: string; hint?: string } & Partial<Usage>);
 
+function problemOf(status: number, body: unknown): ReportProblem {
+  const error = apiErrorSchema.safeParse(body);
+  if (!error.success) return { status, message: `API returned ${status}.` };
+  return { status, message: visitorMessage(error.data.code, error.data.error), hint: error.data.hint, token: error.data.token };
+}
+
+function refusal(response: Response, body: unknown): ScanResult {
+  const { message, hint } = problemOf(response.status, body);
+  return { ok: false, status: response.status, message, hint, ...usageOf(response) };
+}
+
+/** A scan's answer: the check, and the report or the reason there is none. */
+function scanAnswer(response: Response, body: unknown): ScanResult {
+  if (!response.ok) return refusal(response, body);
+  const scan = addressScanSchema.parse(body);
+  return {
+    ok: true,
+    check: scan.check,
+    report: scan.report,
+    reportProblem: scan.reportError ? problemOf(scan.reportError.status, scan.reportError) : null,
+    ...usageOf(response),
+  };
+}
+
 /**
- * The recipient check, from the browser so the free limit applies to the visitor. With Pro and
- * the visitor's own wallet, it also compares the address with that wallet's recent payments.
+ * One scan, from the browser so the free limit applies to the visitor: is it safe to pay this
+ * address, and how risky is the money it holds. Free, it uses one of today's free calls. With a
+ * running Pro code it uses one of the code's calls instead: every next step, and with the
+ * visitor's own wallet the check also compares the address with that wallet's recent payments.
  */
-export async function getDemoCheck(address: string, signal?: AbortSignal, payer?: string): Promise<CheckResult> {
+export async function getScan(address: string, signal?: AbortSignal, payer?: string): Promise<ScanResult> {
   const path = encodeURIComponent(address);
-  const query = payer ? `?payer=${encodeURIComponent(payer)}` : "";
   try {
-    const response = await viaPro(`/v1/check/${path}${query}`, `/v1/demo/check/${path}`, signal);
-    const body = await response.json();
-    if (response.ok) return { ok: true, check: recipientCheckSchema.parse(body), ...usageOf(response) };
-    const error = apiErrorSchema.safeParse(body);
-    return {
-      ok: false,
-      status: response.status,
-      message: error.success ? visitorMessage(error.data.code, error.data.error) : `API returned ${response.status}.`,
-      hint: error.success ? error.data.hint : undefined,
-      ...usageOf(response),
-    };
+    const code = activeProCode();
+    if (code) {
+      const query = payer ? `?payer=${encodeURIComponent(payer)}` : "";
+      const response = await fetch(`${API_BASE_URL}/v1/scan/${path}${query}`, { signal, headers: { Authorization: `Bearer ${code}` } });
+      // A code that has ended (401) is marked so, and one that has made today's calls (429) leaves
+      // the free scan to answer.
+      if (response.status === 401) {
+        const status = storedProStatus();
+        storeProStatus(status ? { ...status, active: false } : null);
+      } else if (response.status !== 429) {
+        return scanAnswer(response, await response.json());
+      }
+    }
+    const response = await fetch(`${API_BASE_URL}/v1/demo/scan/${path}`, { signal });
+    return scanAnswer(response, await response.json());
   } catch (error) {
     if (signal?.aborted) throw error;
     return { ok: false, status: 503, message: "The Svalin API is unreachable right now. Try again in a minute." };
   }
-}
-
-/**
- * The paid route with this browser's Pro code, or else the free route. A code that has ended
- * (401) is marked so, and one that has made today's calls (429) falls back to the free route.
- */
-async function viaPro(paidPath: string, freePath: string, signal?: AbortSignal): Promise<Response> {
-  const code = activeProCode();
-  if (code) {
-    const response = await fetch(`${API_BASE_URL}${paidPath}`, { signal, headers: { Authorization: `Bearer ${code}` } });
-    if (response.status === 401) {
-      const status = storedProStatus();
-      storeProStatus(status ? { ...status, active: false } : null);
-    } else if (response.status !== 429) {
-      return response;
-    }
-  }
-  return fetch(`${API_BASE_URL}${freePath}`, { signal });
 }

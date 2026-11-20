@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 
 const paidRoutes = [
   { path: "/v1/check/{address}", fallback: "$0.002", returns: "Allow, caution or block before paying, including look-alike addresses" },
+  { path: "/v1/scan/{address}", fallback: "$0.004", returns: "The check and the risk report together. With a pass it counts as one call" },
   { path: "/v1/portfolio/{address}", fallback: "$0.002", returns: "Priced holdings with a risk category per token" },
   { path: "/v1/risk/{address}", fallback: "$0.002", returns: "Risk score, grade, exposure metrics and findings" },
   { path: "/v1/brief/{address}", fallback: "$0.02", returns: "A short written brief with up to three actions, plus the report" },
@@ -47,13 +48,19 @@ export default async function RoutesPage() {
               <td>
                 <code>GET /v1/demo/risk/{"{address}"}</code>
               </td>
-              <td>A full risk report; 10 free calls a day per visitor, shared by the free routes</td>
+              <td>A full risk report. Each visitor gets 10 free calls a day, shared by all the free routes</td>
             </tr>
             <tr>
               <td>
                 <code>GET /v1/demo/check/{"{address}"}</code>
               </td>
-              <td>The recipient check, without the payer’s history; shares the same limit</td>
+              <td>The payee check, without the payer’s history. Uses the same free calls</td>
+            </tr>
+            <tr>
+              <td>
+                <code>GET /v1/demo/scan/{"{address}"}</code>
+              </td>
+              <td>The payee check and the risk report together, for one free call. This is what the website’s scan shows</td>
             </tr>
             <tr>
               <td>
@@ -67,7 +74,7 @@ export default async function RoutesPage() {
               <td>
                 <code>GET /v1/demo/exit/{"{address}"}</code>
               </td>
-              <td>A NEAR token’s exit prices at $1K, $10K and $100K; shares the same limit</td>
+              <td>A NEAR token’s exit prices at $1K, $10K and $100K. Uses the same free calls</td>
             </tr>
           </tbody>
         </table>
@@ -97,7 +104,7 @@ export default async function RoutesPage() {
         </table>
       </div>
       <p>
-        The check takes two optional query parameters: <code>payer</code>, the wallet about to pay, which turns on the look-alike and first-payment
+        The check and the scan take two optional query parameters: <code>payer</code>, the wallet about to pay, which turns on the look-alike and first-payment
         checks, and <code>amountUsd</code>.
       </p>
 
@@ -108,7 +115,7 @@ export default async function RoutesPage() {
         </li>
         <li>
           <a href="https://github.com/noobshole/svalin-agent">Source code</a> on GitHub. Its README is for developers who want to read the code or run their own
-          copy; these pages are for using the hosted API.
+          copy. These pages are for using the hosted API.
         </li>
       </ul>
     </DocPage>

@@ -24,7 +24,7 @@ export default function IndexDocsPage() {
       title="Svalin Index"
     >
       <h2 id="grades">What a grade means</h2>
-      <p>A grade answers one question: how much of a $1,000 sale would be lost to price movement?</p>
+      <p>A grade says how much a $1,000 sale would lose to price movement.</p>
       <div className="table-wrap">
         <table className="keep">
           <thead>
@@ -70,7 +70,7 @@ export default function IndexDocsPage() {
       <p>
         The Index is rebuilt every few hours by a public workflow. Each edition keeps the exact data it was computed from and a fingerprint of it, and once a day
         an edition is sealed and never rewritten, so anyone can check that a grade was not changed after the fact. Each edition also records how earlier grades
-        moved since, building a public track record. <a href="https://github.com/noobshole/svalin-index">Every edition is on GitHub.</a>
+        have moved since, so there is a public track record. <a href="https://github.com/noobshole/svalin-index">Every edition is on GitHub.</a>
       </p>
 
       <h2 id="proofs">Proofs on NEAR</h2>

@@ -27,7 +27,8 @@ name = "KEY_STORE"
 class_name = "KeyStoreObject"
 
 # Usage counts: route and outcome per request, never addresses, IPs or keys (src/lib/usage.ts).
-# The dataset is made on the first write; reading it is in docs/DEPLOYMENT.md.
+# Analytics Engine must be on for the account (a deploy fails with error 10089 until it is); the
+# dataset is made on the first write. Turning it on and reading it are in docs/DEPLOYMENT.md.
 [[analytics_engine_datasets]]
 binding = "USAGE"
 dataset = "svalin_usage"

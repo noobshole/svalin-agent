@@ -21,7 +21,9 @@ function Disc({ paint, paintKey, className, children }: { paint: Paint; paintKey
     if (!element || !g) return;
     const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let frame = 0;
+    let fallback = 0;
     let lastSize = 0;
+    let seen = false;
 
     const render = (animate: boolean) => {
       const size = element.clientWidth;
@@ -33,10 +35,19 @@ function Disc({ paint, paintKey, className, children }: { paint: Paint; paintKey
       element.width = element.height = next.width;
       shown.current = next;
       cancelAnimationFrame(frame);
-      if (!animate || calm) {
+      clearTimeout(fallback);
+      if (!animate || calm || document.hidden) {
         g.drawImage(next, 0, 0);
         return;
       }
+      // Keep the old drawing up until the first frame, and if frames stop coming (a background tab,
+      // a busy phone), show the finished drawing instead of leaving the seal half drawn or empty.
+      if (from && from.width === next.width) g.drawImage(from, 0, 0);
+      fallback = window.setTimeout(() => {
+        cancelAnimationFrame(frame);
+        g.clearRect(0, 0, next.width, next.width);
+        g.drawImage(next, 0, 0);
+      }, 1000);
       const start = performance.now();
       const step = (now: number) => {
         const progress = Math.max(0, Math.min(1, (now - start) / 620));
@@ -60,19 +71,24 @@ function Disc({ paint, paintKey, className, children }: { paint: Paint; paintKey
         g.drawImage(next, 0, 0);
         g.restore();
         if (progress < 1) frame = requestAnimationFrame(step);
+        else clearTimeout(fallback);
       };
       frame = requestAnimationFrame(step);
     };
 
-    // A seal already on screen changes at once; one further down the page opens when it is reached.
+    // A seal already on screen draws at once; one further down the page opens when it is reached.
+    const box = element.getBoundingClientRect();
+    const onScreen = box.width > 0 && box.bottom > 0 && box.top < window.innerHeight;
     let viewObserver: IntersectionObserver | null = null;
-    if (shown.current) {
+    if (shown.current || onScreen) {
+      seen = true;
       render(true);
     } else {
       viewObserver = new IntersectionObserver(
         (entries) => {
           if (entries.some((entry) => entry.isIntersecting)) {
             viewObserver?.disconnect();
+            seen = true;
             render(true);
           }
         },
@@ -80,8 +96,9 @@ function Disc({ paint, paintKey, className, children }: { paint: Paint; paintKey
       );
       viewObserver.observe(element);
     }
+    // A seal that came into view before it had a width is drawn as soon as it gets one.
     const sizeObserver = new ResizeObserver(() => {
-      if (shown.current && element.clientWidth !== lastSize) render(false);
+      if ((shown.current || seen) && element.clientWidth !== lastSize) render(!shown.current);
     });
     sizeObserver.observe(element);
     const stopThemeListener = onThemeChange(() => {
@@ -92,6 +109,7 @@ function Disc({ paint, paintKey, className, children }: { paint: Paint; paintKey
       sizeObserver.disconnect();
       stopThemeListener();
       cancelAnimationFrame(frame);
+      clearTimeout(fallback);
     };
   }, [paintKey]);
 

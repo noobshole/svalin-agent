@@ -14,7 +14,7 @@ export function SiteFooter() {
             <Logo className="h-[26px] w-[26px]" />
             <span className="relative -top-0.5">svalin</span>
           </Link>
-          <p>Svalin reports exposures. It is not financial advice and never moves funds.</p>
+          <p>Svalin only reads public data and never moves funds. Nothing here is financial advice.</p>
         </div>
         <nav aria-label="Footer" className="flex gap-6 lg:justify-end">
           <Link className={linkClass} href="/docs">

@@ -270,13 +270,13 @@ export function assessRecipient(
   const blocked = reasons.some((reason) => reason.severity === "block");
   const cautioned = reasons.some((reason) => reason.severity === "caution");
   if (!blocked && !cautioned) {
-    const age = ageDays === null ? "" : `${Math.floor(ageDays).toLocaleString("en-US")} days old`;
+    const age = ageDays === null ? "" : `is ${Math.floor(ageDays).toLocaleString("en-US")} days old`;
     const activity =
       signals.transactions === null
         ? ""
-        : `${signals.transactionsAtLeast ? "at least " : ""}${signals.transactions.toLocaleString("en-US")} transactions`;
-    const facts = [age, activity].filter(Boolean).join(", ");
-    reasons.push({ code: "established", severity: "info", message: `An established address${facts ? `: ${facts}` : ""}.` });
+        : `has ${signals.transactionsAtLeast ? "at least " : ""}${signals.transactions.toLocaleString("en-US")} transactions`;
+    const facts = [age, activity].filter(Boolean).join(" and ");
+    reasons.push({ code: "established", severity: "info", message: `Nothing unusual.${facts ? ` It ${facts}.` : ""}` });
   }
 
   return recipientCheckSchema.parse({
@@ -288,7 +288,8 @@ export function assessRecipient(
     kind: signals.kind,
     signals: {
       createdAt: signals.createdAt === null ? null : new Date(signals.createdAt).toISOString(),
-      ageDays: ageDays === null ? null : Math.round(ageDays * 10) / 10,
+      // Cut down, not rounded, so a page showing whole days agrees with the age in the messages.
+      ageDays: ageDays === null ? null : Math.floor(ageDays * 10) / 10,
       transactions: signals.transactions,
       transactionsAtLeast: signals.transactionsAtLeast,
       paidBefore,

@@ -15,8 +15,8 @@ import {
 const NATIVE_SYMBOL: Record<SupportedChainKey, string> = { solana: "SOL", near: "NEAR" };
 
 const STAKING_OPTIONS: Record<SupportedChainKey, string> = {
-  solana: "liquid-staking options (e.g. JitoSOL, mSOL, INF)",
-  near: "liquid-staking options (e.g. stNEAR, LiNEAR, rNEAR) or a validator staking pool",
+  solana: "liquid staking tokens such as JitoSOL, mSOL or INF",
+  near: "liquid staking tokens such as stNEAR, LiNEAR or rNEAR, or a validator staking pool,",
 };
 
 /**
@@ -185,7 +185,7 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
         severity: "info",
         title: "No priced holdings found",
         summary: "Svalin found no tokens with a reliable price in this wallet, so it has no score or grade.",
-        action: "Check the address, or fund the wallet before requesting a risk report.",
+        action: "Check that the address is right. A wallet needs at least one priced token to get a grade.",
         value: 0,
         threshold: THRESHOLDS.smallPortfolioUsd,
         confidence: 100,
@@ -200,8 +200,8 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
       kind: "concentration",
       severity: top.pct >= 70 ? "high" : top.pct >= 55 ? "medium" : "low",
       title: `${top.symbol} is ${pct(top.pct)} of the portfolio`,
-      summary: `A single volatile exposure above ${THRESHOLDS.concentrationPct}% means one price move dominates the outcome. The portfolio behaves like ${metrics.effectivePositions.toFixed(1)} equal-sized positions.`,
-      action: `Consider capping ${top.symbol.replace(" (incl. staked)", "")} exposure near ${THRESHOLDS.concentrationPct}% by rotating part into stablecoins or a second, uncorrelated major.`,
+      summary: `With more than ${THRESHOLDS.concentrationPct}% in one volatile token, that token's price decides most of what the wallet is worth. Overall the money is spread like ${metrics.effectivePositions.toFixed(1)} equal holdings.`,
+      action: `Consider keeping ${top.symbol.replace(" (incl. staked)", "")} near ${THRESHOLDS.concentrationPct}% of the wallet and moving part into stablecoins or another major token.`,
       value: top.pct,
       threshold: THRESHOLDS.concentrationPct,
       confidence: conf(top.pct, THRESHOLDS.concentrationPct),
@@ -213,11 +213,11 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
       id: "long-tail-exposure",
       kind: "long-tail-exposure",
       severity: severityBands(metrics.longTailPct, [30, 40]),
-      title: `${pct(metrics.longTailPct)} sits in unvetted long-tail tokens`,
+      title: `${pct(metrics.longTailPct)} is in long-tail tokens`,
       summary:
-        "These tokens are outside Svalin's curated list of stablecoins, liquid-staking tokens and majors. Thin liquidity, unlock schedules and rug risk are common here." +
-        (chain === "near" ? " On NEAR, each counts toward the score by its Svalin Index liquidity grade: less for real backing, in full for none." : ""),
-      action: "Review each long-tail position's liquidity and holder concentration before adding more; size them as if they can go to zero.",
+        "These are tokens outside Svalin's list of stablecoins, liquid staking tokens and major coins. Many are hard to sell, have large unlocks coming, or get abandoned by the people who made them." +
+        (chain === "near" ? " On NEAR, each one counts toward the score by its Svalin Index grade, less if it has real backing and in full if it has none." : ""),
+      action: "Before adding more, check how easily each one can be sold and who holds the rest of its supply. Size them as if they could go to zero.",
       value: metrics.longTailPct,
       threshold: THRESHOLDS.longTailPct,
       confidence: conf(metrics.longTailPct, THRESHOLDS.longTailPct),
@@ -230,8 +230,8 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
       kind: "meme-exposure",
       severity: severityBands(metrics.memePct, [30, 50]),
       title: `${pct(metrics.memePct)} is in memecoins`,
-      summary: "Large-cap memecoins are liquid but routinely draw down 50-80% within weeks.",
-      action: "Decide on a maximum meme allocation in advance and take profits back to it when it is exceeded.",
+      summary: "Even the biggest memecoins, which are easy to sell, often fall 50 to 80% within weeks.",
+      action: "Decide in advance how much of the wallet can be in memecoins, and sell back down to that share when it grows past it.",
       value: metrics.memePct,
       threshold: THRESHOLDS.memePct,
       confidence: conf(metrics.memePct, THRESHOLDS.memePct),
@@ -250,8 +250,8 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
           : metrics.stablecoinPct < 0.05
             ? "Almost nothing held in stablecoins"
             : `Only ${pct(metrics.stablecoinPct)} held in stablecoins`,
-      summary: "With almost no stable buffer, there is no dry powder for drawdowns and every fee or opportunity forces a sale of volatile assets.",
-      action: `Hold at least ${THRESHOLDS.stableBufferPct}% in a major stablecoin (USDC/USDT) as a buffer.`,
+      summary: "Without stablecoins, paying a fee or covering a loss means selling a token whose price moves, often at a bad time.",
+      action: `Consider keeping at least ${THRESHOLDS.stableBufferPct}% in a major stablecoin such as USDC or USDT.`,
       value: metrics.stablecoinPct,
       threshold: THRESHOLDS.stableBufferPct,
       confidence: conf(metrics.stablecoinPct, THRESHOLDS.stableBufferPct),
@@ -265,8 +265,8 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
       kind: "lst-opportunity",
       severity: "info",
       title: `${pct(metrics.nativePct)} is unstaked ${native}`,
-      summary: `Liquid staking tokens keep the same ${native} price exposure while earning staking rewards and staying transferable.`,
-      action: `Compare ${STAKING_OPTIONS[chain]} for part of the idle ${native}. Svalin will not execute this for you.`,
+      summary: `A liquid staking token follows the ${native} price like plain ${native} does, but it also earns staking rewards and can still be sent or sold.`,
+      action: `Compare ${STAKING_OPTIONS[chain]} for part of the unstaked ${native}. Svalin never does this for you.`,
       value: metrics.nativePct,
       threshold: THRESHOLDS.idleNativePct,
       confidence: conf(metrics.nativePct, THRESHOLDS.idleNativePct),
@@ -278,9 +278,9 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
       id: "idle-stablecoins",
       kind: "idle-stablecoins",
       severity: "info",
-      title: `${pct(metrics.stablecoinPct)} is parked in stablecoins`,
-      summary: "Low volatility, but idle stablecoins lose to inflation and earn nothing by default.",
-      action: "If this capital is not needed soon, review audited lending markets or yield-bearing stablecoins and their risks.",
+      title: `${pct(metrics.stablecoinPct)} is in stablecoins`,
+      summary: "Stablecoins hold their price, but on their own they earn nothing and slowly lose value to inflation.",
+      action: "If this money is not needed soon, audited lending markets or yield-bearing stablecoins can earn something. Check their risks first.",
       value: metrics.stablecoinPct,
       threshold: THRESHOLDS.idleStablePct,
       confidence: conf(metrics.stablecoinPct, THRESHOLDS.idleStablePct),
@@ -296,7 +296,7 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
       title: `Selling everything now would fetch about ${usd(metrics.exitValueUsd)}, ${pct(exitLoss)} less`,
       summary:
         "Some positions are large next to the real money in their trading pools, so selling them would push the price down. This assumes each position is sold on its own, at today's pool depth.",
-      action: "Count these positions at their exit value, not their quoted value, and sell large ones in parts if you need to.",
+      action: "Value these positions at what they would sell for, not at their quoted price. If you need to sell a large one, sell it in parts.",
       value: exitLoss,
       threshold: THRESHOLDS.exitCostPct,
       confidence: conf(exitLoss, THRESHOLDS.exitCostPct),
@@ -310,7 +310,7 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
       severity: "medium",
       title: `${hiddenNames} token${hiddenNames === 1 ? " is" : "s are"} named to give orders to whoever reads ${hiddenNames === 1 ? "it" : "them"}`,
       summary:
-        "Their names hold instructions, links or encoded text aimed at the reader, often an AI agent: a known way to trick agents into paying or signing. Svalin shows them as [hidden name].",
+        "Their names contain instructions, links or encoded text meant for whoever reads them, often an AI agent. It is a known way to trick agents into paying or signing. Svalin shows them as [hidden name].",
       action: "Treat these tokens as spam. Never act on text from a token's name, and don't visit links from it or swap the tokens.",
       value: hiddenNames,
       threshold: 0,
@@ -328,8 +328,8 @@ function buildFindings({ metrics, total, dataCoverage, chain, hiddenNames }: Fin
       kind: "small-portfolio",
       severity: "info",
       title: `Small portfolio ($${total.toFixed(2)})`,
-      summary: "Percentages swing sharply on small balances, so treat this report as indicative.",
-      action: "Re-run the report once the wallet holds more value.",
+      summary: "On a small balance, one small trade moves the percentages a lot, so read this report as a rough guide.",
+      action: "Run the report again once the wallet holds more.",
       value: round(total, 2),
       threshold: THRESHOLDS.smallPortfolioUsd,
       confidence: 100,
@@ -347,11 +347,11 @@ function unpricedFinding(metrics: RiskReport["metrics"], chain: PortfolioOvervie
     severity: "low",
     title: `${metrics.unpricedAssetCount} tokens have no market price`,
     summary:
-      "Unpriced tokens are usually airdropped spam. Interacting with them (swapping, visiting linked sites) is a common wallet-drainer vector.",
+      "Tokens with no price are usually spam sent to the wallet. Swapping them or visiting the sites they link to is a common way wallets get drained.",
     action:
       chain === "solana"
-        ? "Do not interact with unknown tokens. Burning them and closing their token accounts reclaims the rent deposit."
-        : "Do not interact with unknown tokens or call the contracts and sites they link to.",
+        ? "Leave unknown tokens alone. Burning them and closing their token accounts gets the rent deposit back."
+        : "Leave unknown tokens alone, and don't call the contracts or open the sites they link to.",
     value: metrics.unpricedAssetCount,
     threshold: THRESHOLDS.unpricedCount,
     confidence: 100,

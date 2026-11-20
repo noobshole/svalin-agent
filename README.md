@@ -34,7 +34,7 @@ money, inside a contract.
 | **Svalin Index** | Grades every priced NEAR token A to F by the real money in its pools. Rebuilt every few hours; one edition a day is sealed on NEAR. | [`apps/api`](apps/api), [svalin-index](https://github.com/noobshole/svalin-index) |
 | **Checks** | Before paying an address: allow, caution or block. Wallet risk reports, exit prices and grade proofs. From $0.002 a call in USDC over x402 on NEAR or Solana, with 10 free calls a day. | [`apps/api`](apps/api), [`packages/mcp`](packages/mcp) |
 | **Svalin Guard** | A vault contract. The agent's key can only ask; the vault pays, holds or refuses by the owner's rules, on NEAR and on Solana, and buys a token only if its grade is proven against the sealed edition. | [`guard`](guard) |
-| **Website** | Free wallet scan, payee check, the Index, docs and pricing. | [`apps/web`](apps/web) |
+| **Website** | A free scan of any address (whether it is safe to pay, and a grade for the money it holds), the Index, docs and pricing. | [`apps/web`](apps/web) |
 
 In more detail:
 
@@ -114,7 +114,7 @@ Each step needs no account and no key.
 6. **The tests pass.**
 
    ```bash
-   pnpm install && pnpm build && pnpm test    # 209 API tests and 36 MCP tests
+   pnpm install && pnpm build && pnpm test    # 218 API tests and 36 MCP tests
    cd guard && cargo test                     # 201 tests: the vault, the registry, the check program
    ```
 
@@ -149,12 +149,14 @@ in it, by rules the owner set.
 | --- | --- | --- |
 | `GET /v1/demo/risk/{address}` | Free, 10 calls a day | Risk report |
 | `GET /v1/demo/check/{address}` | Free, shares the 10 | Recipient check, without the payer's history |
+| `GET /v1/demo/scan/{address}` | Free, shares the 10 | The check and the risk report together, for one free call. This is what the website's scan shows |
 | `GET /v1/index/near-tokens` | Free | The Svalin Index |
 | `GET /v1/demo/exit/{contract}` · `/v1/demo/proof/{contract}` | Free, shares the 10 | Exit prices; a grade with its proof |
 | `GET /v1/portfolio/{address}` | $0.002 | Priced holdings and a risk category per token |
 | `GET /v1/risk/{address}` | $0.002 | Score, grade, exposure metrics and findings |
 | `GET /v1/brief/{address}` | $0.02 | Headline, summary and up to 3 actions |
 | `GET /v1/check/{address}?payer=&amountUsd=` | $0.002 | Allow, caution or block, with reasons |
+| `GET /v1/scan/{address}?payer=&amountUsd=` | $0.004 | The check and the risk report together; one call with a pass |
 | `GET /v1/exit/{contract}?amountUsd=` | $0.002 | What selling a NEAR token would actually fetch |
 | `GET /v1/proof/{contract}` | $0.002 | A grade with a Merkle proof against the sealed edition |
 | `POST /v1/keys/{pro,business}` | $9 · $79 | A pass for 30 days on every paid route |
@@ -202,7 +204,7 @@ sample data, and it refuses to start in production that way.
 | Path | What it is |
 | --- | --- |
 | `apps/api` | Hono API: portfolios, the deterministic risk engine, the Index, the x402 paywall, OpenAPI |
-| `apps/web` | Next.js website: wallet scan, check before paying, the Index, Guard, docs and pricing |
+| `apps/web` | Next.js website: the scan (payee check and risk report in one), the Index, Guard, docs and pricing |
 | `packages/mcp` | `svalin-mcp`: MCP server with an auto-paying x402 client and hard spend caps |
 | `packages/shared` | Zod schemas shared by the API, the website and the MCP server |
 | `packages/chain-config` | Chains, x402 networks, facilitators, curated token registry |
@@ -241,7 +243,7 @@ Svalin existed before the hackathon as a wallet risk API. Two tags separate the 
 What that diff contains:
 
 - The Svalin Index, its daily editions and the registry on NEAR that seals them.
-- Check Before Paying, exit prices, grade proofs, passes, and x402 payments on NEAR.
+- The payee check, exit prices, grade proofs, passes, and x402 payments on NEAR.
 - Svalin Guard: everything in [`guard`](guard), started on 3 November 2026.
 - The website as it is now.
 

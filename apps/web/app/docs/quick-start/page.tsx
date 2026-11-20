@@ -6,7 +6,7 @@ import { API_BASE_URL } from "@/lib/api";
 
 export const metadata: Metadata = {
   title: "Quick start — Svalin docs",
-  description: "Your first answer from the Svalin API: scan a wallet and check an address, free, with no account or key.",
+  description: "Get your first answers from the Svalin API for free, with no account or key.",
 };
 
 const RISK_ANSWER = `{
@@ -18,8 +18,8 @@ const RISK_ANSWER = `{
   "findings": [
     {
       "severity": "high",
-      "title": "74.7% sits in unvetted long-tail tokens",
-      "action": "Review each long-tail position's liquidity and holder concentration before adding more; size them as if they can go to zero."
+      "title": "74.7% is in long-tail tokens",
+      "action": "Before adding more, check how easily each one can be sold and who holds the rest of its supply. Size them as if they could go to zero."
     }
   ],
   "methodologyVersion": "2026-11.1"
@@ -78,7 +78,7 @@ export default function QuickStartPage() {
         </li>
       </ul>
       <p>
-        <Link href="/docs/wallet-scan">Wallet Scan</Link> explains how the score is built.
+        <Link href="/docs/wallet-scan">Risk report</Link> explains how the score is built.
       </p>
 
       <h2 id="check">Check an address</h2>
