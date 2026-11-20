@@ -55,7 +55,7 @@ export const portfolioOverviewSchema = z.object({
   /** Tokens whose name or symbol was written to give its reader orders; Svalin shows "[hidden name]". */
   hiddenNameCount: z.number().int().nonnegative().optional(),
   dataSource: dataSourceSchema,
-  refreshedAt: z.string().datetime(),
+  refreshedAt: z.iso.datetime(),
 });
 
 export type AssetCategory = z.infer<typeof assetCategorySchema>;

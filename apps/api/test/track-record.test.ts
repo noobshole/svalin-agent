@@ -1,4 +1,4 @@
-import type { NearTokenIndex, RatedTokenRow } from "@svalin-agent/shared";
+import { gradeMigrationSchema, type NearTokenIndex, type RatedTokenRow } from "@svalin-agent/shared";
 import { describe, expect, it } from "vitest";
 
 import { gradeMigration } from "../src/ratings/track-record.js";
@@ -34,5 +34,12 @@ describe("track record", () => {
     expect(migration).toMatchObject({ days: 7, tokens: 6, upgraded: 1, downgraded: 2, unchanged: 2, gone: 1, lostAllBacking: 2 });
     expect(migration.matrix.C).toEqual({ A: 0, B: 1, C: 0, D: 0, F: 1, gone: 0 });
     expect(migration.matrix.D).toEqual({ A: 0, B: 0, C: 0, D: 0, F: 1, gone: 1 });
+  });
+
+  it("reads a matrix that leaves out grades and targets, but not one with unknown ones", () => {
+    const window = { days: 7, sealedDay: "2026-10-18", from: "2026-10-18T00:40:00.000Z", tokens: 1, upgraded: 0, downgraded: 0, unchanged: 1, gone: 0, lostAllBacking: 0 };
+    expect(gradeMigrationSchema.parse({ ...window, matrix: { B: { B: 1 } } }).matrix).toEqual({ B: { B: 1 } });
+    expect(gradeMigrationSchema.safeParse({ ...window, matrix: { E: { B: 1 } } }).success).toBe(false);
+    expect(gradeMigrationSchema.safeParse({ ...window, matrix: { B: { lost: 1 } } }).success).toBe(false);
   });
 });

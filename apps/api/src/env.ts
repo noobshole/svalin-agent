@@ -20,28 +20,22 @@ const envSchema = z.object({
   PORTFOLIO_SOURCE: z.enum(["live", "mock"]).optional(),
   HELIUS_API_KEY: optionalString,
   HELIUS_RPC_URL: optionalString,
-  FASTNEAR_API_URL: z.string().url().default("https://api.fastnear.com"),
-  NEAR_RPC_URL: z.string().url().default("https://rpc.mainnet.fastnear.com"),
-  NEAR_PRICE_API_URL: z.string().url().default("https://indexer.ref.finance/list-token-price"),
+  FASTNEAR_API_URL: z.url().default("https://api.fastnear.com"),
+  NEAR_RPC_URL: z.url().default("https://rpc.mainnet.fastnear.com"),
+  NEAR_PRICE_API_URL: z.url().default("https://indexer.ref.finance/list-token-price"),
   // Ref Finance pools, used to check what NEAR tokens outside the curated registry could sell for.
-  NEAR_POOLS_API_URL: z.string().url().default("https://indexer.ref.finance/list-top-pools"),
+  NEAR_POOLS_API_URL: z.url().default("https://indexer.ref.finance/list-top-pools"),
   // Where the scheduled job publishes the latest Svalin Index edition for NEAR tokens.
-  NEAR_INDEX_URL: z
-    .string()
-    .url()
-    .default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-token-index.json"),
+  NEAR_INDEX_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-token-index.json"),
   // The Svalin Ratings registry on NEAR that grade proofs are made against, and where its RPC and
   // the sealed editions are.
   NEAR_RATINGS_REGISTRY: z.string().default("svalin-ratings-v1.testnet"),
-  NEAR_RATINGS_RPC_URL: z.string().url().default("https://rpc.testnet.fastnear.com"),
-  NEAR_INDEX_SEALED_URL: z.string().url().default("https://raw.githubusercontent.com/noobshole/svalin-index/main/editions"),
+  NEAR_RATINGS_RPC_URL: z.url().default("https://rpc.testnet.fastnear.com"),
+  NEAR_INDEX_SEALED_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/main/editions"),
   // Depth from Ref's concentrated-liquidity pools, published with each edition.
-  NEAR_DCL_DEPTH_URL: z
-    .string()
-    .url()
-    .default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-dcl-depth.json"),
+  NEAR_DCL_DEPTH_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-dcl-depth.json"),
   // Account age, activity and recent transfers on NEAR, for the recipient check.
-  FASTNEAR_TX_API_URL: z.string().url().default("https://tx.main.fastnear.com"),
+  FASTNEAR_TX_API_URL: z.url().default("https://tx.main.fastnear.com"),
   PORTFOLIO_CACHE_SECONDS: z.coerce.number().int().nonnegative().default(60),
 
   X402_ENV: z.enum(["mainnet", "testnet"]).optional(),
@@ -88,7 +82,7 @@ const envSchema = z.object({
   TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
   // Shared with the web app so it can pass each visitor's IP for the per-visitor demo limit.
   WEB_FORWARDING_SECRET: optionalString.refine((value) => !value || value.length >= 24, {
-    message: "WEB_FORWARDING_SECRET must be at least 24 characters.",
+    error: "WEB_FORWARDING_SECRET must be at least 24 characters.",
   }),
 
   ANTHROPIC_API_KEY: optionalString,

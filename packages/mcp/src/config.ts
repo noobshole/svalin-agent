@@ -1,11 +1,14 @@
 import { z } from "zod";
 
 const envSchema = z.object({
-  SVALIN_API_URL: z
-    .string({ required_error: "Set SVALIN_API_URL to your Svalin API base URL (e.g. https://your-svalin-api.example.com)" })
-    .url(),
+  SVALIN_API_URL: z.url({
+    error: (issue) =>
+      issue.input === undefined
+        ? "Set SVALIN_API_URL to your Svalin API base URL (e.g. https://your-svalin-api.example.com)"
+        : undefined,
+  }),
   SVALIN_SOLANA_PRIVATE_KEY: z.string().optional(),
-  SVALIN_SOLANA_RPC_URL: z.string().url().optional(),
+  SVALIN_SOLANA_RPC_URL: z.url().optional(),
   SVALIN_NEAR_ACCOUNT_ID: z
     .string()
     .max(64)
@@ -17,7 +20,7 @@ const envSchema = z.object({
     .string()
     .regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]+$/, "SVALIN_NEAR_PRIVATE_KEY must be an ed25519 key, like ed25519:…")
     .optional(),
-  SVALIN_NEAR_RPC_URL: z.string().url().optional(),
+  SVALIN_NEAR_RPC_URL: z.url().optional(),
   SVALIN_PREFERRED_NETWORK: z.enum(["solana", "near"]).default("solana"),
   /** A Svalin key (svk_…) or active Pro code (svp_…): paid tools then use its calls instead of paying each one. */
   SVALIN_API_KEY: z
@@ -29,7 +32,7 @@ const envSchema = z.object({
   /** Where the payment guard remembers each service's payee and price (default ~/.svalin/payees.json). */
   SVALIN_PAYEE_MEMORY: z.string().optional(),
 }).refine((env) => Boolean(env.SVALIN_NEAR_ACCOUNT_ID) === Boolean(env.SVALIN_NEAR_PRIVATE_KEY), {
-  message: "Set both SVALIN_NEAR_ACCOUNT_ID and SVALIN_NEAR_PRIVATE_KEY, or neither.",
+  error: "Set both SVALIN_NEAR_ACCOUNT_ID and SVALIN_NEAR_PRIVATE_KEY, or neither.",
 });
 
 export type McpConfig = z.infer<typeof envSchema>;

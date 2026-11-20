@@ -1,3 +1,6 @@
+// First: Zod must be configured before any schema below is built.
+import "./zod-config.js";
+
 export * from "./address.js";
 export * from "./check.js";
 export * from "./pass.js";

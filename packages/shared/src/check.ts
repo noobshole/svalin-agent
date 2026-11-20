@@ -67,7 +67,7 @@ export const recipientCheckSchema = z.object({
   verdict: checkVerdictSchema,
   kind: recipientKindSchema,
   signals: z.object({
-    createdAt: z.string().datetime().nullable(),
+    createdAt: z.iso.datetime().nullable(),
     ageDays: z.number().nonnegative().nullable(),
     /** Transactions seen; a lower bound when `transactionsAtLeast` is true. */
     transactions: z.number().int().nonnegative().nullable(),
@@ -88,7 +88,7 @@ export const recipientCheckSchema = z.object({
   reasons: z.array(checkReasonSchema),
   dataSource: z.string(),
   methodologyVersion: z.string(),
-  checkedAt: z.string().datetime(),
+  checkedAt: z.iso.datetime(),
 });
 
 export type RecipientKind = z.infer<typeof recipientKindSchema>;
