@@ -33,36 +33,36 @@ export default function GuardDocsPage() {
     >
       <h2 id="open">Open or create a vault</h2>
       <p>
-        Both happen on the <a className="link" href="https://svalin-guard.noobshole.workers.dev">vault page</a>, from your own wallet. Step by
-        step, with pictures: <Link href="/docs/guard/walkthrough">Make your first vault</Link>.
+        Both happen on the <a className="link" href="https://svalin-guard.noobshole.workers.dev">vault page</a>, from your own wallet. <Link href="/docs/guard/walkthrough">Make
+        your first vault</Link> shows each step with pictures.
       </p>
       <ul>
         <li>
-          <strong>To create one,</strong> connect your wallet, choose a name and your limits, paste your agent’s public key (see{" "}
+          To create one, connect your wallet, choose a name and your limits, paste your agent’s public key (see{" "}
           <a href="#agent-key">Give your agent a key</a>), and approve 6 test NEAR once. The NEAR stays in the vault to store its code.
         </li>
         <li>
-          <strong>To open yours,</strong> connect your wallet: it lists the vaults you own. Anyone can open a vault by its name to read it.
+          To open yours, connect your wallet and it lists the vaults you own. Anyone can open a vault by its name to read it.
         </li>
       </ul>
 
       <h2 id="keys">Who holds which key</h2>
       <ul>
         <li>
-          <strong>The agent</strong> holds one key. It can ask for a payment or a token buy. It cannot approve, change a rule or start a withdrawal; it can
+          The agent holds one key. It can ask for a payment or a token buy. It cannot approve, change a rule or start a withdrawal. It can
           only deliver a withdrawal the owner has already waited for, to the address the owner chose.
         </li>
         <li>
-          <strong>The owner</strong> uses their own wallet, on another device than the agent, to approve what is held and to change the rules.
+          The owner uses their own wallet, on another device than the agent, to approve what is held and to change the rules.
         </li>
         <li>
-          <strong>The guardian</strong> is a second device, or someone the owner trusts. It can freeze the vault, cancel a waiting change and reject a
+          The guardian is a second device, or someone the owner trusts. It can freeze the vault, cancel a waiting change and reject a
           held payment. It approves a large payment together with the owner, never alone. If the owner’s wallet is lost, it can start a recovery
-          to a new owner; that waits, and the owner can cancel it. If the guardian turns against the owner, the owner can leave it; that waits twice
+          to a new owner. That waits, and the owner can cancel it. If the guardian turns against the owner, the owner can drop it. That waits twice
           as long as a recovery, and the guardian cannot cancel it.
         </li>
         <li>
-          <strong>Svalin</strong> has no key to any vault. It publishes the grades the vault checks.
+          Svalin has no key to any vault. It publishes the grades the vault checks.
         </li>
       </ul>
       <p>Setting up a vault deletes the key that deployed it, so from then on only the code decides.</p>
@@ -76,11 +76,11 @@ export default function GuardDocsPage() {
         <code>node new-key.mjs ~/.svalin/my-agent.json</code>
       </pre>
       <p>
-        Paste the public key it prints into the vault page. Give the agent the file and the vault’s name. The file holds the private key: never
+        Paste the public key it prints into the vault page. Give the agent the file and the vault’s name. The file holds the private key, so never
         paste it anywhere. The vault page only takes the public one.
       </p>
       <p>
-        Any agent can hold the key, built on any model; Svalin runs no one’s agent. The key can only ask.{" "}
+        Any agent can hold the key, built on any model. Svalin doesn’t run anyone’s agent. The key can only ask.{" "}
         <Link href="/docs/guard/walkthrough#agent">Connect your agent</Link> shows the call it makes.
       </p>
 
@@ -97,7 +97,7 @@ export default function GuardDocsPage() {
           <tbody>
             <tr>
               <td>A payee whose name reads like a well-known account or a past payee</td>
-              <td data-label="The vault">Refused; one a letter away is held</td>
+              <td data-label="The vault">Refused. One a letter away is held</td>
             </tr>
             <tr>
               <td>A payee it has never paid</td>
@@ -129,7 +129,7 @@ export default function GuardDocsPage() {
 
       <h2 id="limits">Limits</h2>
       <p>
-        A payee the vault has paid before gets the full per-payment limit; a new one gets a smaller limit. One daily limit covers both chains. With a
+        A payee the vault has paid before gets the full per-payment limit, and a new one gets a smaller limit. One daily limit covers both chains. With a
         guardian set, a held payment above the limits needs both the owner and the guardian.
       </p>
 
@@ -151,14 +151,14 @@ export default function GuardDocsPage() {
       <h2 id="owner">What the owner can do</h2>
       <ul>
         <li>
-          <strong>Safer changes happen at once:</strong> lower a limit, freeze the vault, remove the agent.
+          Lowering a limit, freezing the vault and removing the agent happen at once.
         </li>
         <li>
-          <strong>Riskier changes wait,</strong> 24 hours by default, and can be cancelled: raise a limit, add a payee, unfreeze, or take any money out.
-          A stolen owner key cannot empty the vault in one go.
+          Raising a limit, adding a payee, unfreezing and taking any money out wait 24 hours by default, and can be cancelled during the wait. So a
+          stolen owner key cannot empty the vault in one go.
         </li>
         <li>
-          <strong>A fingerprint on a phone</strong> can reject a payment or freeze the vault at any time. It can approve only a payment to someone the
+          A fingerprint on a phone can reject a payment or freeze the vault at any time. It can approve only a payment to someone the
           vault has already paid, within the limits, and it can never change a rule or take money out.
         </li>
       </ul>

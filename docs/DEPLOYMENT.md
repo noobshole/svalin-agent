@@ -79,11 +79,14 @@ How Workers differ from a container host:
 - The `"svalin_api_started"` log line appears on the first request after each deploy, in the
   Worker's **Logs** tab.
 - Usage counts go to Workers Analytics Engine (binding `USAGE`, dataset `svalin_usage`, made on
-  the first write). Each request is one data point: the route's name, how it ended (`paid_x402`,
-  `paid_key`, `free`, `payment_required`, `refused`, `error`), the error code or the recipient
-  check's verdict (`lookalike` when it caught one), the network a payment settled on, and the
-  chain of the address. Never the address, an IP, a key or the request. Writing never holds up or
-  fails a request; Workers Free takes 100,000 a day, and Cloudflare keeps them for three months.
+  the first write). Turn Analytics Engine on once for the account first (Dashboard → **Workers &
+  Pages** → **Analytics Engine**); until then every deploy of the API fails with error 10089, "You
+  need to enable Analytics Engine". Each request is one data point: the route's name, how it
+  ended (`paid_x402`, `paid_key`, `free`, `payment_required`, `refused`, `error`), the error code
+  or the recipient check's verdict (`lookalike` when it caught one), the network a payment settled
+  on, and the chain of the address. Never the address, an IP, a key or the request. Writing never
+  holds up or fails a request; Workers Free takes 100,000 a day, and Cloudflare keeps them for
+  three months.
   To read them, make an API token with **Account Analytics: Read** (My Profile → API Tokens) and
   ask the SQL API:
 
@@ -129,9 +132,9 @@ Settings → Instance Type).
   CDP_API_KEY_SECRET=...        # optional
   ```
 
-  Prices default to $0.002 for every call except the brief, $0.02.
-  Override them with `PRICE_PORTFOLIO_USD`, `PRICE_RISK_USD`, `PRICE_BRIEF_USD`, `PRICE_CHECK_USD`,
-  `PRICE_EXIT_USD` and `PRICE_PROOF_USD`. Each visitor gets `DEMO_REQUESTS_PER_DAY` free calls
+  Prices default to $0.002 for every call except the brief, $0.02, and the scan, $0.004 (the check
+  and the risk report together; a pass counts it as one call). Override them with `PRICE_PORTFOLIO_USD`,
+  `PRICE_RISK_USD`, `PRICE_BRIEF_USD`, `PRICE_CHECK_USD`, `PRICE_SCAN_USD`, `PRICE_EXIT_USD` and `PRICE_PROOF_USD`. Each visitor gets `DEMO_REQUESTS_PER_DAY` free calls
   (default 10), and `LOCK_FREE_NEXT_STEPS=true` leaves next steps out of the free risk report.
 
   Grade proofs (`/v1/proof`) are made against the Svalin Ratings registry

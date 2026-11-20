@@ -1,4 +1,4 @@
-import { newSvalinKey, proReference } from "@svalin-agent/shared";
+import { addressScanSchema, newSvalinKey, proReference } from "@svalin-agent/shared";
 import { describe, expect, it } from "vitest";
 
 import { createApp, type ProPaymentFinder } from "../src/app.js";
@@ -392,5 +392,50 @@ describe("Svalin Pro", () => {
     history.push({ tx: "pro", network: "near:testnet", atomic: reserved.amount.replace(".", "").replace(/^0+/, ""), at: Date.now() });
     expect(await (await activate(app, code)).json()).toMatchObject({ found: 1, pending: [], status: { active: true } });
     expect(fetched).toEqual(["per-call", "pro"]);
+  });
+});
+
+describe("the paid scan", () => {
+  it("counts one call with a pass, and answers both the check and the report", async () => {
+    const app = createApp(config, { facilitator: acceptingFacilitator() });
+    const { key } = await (await buyKey(app, "pro")).json();
+    const response = await app.request(`/v1/scan/${SOLANA_WALLET}`, { headers: bearer(key) });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Calls-Left")).toBe("99");
+    const scan = addressScanSchema.parse(await response.json());
+    expect(scan.check.recipient).toBe(SOLANA_WALLET);
+    expect(scan.report?.chain).toBe("solana");
+    // The paid report keeps every next step.
+    expect(scan.report?.findings.every((finding) => typeof finding.action === "string")).toBe(true);
+  });
+
+  it("asks agents paying per call for the check and the report together", async () => {
+    const app = createApp(config, { facilitator: acceptingFacilitator() });
+    const unpaid = await app.request(`/v1/scan/${SOLANA_WALLET}`);
+    expect(unpaid.status).toBe(402);
+    expect(decodeHeader(unpaid.headers.get("PAYMENT-REQUIRED")).accepts[0].amount).toBe("4000");
+  });
+
+  it("fails the whole call, and gives the call back, when the report fails on Svalin's side", async () => {
+    class DownSource extends MockPortfolioSource {
+      async getOverview(): Promise<never> {
+        throw new ApiError(502, "upstream_unavailable", "The data provider did not answer.");
+      }
+    }
+    const app = createApp(config, { facilitator: acceptingFacilitator(), portfolioSource: new DownSource() });
+    const { key } = await (await buyKey(app, "pro")).json();
+    expect((await app.request(`/v1/scan/${SOLANA_WALLET}`, { headers: bearer(key) })).status).toBe(502);
+    const left = await (await app.request("/v1/keys/me", { headers: bearer(key) })).json();
+    expect(left.callsLeft).toBe(100);
+  });
+
+  it("is listed with its price and the check's query in OpenAPI and llms.txt", async () => {
+    const app = createApp(config, { facilitator: acceptingFacilitator() });
+    const spec = await (await app.request("/openapi.json")).json();
+    const scan = spec.paths["/v1/scan/{address}"].get;
+    expect(scan["x-payment-info"].price.amount).toBe("0.004000");
+    expect(scan.parameters.map((parameter: { name: string }) => parameter.name)).toEqual(["address", "payer", "amountUsd"]);
+    expect(scan.summary.length).toBeLessThanOrEqual(MAX_ROUTE_DESCRIPTION_LENGTH);
+    expect(await (await app.request("/llms.txt")).text()).toContain("/v1/scan/{address}");
   });
 });

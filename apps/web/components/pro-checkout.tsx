@@ -128,7 +128,7 @@ export function ProCheckout() {
   }
 
   function removePass() {
-    if (!window.confirm("Remove your Pro code from this browser? Copy it first: Svalin cannot show it again.")) return;
+    if (!window.confirm("Remove your Pro code from this browser? Copy it first, because Svalin cannot show it again.")) return;
     forgetPro();
     setCode(null);
     setStatus(null);
@@ -201,7 +201,7 @@ export function ProCheckout() {
           ) : code ? (
             <div className="grid gap-8">
               <Step number={1} title="Save your Pro code first">
-                <p className="text-mutedForeground">This code is your pass. It stays in this browser; copy it somewhere safe to use Pro on another device. Svalin cannot recover a lost code.</p>
+                <p className="text-mutedForeground">This code is your pass. It stays in this browser, so copy it somewhere safe if you want Pro on another device. Svalin cannot recover a lost code.</p>
                 <CodeBox code={code} />
               </Step>
 
@@ -219,7 +219,7 @@ export function ProCheckout() {
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                 <button className="btn-quiet" disabled={checking} onClick={() => void check(code)} type="button">
-                  {checking ? "Checking…" : "I’ve paid: check now"}
+                  {checking ? "Checking…" : "I’ve paid, check now"}
                 </button>
                 <span className="min-w-0 flex-1 basis-56 text-mutedForeground" role="status">
                   {pollUntil > 0 ? `Waiting for your payment${checkedAt ? `, last checked at ${new Date(checkedAt).toLocaleTimeString()}` : ""}.` : "Stopped checking automatically. Use the button once you have paid."}

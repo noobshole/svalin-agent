@@ -37,7 +37,7 @@ export function PaymentNetworks({ className }: { className?: string }) {
   const list = (chains: string[]) => chains.join(" and ");
   let sentence: string;
   if (test.length === 0) sentence = `Payments are in real USDC on ${list(live)}.`;
-  else if (live.length === 0) sentence = `Payments on ${list(test)} use free test USDC for now, while real USDC opens chain by chain.`;
-  else sentence = `${list(live)} takes real USDC; ${list(test)} still uses free test USDC for now.`;
+  else if (live.length === 0) sentence = `Payments on ${list(test)} use free test USDC for now. Real USDC opens one chain at a time.`;
+  else sentence = `${list(live)} takes real USDC, and ${list(test)} still uses free test USDC for now.`;
   return <p className={cn("text-sm text-mutedForeground", className)}>{sentence}</p>;
 }

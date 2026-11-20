@@ -25,22 +25,22 @@ export default async function PricingPage() {
       <section className="grid4">
         <header className="grid content-start gap-4">
           <h1 className="display">Pricing</h1>
-          <p className="lede">Free to try. One pass for people, one price per call for agents.</p>
+          <p className="lede">Scanning is free to try. People can buy a monthly pass, and agents pay per call.</p>
         </header>
         <div className="grid gap-y-10 lg:col-span-3 lg:grid-cols-3 lg:gap-x-[var(--gap)] lg:gap-y-3">
-          <Plan link={{ href: "/scan", label: "Scan a wallet" }} name="Free" price="$0">
-            <li>10 scans or checks a day</li>
-            <li>Every warning, always</li>
+          <Plan link={{ href: "/scan", label: "Scan an address" }} name="Free" price="$0">
+            <li>10 scans a day</li>
+            <li>Every warning shown</li>
             <li>The Svalin Index</li>
           </Plan>
           <Plan highlight link={{ href: "#checkout", label: "Get Pro" }} name="Svalin Pro" note="or $90 a year" price={`${proPrice} a month`}>
             <li>100 calls a day, on the website and in your agent</li>
             <li>Every next step, and exit prices at any sale size</li>
-            <li>The look-alike check against your own wallet</li>
+            <li>The look-alike check against wallets you paid</li>
           </Plan>
           <Plan link={{ href: "/docs", label: "Read the docs" }} name="For agents" note={`or ${businessPrice} a month for 200,000 calls`} price={`${callPrice} a call`}>
             <li>
-              Every call {callPrice}; the written brief {briefPrice}
+              {callPrice} a call, or {briefPrice} for the written brief
             </li>
             <li>Paid in USDC over x402, no account</li>
             <li>A call that fails is never charged</li>
@@ -52,8 +52,8 @@ export default async function PricingPage() {
       <section className="grid4 items-start">
         <div className="order-2 border-b border-border lg:order-none lg:col-span-2">
           <Answer title="How you pay for Pro">
-            In USDC from your own wallet. On Solana you scan a QR code with your wallet app; on NEAR you send an exact amount. Svalin never connects to your wallet and never asks you to sign
-            anything: it finds your payment on the blockchain. Card payments are planned for early 2027.
+            You pay in USDC from your own wallet. On Solana you scan a QR code with your wallet app, and on NEAR you send an exact amount. Svalin never
+            connects to your wallet or asks you to sign anything. It finds your payment on the blockchain. Card payments are planned for early 2027.
           </Answer>
           <Answer title="Your Pro code">
             The code is your pass. It stays in your browser, and you can copy it to another device or into your agent’s settings. Svalin keeps only a fingerprint of it, so a lost code
@@ -61,14 +61,14 @@ export default async function PricingPage() {
           </Answer>
           <Answer title="Renewing">
             Crypto payments do not renew by themselves. The site reminds you three days before your pass ends, and paying again with the same code adds the new days after the current end.
-            Agents renew by buying again with their key; see the{" "}
+            Agents renew by buying again with their key, as the{" "}
             <Link className="link text-foreground" href="/docs/passes">
               docs
-            </Link>
-            .
+            </Link>{" "}
+            explain.
           </Answer>
           <Answer title="What stays free">
-            Every check shows every warning, with or without a pass: Svalin never hides “don’t pay this address” behind a paywall.
+            Every scan shows every warning, with or without a pass. Svalin never puts “don’t pay this address” behind a paywall.
           </Answer>
         </div>
         <div className="order-1 lg:order-none lg:col-span-2">

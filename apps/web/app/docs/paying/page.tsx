@@ -31,7 +31,7 @@ export default function PayingPage() {
 
       <h2 id="networks">Test and real USDC</h2>
       <PaymentNetworks className="mb-4" />
-      <p>Each chain moves from its test network to real USDC on its own; the line above is read live from the API.</p>
+      <p>Each chain moves from its test network to real USDC on its own. The line above is read live from the API.</p>
 
       <h2 id="failures">When a call fails</h2>
       <p>

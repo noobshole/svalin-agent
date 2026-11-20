@@ -13,8 +13,8 @@ export const DOC_GROUPS: { name: string; links: DocLink[] }[] = [
   {
     name: "Products",
     links: [
-      { href: "/docs/wallet-scan", label: "Wallet Scan" },
-      { href: "/docs/check", label: "Check Before Paying" },
+      { href: "/docs/wallet-scan", label: "Risk report" },
+      { href: "/docs/check", label: "Payee check" },
       { href: "/docs/svalin-index", label: "Svalin Index" },
       { href: "/docs/guard", label: "Svalin Guard" },
       { href: "/docs/guard/walkthrough", label: "Make your first vault" },

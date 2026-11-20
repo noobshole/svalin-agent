@@ -10,6 +10,7 @@ import {
   newSvalinKey,
   proPlanSchema,
   proReference,
+  type AddressScan,
   type KeyPlan,
   type NearCheckout,
   type PortfolioOverview,
@@ -116,8 +117,8 @@ const NEAR_AMOUNTS_PER_HOUR = 10;
 const REFUSED_KEYS_PER_HOUR = 30;
 
 const PAID_PREFIXES = Object.values(paidRoutes).map((route) => route.path.replace("{address}", ""));
-const DEMO_PREFIXES = ["/v1/demo/risk/", "/v1/demo/check/", "/v1/demo/exit/", "/v1/demo/proof/"];
-const CHECK_PREFIXES = ["/v1/check/", "/v1/demo/check/"];
+const DEMO_PREFIXES = ["/v1/demo/risk/", "/v1/demo/check/", "/v1/demo/scan/", "/v1/demo/exit/", "/v1/demo/proof/"];
+const CHECK_PREFIXES = ["/v1/check/", "/v1/scan/", "/v1/demo/check/", "/v1/demo/scan/"];
 const EXIT_PREFIXES = ["/v1/exit/", "/v1/demo/exit/"];
 const PROOF_PREFIXES = ["/v1/proof/", "/v1/demo/proof/"];
 /** Reasons that make a recipient check a caught look-alike. */
@@ -402,6 +403,12 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     return c.json(await checkRecipient(c, false));
   });
 
+  // The website's one box: the free check and the free risk report for one address, for one free call.
+  app.get("/v1/demo/scan/:address", async (c) => {
+    await useFreeCall(c, "/v1/scan/{address}");
+    return c.json(await scanAddress(c, false));
+  });
+
   // The Svalin Index: every NEAR token Ref Finance prices, graded by the real money behind it.
   app.get("/v1/index/near-tokens", async (c) => {
     const body = await indexFeed.latest();
@@ -432,6 +439,8 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   });
 
   app.get("/v1/check/:address", async (c) => c.json(await checkRecipient(c)));
+
+  app.get("/v1/scan/:address", async (c) => c.json(await scanAddress(c, true)));
 
   app.get("/v1/exit/:address", async (c) => {
     const { index, row, note } = await gradedToken(c.req.param("address"));
@@ -683,6 +692,28 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     const caught = check.verdict === "block" && check.reasons.some((reason) => LOOKALIKE_REASONS.has(reason.code));
     c.set("checkVerdict", caught ? "lookalike" : check.verdict);
     return check;
+  }
+
+  /**
+   * The check and the risk report for one address. An address with no report (a token, a program,
+   * an empty wallet) still gets its check, with the reason it has no report. On the paid route a
+   * failure on Svalin's side fails the whole call, so the caller is not charged for half an answer.
+   */
+  async function scanAddress(c: Context<{ Variables: Variables }>, paid: boolean): Promise<AddressScan> {
+    const [check, risk] = await Promise.all([
+      checkRecipient(c, paid),
+      getOverview(c.req.param("address") ?? "").then(
+        (overview) => {
+          const report = buildRiskReport(overview);
+          return { report: !paid && config.demo.lockNextSteps ? lockNextSteps(report) : report, reportError: null };
+        },
+        (error: unknown) => {
+          if (!(error instanceof ApiError) || (paid && error.status >= 500)) throw error;
+          return { report: null, reportError: { ...error.toBody(), status: error.status } };
+        },
+      ),
+    ]);
+    return { check, ...risk };
   }
 
   /** What one finished request did, for the usage count. */

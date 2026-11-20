@@ -21,7 +21,7 @@ export default async function PlansPage() {
         ["limits", "When limits reset"],
         ["counts", "What counts as a call"],
       ]}
-      lede="Free to try. One pass for people, one price per call for agents."
+      lede="Scanning is free to try. People can buy a monthly pass, and agents pay per call."
       path="/docs/plans"
       title="Plans and limits"
     >
@@ -39,12 +39,12 @@ export default async function PlansPage() {
             <tr>
               <td>Free</td>
               <td data-label="Price">$0</td>
-              <td data-label="What you get">10 scans or checks a day, and the Svalin Index</td>
+              <td data-label="What you get">10 scans a day, and the Svalin Index</td>
             </tr>
             <tr>
               <td>Pay per call</td>
               <td data-label="Price">
-                {price("/v1/check/{address}", "$0.002")} a call; the written brief {price("/v1/brief/{address}", "$0.02")}
+                {price("/v1/check/{address}", "$0.002")} a call, or {price("/v1/brief/{address}", "$0.02")} for the written brief
               </td>
               <td data-label="What you get">Every paid route, in USDC over x402, with no account</td>
             </tr>
@@ -62,7 +62,7 @@ export default async function PlansPage() {
         </table>
       </div>
       <p>
-        Buy Pro on the <Link href="/pricing">Pricing page</Link>. Agents can buy either pass themselves: see <Link href="/docs/passes">Passes for agents</Link>.
+        Buy Pro on the <Link href="/pricing">Pricing page</Link>. Agents can buy either pass themselves, as <Link href="/docs/passes">Passes for agents</Link> explains.
       </p>
 
       <h2 id="free">What stays free</h2>

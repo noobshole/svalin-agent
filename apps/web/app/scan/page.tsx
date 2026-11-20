@@ -4,8 +4,9 @@ import { Suspense } from "react";
 import { ScanResult } from "@/components/scan-result";
 
 export const metadata: Metadata = {
-  title: "Wallet Scan — Svalin",
-  description: "Grade any Solana wallet or NEAR account from A to F by how its money is spread, with what is wrong and what it would really fetch if sold.",
+  title: "Scan — Svalin",
+  description:
+    "Check a Solana address or NEAR account before you send it money. Svalin flags signs of a scam and grades the money it holds from A to F. Free.",
 };
 
 export default function ScanPage() {

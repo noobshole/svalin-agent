@@ -45,8 +45,8 @@ function exposureSlices(metrics: RiskReport["metrics"]) {
 /** The sentence that goes with a grade. */
 export function gradeSentence(report: RiskReport) {
   const { level, score } = report;
-  if (!level || score === null) return "Not rated. Nothing here has a price to score.";
-  return `${level.charAt(0).toUpperCase()}${level.slice(1)} portfolio risk. Score ${score} of 100.`;
+  if (!level || score === null) return "Not graded, because nothing it holds has a price.";
+  return `Risk score ${score} out of 100, which is ${level}.`;
 }
 
 /** 0 (safest) to 100 (riskiest), with ticks at the grade boundaries. Empty when the wallet is not rated. */
@@ -90,7 +90,7 @@ function LockedStep() {
         Trim this position over the coming weeks and keep a stable reserve
       </span>
       <Link className="link" href="/pricing">
-        Unlock with Pro
+        Shown with Pro
       </Link>
     </span>
   );
@@ -99,8 +99,9 @@ function LockedStep() {
 /** The report's figures, exposure and findings. The page around it shows the seal and the address. */
 export function RiskReportView({ report }: { report: RiskReport }) {
   const { metrics } = report;
+  const unpriced = metrics.unpricedAssetCount;
   const stats = [
-    { label: "Priced value", value: formatUsd(metrics.totalValueUsd) },
+    { label: "Value", value: formatUsd(metrics.totalValueUsd) },
     ...(typeof metrics.exitValueUsd === "number" && typeof metrics.exitLossPct === "number"
       ? [
           {
@@ -111,21 +112,21 @@ export function RiskReportView({ report }: { report: RiskReport }) {
         ]
       : []),
     {
-      label: "Largest volatile bet",
-      value: metrics.largestVolatilePosition ? formatPct(metrics.largestVolatilePosition.pct) : "—",
+      label: "Biggest risky holding",
+      value: metrics.largestVolatilePosition ? formatPct(metrics.largestVolatilePosition.pct) : "None",
       sub: metrics.largestVolatilePosition?.symbol,
     },
-    { label: "Behaves like", value: `${metrics.effectivePositions.toFixed(1)} positions`, sub: "of equal size" },
+    { label: "Spread", value: `Like ${metrics.effectivePositions.toFixed(1)} equal holdings` },
     {
       label: "Data coverage",
       value: `${report.dataCoverage}%`,
-      sub: `${metrics.unpricedAssetCount} unpriced token${metrics.unpricedAssetCount === 1 ? "" : "s"}`,
+      sub: unpriced === 0 ? "Every token has a price" : `${unpriced} token${unpriced === 1 ? "" : "s"} without a price`,
     },
   ];
 
   return (
     <div className="grid gap-12">
-      {report.dataSource === "mock" ? <p className="notice text-sm text-riskMedium">This API instance is running on sample data. Numbers are illustrative.</p> : null}
+      {report.dataSource === "mock" ? <p className="notice text-sm text-riskMedium">This copy of the API runs on sample data, so the numbers are made up.</p> : null}
 
       <ScoreBar report={report} />
 
@@ -142,7 +143,7 @@ export function RiskReportView({ report }: { report: RiskReport }) {
       </dl>
 
       <section className="grid gap-4">
-        <h2 className="title">Exposure</h2>
+        <h3 className="text-2xl font-light">What it holds</h3>
         <div className="flex h-3 gap-0.5 bg-surface2">
           {exposureSlices(metrics).map((slice) =>
             slice.value > 0 ? <div className={slice.tone} key={slice.label} style={{ width: `${slice.value}%` }} title={`${slice.label} ${formatPct(slice.value)}`} /> : null,
@@ -160,11 +161,11 @@ export function RiskReportView({ report }: { report: RiskReport }) {
       </section>
 
       <section className="grid gap-4">
-        <h2 className="title">
+        <h3 className="text-2xl font-light">
           Findings <span className="dim">{report.findings.length}</span>
-        </h2>
+        </h3>
         {report.findings.length === 0 ? (
-          <p className="text-mutedForeground">No findings. This wallet clears every check.</p>
+          <p className="text-mutedForeground">Nothing to flag.</p>
         ) : (
           <div className="border-b border-border">
             {report.findings.map((finding) => (
@@ -174,7 +175,9 @@ export function RiskReportView({ report }: { report: RiskReport }) {
         )}
       </section>
 
-      <p className="text-sm text-mutedForeground">Checked {checkedAt(report.generatedAt)}. Not financial advice; Svalin only reads public data and never moves funds.</p>
+      <p className="text-sm text-mutedForeground">
+        Checked {checkedAt(report.generatedAt)}. Svalin only reads public data and never moves funds. This is not financial advice.
+      </p>
     </div>
   );
 }

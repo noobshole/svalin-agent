@@ -70,6 +70,13 @@ describe("usage counts", () => {
     expect(events).toEqual([{ route: "demo/check", outcome: "free", reason: "lookalike", network: "", chain: "near" }]);
   });
 
+  it("counts a free scan once, under its own name, with the check's verdict", async () => {
+    const { app, events } = counted();
+    const scan = await (await app.request("/v1/demo/scan/intent5.near")).json();
+    expect(scan.check.verdict).toBe("block");
+    expect(events).toEqual([{ route: "demo/scan", outcome: "free", reason: "lookalike", network: "", chain: "near" }]);
+  });
+
   it("leaves out the health check, and never lets counting change an answer", async () => {
     const app = createApp(config, {
       usage: {

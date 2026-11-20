@@ -1,4 +1,4 @@
-import type { ChainFamily } from "@svalin-agent/shared";
+import { addressScanSchema, type ChainFamily } from "@svalin-agent/shared";
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/app.js";
@@ -213,6 +213,55 @@ describe("free surface", () => {
     const body = await response.json();
     expect(body).toMatchObject({ code: "token_address", token });
     expect(body.hint).toContain("Liquidity grade C in the Svalin Index: $44,627");
+  });
+
+  it("answers the free scan with the check and the report, for one free call", async () => {
+    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_DAY: "3" }), { clientIp: () => "1.2.3.4" });
+    const response = await limited.request(`/v1/demo/scan/${SOLANA_WALLET}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Free-Remaining")).toBe("2");
+    const scan = addressScanSchema.parse(await response.json());
+    expect(scan.check.recipient).toBe(SOLANA_WALLET);
+    expect(scan.report?.chain).toBe("solana");
+    expect(scan.reportError).toBeNull();
+    // The same answers as the free check and the free risk route, which skip the payer's history.
+    const check = await (await app.request(`/v1/demo/check/${SOLANA_WALLET}`)).json();
+    expect({ verdict: scan.check.verdict, reasons: scan.check.reasons }).toEqual({ verdict: check.verdict, reasons: check.reasons });
+    const alone = await (await app.request(`/v1/demo/risk/${SOLANA_WALLET}`)).json();
+    expect(scan.report?.score).toBe(alone.score);
+  });
+
+  it("still checks an address that has no report, and says why there is none", async () => {
+    const token = { chain: "near" as const, address: "jambo-1679.meme-cooking.near", symbol: "JAMBO", grade: "C" as const, backingUsd: 44627 };
+    class TokenSource extends MockPortfolioSource {
+      async getOverview(): Promise<never> {
+        throw tokenAddressError(token);
+      }
+    }
+    const live = createApp(testConfig(), { portfolioSource: new TokenSource() });
+    const response = await live.request(`/v1/demo/scan/${token.address}`);
+    expect(response.status).toBe(200);
+    const scan = addressScanSchema.parse(await response.json());
+    expect(scan.check.recipient).toBe(token.address);
+    expect(scan.report).toBeNull();
+    expect(scan.reportError).toMatchObject({ status: 422, code: "token_address", token });
+  });
+
+  it("refuses a bad address or query on the free scan before counting a free call", async () => {
+    const limited = createApp(testConfig({ DEMO_REQUESTS_PER_DAY: "1" }), { clientIp: () => "1.2.3.4" });
+    expect((await limited.request("/v1/demo/scan/Not-An-Address")).status).toBe(400);
+    expect((await limited.request(`/v1/demo/scan/${SOLANA_WALLET}?amountUsd=-5`)).status).toBe(400);
+    const response = await limited.request(`/v1/demo/scan/${SOLANA_WALLET}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Free-Remaining")).toBe("0");
+  });
+
+  it("lists the free scan in the manifest, the OpenAPI document and llms.txt", async () => {
+    const manifest = await (await app.request("/")).json();
+    expect(manifest.endpoints.map((endpoint: { path: string }) => endpoint.path)).toContain("/v1/demo/scan/{address}");
+    const spec = await (await app.request("/openapi.json")).json();
+    expect(spec.paths["/v1/demo/scan/{address}"].get["x-payment-info"]).toBeUndefined();
+    expect(await (await app.request("/llms.txt")).text()).toContain("/v1/demo/scan/{address}");
   });
 
   it("rejects EVM addresses, which Svalin no longer serves", async () => {

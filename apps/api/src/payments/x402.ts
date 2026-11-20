@@ -39,6 +39,11 @@ const outputExamples: Record<PaidRouteKey, unknown> = {
     kind: "wallet",
     reasons: [{ code: "lookalike", severity: "block", message: "This address imitates 7xKX…AsU, which this wallet paid recently…" }],
   },
+  scan: {
+    check: { verdict: "allow", kind: "wallet", reasons: [{ code: "established", severity: "info", message: "Nothing unusual. It is 300 days old and has 250 transactions." }] },
+    report: { score: 58, grade: "C", level: "elevated" },
+    reportError: null,
+  },
   exit: {
     contract: "token.v2.ref-finance.near",
     grade: "B",

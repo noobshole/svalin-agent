@@ -4,7 +4,7 @@ import Link from "next/link";
 import { DocPage } from "@/components/doc-page";
 
 export const metadata: Metadata = {
-  title: "Check Before Paying — Svalin docs",
+  title: "Payee check — Svalin docs",
   description: "How Svalin answers allow, caution or block before money moves, how look-alike addresses are caught, and what the free check leaves out.",
 };
 
@@ -21,20 +21,20 @@ export default function CheckDocsPage() {
       ]}
       lede="Before money moves, the check answers allow, caution or block, with reasons."
       path="/docs/check"
-      title="Check Before Paying"
+      title="Payee check"
     >
       <h2 id="answers">The three answers</h2>
       <ul>
         <li>
-          <strong>Block:</strong> the address is not a wallet (a token or a program), the account does not exist, or it imitates an address or name the payer
-          has paid before, or a well-known NEAR account.
+          Block means the address is not a wallet but a token or a program, the account does not exist, or it imitates a well-known NEAR account or an
+          address the payer has paid before.
         </li>
         <li>
-          <strong>Caution:</strong> the address is brand new or barely used, runs a contract, is about to receive a large first payment, or its history could
-          not be read.
+          Caution means the address is brand new or barely used, runs a contract, is about to receive a large first payment, or its history could not be
+          read.
         </li>
         <li>
-          <strong>Allow:</strong> none of the above.
+          Allow means none of these was found.
         </li>
       </ul>
 
@@ -67,7 +67,7 @@ export default function CheckDocsPage() {
 
       <h2 id="try">Try it</h2>
       <p>
-        Free on the <Link href="/check">Check page</Link>, or over the API at <code>GET /v1/check/{"{address}"}</code>. See <Link href="/docs/routes">Routes</Link>.
+        Free on the <Link href="/scan">Scan page</Link>, or over the API at <code>GET /v1/check/{"{address}"}</code>. See <Link href="/docs/routes">Routes</Link>.
       </p>
     </DocPage>
   );

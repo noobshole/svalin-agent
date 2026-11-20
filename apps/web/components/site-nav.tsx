@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils/cn";
 
 const MAIN = [
   { href: "/scan", label: "Scan" },
-  { href: "/check", label: "Check" },
   { href: "/ratings", label: "Index" },
   { href: "/guard", label: "Guard" },
   { href: "/pricing", label: "Pricing" },

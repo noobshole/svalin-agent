@@ -5,9 +5,9 @@ import Link from "next/link";
 import { TokenIndex, gradeTone } from "@/components/token-index";
 
 export const metadata: Metadata = {
-  title: "Svalin Index — is the price real? NEAR tokens, graded",
+  title: "Svalin Index — NEAR tokens graded by the real money behind them",
   description:
-    "Every NEAR token with a Ref Finance price, graded by the real money behind it: how much of a $1,000 sale would be lost to price movement. Rebuilt every few hours.",
+    "Every NEAR token Ref Finance prices, graded by how much a $1,000 sale would lose given the real money in its pools. Rebuilt every few hours.",
 };
 
 const GRADES: TokenGrade[] = ["A", "B", "C", "D", "F"];
@@ -30,14 +30,14 @@ export default function RatingsPage() {
               <span className="dim">Is the</span> price real?
             </h1>
             <p className="lede">
-              A price is just a quote. Svalin grades every NEAR token Ref Finance prices by one question: how much of a $1,000 sale would be lost to price movement, given the real money in
-              its trading pools?
+              A price is just a quote. Svalin grades every NEAR token that Ref Finance prices by how much a $1,000 sale would lose, given the real money in its
+              trading pools.
             </p>
           </>
         }
         story={
           <div className="grid content-start gap-4 lg:col-span-2">
-            <h2 className="title">The $189 million account that wasn’t</h2>
+            <h2 className="title">A $189 million account worth $93,000</h2>
             <p className="max-w-[34em]">
               Someone sent root.near about 3,900 of a nameless token quoted at $48,447 each. Read at face value, the account was worth $189 million. Nothing stood behind that price, so a
               wallet tool that trusts quotes, or an AI agent reading one, sees a fortune. On 8 Nov 2026, Svalin’s pool check put the account at about $93,000.
@@ -66,18 +66,17 @@ export default function RatingsPage() {
               name.
             </p>
             <p>
-              Grades describe how sellable a token is, not whether its project is good, and they are not financial advice. The index is rebuilt every few hours and each edition is kept in
-              the public{" "}
+              A grade says how easily a token can be sold. It says nothing about whether the project is good, and it is not financial advice. The index is rebuilt
+              every few hours and each edition is kept in the public{" "}
               <a className="link" href="https://github.com/noobshole/svalin-index" rel="noreferrer" target="_blank">
                 svalin-index
               </a>{" "}
               repository.
             </p>
             <p>
-              The same check runs inside every Svalin wallet report, so a junk token cannot make a wallet look rich, and a token’s liquidity grade sets how much it adds to the
-              wallet’s portfolio risk.{" "}
+              Every scan uses the same check, so a junk token can’t make a wallet look rich. A token’s grade also sets how much it adds to the wallet’s risk.{" "}
               <Link className="link" href="/scan">
-                Scan a wallet
+                Scan an address
               </Link>
               .
             </p>

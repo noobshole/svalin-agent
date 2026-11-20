@@ -4,7 +4,7 @@ import Link from "next/link";
 import { DocPage } from "@/components/doc-page";
 
 export const metadata: Metadata = {
-  title: "Wallet Scan — Svalin docs",
+  title: "Risk report — Svalin docs",
   description: "How Svalin grades a Solana wallet or NEAR account from A to F: what the score measures and what a grade does not say.",
 };
 
@@ -19,9 +19,9 @@ export default function WalletScanPage() {
         ["limits", "What a grade does not say"],
         ["try", "Try it"],
       ]}
-      lede="A risk grade for any Solana wallet or NEAR account, from how its money is spread."
+      lede="A grade from A to F for the money a Solana wallet or NEAR account holds, based on how it is spread."
       path="/docs/wallet-scan"
-      title="Wallet Scan"
+      title="Risk report"
     >
       <h2 id="get">What you get</h2>
       <p>Svalin returns a priced portfolio and a risk report: a score from 0, the safest, to 100, a grade from A to F, and findings with next steps.</p>
@@ -101,11 +101,11 @@ export default function WalletScanPage() {
       <ul>
         <li>It measures how holdings are spread, not whether the owner can be trusted.</li>
         <li>
-          It is not a token’s grade. The <Link href="/docs/svalin-index">Svalin Index</Link> grades how sellable one token is; a wallet full of B-grade tokens
+          It is not a token’s grade. The <Link href="/docs/svalin-index">Svalin Index</Link> grades how sellable one token is, and a wallet full of B-grade tokens
           can still carry high risk if one of them is 80% of it.
         </li>
         <li>Positions inside DeFi protocols are seen only if they are held as tokens with a price.</li>
-        <li>Solana prices are used as the data provider quotes them; the check of real pool money covers NEAR only for now.</li>
+        <li>Solana prices are used as the data provider quotes them. The check of real pool money covers NEAR only for now.</li>
       </ul>
 
       <h2 id="try">Try it</h2>

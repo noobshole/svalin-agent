@@ -182,7 +182,7 @@ function LoudestClaim({ rows }: { rows: RatedTokenRow[] }) {
           <dd className="text-lg">none</dd>
         </div>
       </dl>
-      <p className="text-sm text-mutedForeground">Quoted at {formatPrice(claim[2])} per token. Grade F: nobody can sell it at that price.</p>
+      <p className="text-sm text-mutedForeground">Quoted at {formatPrice(claim[2])} per token. Graded F, because nobody can sell it at that price.</p>
     </div>
   );
 }
@@ -335,11 +335,11 @@ function ExitPanel({ row, note, edition }: { row: RatedTokenRow; note: TokenNote
     <div className="grid gap-5 border-t border-border pb-8 pt-4">
       <p className="max-w-[50em] text-sm text-mutedForeground">
         Liquidity grade <span className={gradeTone[grade]}>{grade}</span> in the edition of {editionTime(edition.generatedAt)} UTC (<span className="font-mono text-xs">{edition.methodology}</span>). It measures how much a sale
-        would lose, not whether the project is good.
+        would lose. It says nothing about the project.
       </p>
       {note?.selfDeclaredTest ? (
         <p className="max-w-[50em] text-sm text-riskMedium">
-          Its own on-chain name{note.name ? <> is “{note.name}”</> : " says it is a test"}. Test tokens often trade under a real project’s ticker; check the contract address.
+          Its own on-chain name{note.name ? <> is “{note.name}”</> : " says it is a test"}. Test tokens often trade under a real project’s ticker, so check the contract address.
         </p>
       ) : null}
       <dl className="border-b border-border lg:hidden">

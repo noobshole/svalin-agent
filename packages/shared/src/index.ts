@@ -3,5 +3,6 @@ export * from "./check.js";
 export * from "./pass.js";
 export * from "./portfolio.js";
 export * from "./risk.js";
+export * from "./scan.js";
 export * from "./service.js";
 export * from "./token-index.js";

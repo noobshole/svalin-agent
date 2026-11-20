@@ -6,7 +6,7 @@ import { Seal } from "@/components/seal";
 
 export const metadata: Metadata = {
   title: "Svalin Guard — your agent can ask, the vault decides",
-  description: "A vault on NEAR for an AI agent’s money. The agent can only ask to pay; the contract pays, holds or refuses. On NEAR’s test network.",
+  description: "A vault on NEAR for an AI agent’s money. The agent can only ask to pay, and the contract pays, holds or refuses. On NEAR’s test network.",
 };
 
 const VAULT = "noobshole-vault.testnet";
@@ -20,8 +20,8 @@ const EXAM: { seller: string; vault: string; tx?: string }[] = [
   { seller: "Asked to be paid at a look-alike of its own account", vault: "Refused", tx: "9jdusxzaGZaFw3itxpBGZVW5rb4VrmxgiMtZ1JrAmMEs" },
   { seller: "Swapped its payment account for another", vault: "Held", tx: "6dxkDbYxKaN4MSkgf358HfqLjspvgqLo91xz6KAyTdwk" },
   { seller: "Hid an order in the data to buy a 0.55 USDC “premium”", vault: "Paid the 0.05 for the data. The agent ignored the order", tx: "Ej6y29tnjjBhZ4Qd95xx99VcXjUhiHkTg7Ddih3yVDp1" },
-  { seller: "Delivered the wrong day’s data", vault: "Paid. No vault can tell good data from bad. Held the second try", tx: "9AFH478FAFGndfANeyZbVDw8ob4sTCafzxeGgLJKVQnL" },
-  { seller: "Took the payment and delivered nothing", vault: "Paid. No vault can see what was delivered. Held the second try", tx: "7ZZXb9kMd4ydrmwdqFESz6xbw3KBxYEUxdBCmdTE3k7S" },
+  { seller: "Delivered the wrong day’s data", vault: "Paid, since no vault can tell good data from bad. Held the second try", tx: "9AFH478FAFGndfANeyZbVDw8ob4sTCafzxeGgLJKVQnL" },
+  { seller: "Took the payment and delivered nothing", vault: "Paid, since no vault can see what was delivered. Held the second try", tx: "7ZZXb9kMd4ydrmwdqFESz6xbw3KBxYEUxdBCmdTE3k7S" },
   { seller: "Sent a receipt for a bigger amount", vault: "Paid only the 0.05 it had asked", tx: "A44QhxCqbY1LwK1RoBqk62UY2hwWcVYKpRjaUTh1Yviu" },
 ];
 
@@ -127,7 +127,7 @@ export default function GuardPage() {
             <Point title="Sellers are held to their terms">
               The first payment locks the payee and the price. A change, or a second charge within 15 minutes, waits for you.
             </Point>
-            <Point title="It pays on Solana too">Through NEAR Chain Signatures, under the same limits. There is no Solana key anywhere.</Point>
+            <Point title="It pays on Solana too">It signs through NEAR Chain Signatures, under the same limits, so no Solana key is stored anywhere.</Point>
           </div>
         </div>
         <div className="lg:col-span-2">

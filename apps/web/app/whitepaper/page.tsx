@@ -6,7 +6,7 @@ import { DocPage, Status } from "@/components/doc-page";
 export const metadata: Metadata = {
   title: "Whitepaper — Svalin",
   description:
-    "Svalin: verifiable risk ratings, a check before paying, and on-chain guardrails for agent money on NEAR and Solana.",
+    "How Svalin rates tokens, wallets and payments for AI agents on NEAR and Solana, puts grades on-chain, and lets a contract enforce an owner’s spending rules.",
 };
 
 const contents: [string, string][] = [
@@ -28,17 +28,17 @@ export default function WhitepaperPage() {
     <DocPage
       contents={contents}
       path="/whitepaper"
-      lede="A read-only service that tells AI agents what is real before they spend, a check before every payment, and a guard contract that makes the chain enforce it."
+      lede="How Svalin rates tokens, wallets and payments for AI agents, puts those grades on-chain, and lets a contract enforce an owner’s spending rules."
       note="Public edition, November 2026"
       title={
         <>
-          Verifiable risk ratings and <span className="whitespace-nowrap">on-chain</span> guardrails for agent money
+          Risk ratings and <span className="whitespace-nowrap">on-chain</span> spending rules for AI agents
         </>
       }
     >
       <h2 id="summary">Summary</h2>
       <p>
-        AI agents now hold and spend money. They can be talked into bad decisions, and the data they read can be fake: a token can carry a price with
+        AI agents now hold and spend money. They can be talked into bad decisions, and the data they read can be fake. A token can carry a price with
         no money behind it, and an address can be planted to look like one the agent has paid before.
       </p>
       <p>
@@ -53,7 +53,7 @@ export default function WhitepaperPage() {
       <h3>Agents can be talked into things</h3>
       <p>
         In May 2026 a hidden instruction made an AI agent linked to Grok and Bankr transfer tokens reported at $150,000 to $204,000. No key and no
-        contract was compromised; the model simply followed an instruction it should have refused. This is prompt injection, and it works on any agent
+        contract was compromised. The model followed an instruction it should have refused. This is prompt injection, and it works on any agent
         that reads the open web.
       </p>
       <h3>A quoted price is only a quote</h3>
@@ -68,7 +68,7 @@ export default function WhitepaperPage() {
         the victim copies the wrong one from their history. One victim lost about $50 million in USDT this way in December 2025. Agents that reuse
         recent addresses are an easy target.
       </p>
-      <h3>Advice an agent can skip is not a safeguard</h3>
+      <h3>An agent can skip a check</h3>
       <p>
         Scanners help only when the agent asks and obeys. An agent manipulated into a bad payment can also be manipulated into skipping the check.
         Limits that matter have to live outside the agent, in code it cannot change.
@@ -76,21 +76,11 @@ export default function WhitepaperPage() {
 
       <h2 id="principles">2. Design principles</h2>
       <ul>
-        <li>
-          <strong>Read-only core.</strong> The rating service has no code path that signs for, approves or moves the funds of a wallet it analyses.
-        </li>
-        <li>
-          <strong>Deterministic.</strong> The same inputs always give the same output. No language model computes a number.
-        </li>
-        <li>
-          <strong>Verifiable.</strong> Index editions archive their inputs and fingerprints, so anyone can recompute every grade.
-        </li>
-        <li>
-          <strong>Enforced, not advised.</strong> Where it matters, rules are checked by a contract the agent cannot bypass.
-        </li>
-        <li>
-          <strong>Never charged for errors.</strong> Bad input is rejected before payment, and failed calls are never settled.
-        </li>
+        <li>The rating service has no code that signs for, approves or moves the funds of a wallet it checks.</li>
+        <li>The same inputs always give the same output. No language model computes a number.</li>
+        <li>Index editions keep their inputs and fingerprints, so anyone can recompute every grade.</li>
+        <li>Where it matters, a contract the agent cannot bypass checks the rules.</li>
+        <li>Bad input is refused before payment, and a call that fails is never settled.</li>
       </ul>
 
       <h2 id="overview">3. How Svalin fits together</h2>
@@ -110,14 +100,14 @@ export default function WhitepaperPage() {
         ))}
       </div>
       <p>
-        In everyday terms: the Ratings are a food-safety inspector that grades every token. The Registry is the grade sticker in the window, readable
+        In everyday terms, the Ratings are a food-safety inspector that grades every token. The Registry is the grade sticker in the window, readable
         by anyone. The Guard is a company card with rules: the employee, here the agent, can only spend through it, and it declines F-rated places,
         purchases over the limit and payments to strangers.
       </p>
 
       <h2 id="ratings">4. Svalin Ratings</h2>
       <h3>
-        Wallet risk reports
+        Risk reports
         <Status kind="live" />
       </h3>
       <p>
@@ -132,29 +122,29 @@ export default function WhitepaperPage() {
       </p>
 
       <h3>
-        Check Before Paying
+        The payee check
         <Status kind="live" />
       </h3>
       <p>
         Before money moves, the check answers <strong>allow</strong>, <strong>caution</strong> or <strong>block</strong>, with reasons. It is
-        deterministic: data sources gather the signals, and one function judges them.
+        deterministic. Data sources gather the signals, and one function judges them.
       </p>
       <ul>
         <li>
-          <strong>Block:</strong> the address is not a wallet (a token or a program), the account does not exist, or it imitates an address or
-          name the payer has paid before, or a well-known NEAR account.
+          Block means the address is not a wallet but a token or a program, the account does not exist, or it imitates a well-known NEAR
+          account or an address the payer has paid before.
         </li>
         <li>
-          <strong>Caution:</strong> the address is brand new or barely used, runs a contract, is about to receive a large first payment, or its
-          history could not be read.
+          Caution means the address is brand new or barely used, runs a contract, is about to receive a large first payment, or its history
+          could not be read.
         </li>
         <li>
-          <strong>Allow:</strong> none of the above.
+          Allow means none of these was found.
         </li>
       </ul>
       <p>
         If the payer’s history cannot be read, the check says so and cautions instead of guessing, because a gap could hide the very payment a
-        look-alike imitates. <Link href="/check">Try the free check.</Link>
+        look-alike imitates. <Link href="/scan">Try a free scan.</Link>
       </p>
 
       <h3>
@@ -163,8 +153,8 @@ export default function WhitepaperPage() {
       </h3>
       <p>
         The Index grades every NEAR token that Ref Finance prices by its <strong>real backing</strong>: the money its trading pools hold in tokens
-        Svalin trusts, such as NEAR and USDC. A sale can never take out more than that. The grade answers one question: how much of a $1,000 sale
-        would be lost to price movement?
+        Svalin trusts, such as NEAR and USDC. A sale can never take out more than that. The grade says how much a $1,000 sale would lose
+        to price movement.
       </p>
       <div className="table-wrap">
         <table className="keep">
@@ -191,9 +181,9 @@ export default function WhitepaperPage() {
         </table>
       </div>
       <p>
-        Only trusted money counts, so pools where fake tokens trade against each other add nothing: fake tokens and freshly seeded pools were part of
+        Only trusted money counts, so pools where fake tokens trade against each other add nothing. Fake tokens and freshly seeded pools were part of
         the April 2026 Rhea Finance exploit. New money also has to stay put before it counts, so a pool added this morning cannot lift a grade today.
-        Grades describe how sellable a token is, not whether its project is good. <Link href="/ratings">See the live Index.</Link>
+        A grade says how easily a token can be sold. It says nothing about whether the project is good. <Link href="/ratings">See the live Index.</Link>
       </p>
       <p>
         Every token also has <strong>exit prices</strong>: what selling $1K, $10K or $100K of it would actually fetch, how much can be sold close
@@ -209,7 +199,7 @@ export default function WhitepaperPage() {
       <p>
         The Index is rebuilt every few hours by a public workflow. Each edition keeps the exact data it was computed from and a fingerprint of it, and
         once a day an edition is sealed and never rewritten, so anyone can check that a grade was not changed after the fact. Each edition also
-        records how earlier grades moved since, building a public track record.
+        records how earlier grades have moved since, so there is a public track record.
       </p>
 
       <h3>
@@ -231,20 +221,20 @@ export default function WhitepaperPage() {
       </p>
       <ul>
         <li>
-          <strong>What it stores:</strong> one Merkle root per edition, added in date order and never replaced.
+          It stores one Merkle root per edition, added in date order and never replaced.
         </li>
         <li>
-          <strong>Who can write:</strong> only Svalin’s publishing key, a NEAR key that can publish and do nothing else, so even if it leaked it could
-          not move money.
+          Only Svalin’s publishing key can write to it. That NEAR key can publish and do nothing else, so even a leaked copy could not move
+          money.
         </li>
         <li>
-          <strong>A challenge window:</strong> a new edition can be used only after a wait, so a wrong root can be retracted before anyone relies on it.
+          A new edition can be used only after a wait, so a wrong root can be retracted before anyone relies on it.
         </li>
         <li>
-          <strong>How to check it:</strong> anyone can rebuild a root from the sealed files and compare.
+          Anyone can rebuild a root from the sealed files and compare.
         </li>
         <li>
-          <strong>Reading is free:</strong> any contract or agent can verify a token’s grade.
+          Reading is free, so any contract or agent can verify a token’s grade.
         </li>
       </ul>
 
@@ -261,14 +251,14 @@ export default function WhitepaperPage() {
       <h3>Roles and keys</h3>
       <ul>
         <li>
-          <strong>Owner:</strong> approves held requests and freezes the Guard at once. Looser rules and every withdrawal wait, so a stolen key cannot empty it in one go.
+          The owner approves held requests and can freeze the Guard at once. Looser rules and every withdrawal wait, so a stolen key cannot empty it in one go.
         </li>
         <li>
-          <strong>Spender:</strong> holds a NEAR function-call key limited to the Guard’s buy and pay methods. It cannot attach funds, call
-          other contracts, add keys or start a withdrawal. Its power is to ask.
+          The spender holds a NEAR function-call key limited to the Guard’s buy and pay methods. It cannot attach funds, call
+          other contracts, add keys or start a withdrawal. All it can do is ask.
         </li>
         <li>
-          <strong>Svalin:</strong> publishes grades to the Registry. It has no key to any Guard and no say over any owner’s funds.
+          Svalin publishes grades to the Registry. It has no key to any Guard and no say over any owner’s funds.
         </li>
       </ul>
       <h3>Rules an owner can set</h3>
@@ -278,9 +268,9 @@ export default function WhitepaperPage() {
         <li>A guardian, who can freeze the Guard and must also approve payments above the limits.</li>
       </ul>
       <p>
-        The Guard is a general engine: one owner, one limited spender, rules the chain enforces. AI agents come first because they act fastest and are
-        easiest to trick, but the same contract suits a trading bot, a team member paying contributors, or a person’s own wallet in a safe mode.
-        It is not custody by Svalin and not a full wallet, and budgets should stay small.
+        The Guard works for more than AI agents. It has one owner, one limited spender and rules the chain enforces. Agents come first because they act
+        fastest and are easiest to trick, but the same contract suits a trading bot, a team member paying contributors, or a person’s own wallet in a
+        safe mode. Svalin does not hold the money, the Guard is not a full wallet, and budgets should stay small.
       </p>
 
       <h2 id="chains">7. NEAR and Solana</h2>
@@ -296,7 +286,7 @@ export default function WhitepaperPage() {
           </thead>
           <tbody>
             <tr>
-              <td>Wallet reports and the check</td>
+              <td>Scans (payee check and risk report)</td>
               <td data-label="NEAR">Live</td>
               <td data-label="Solana">Live</td>
             </tr>
@@ -325,11 +315,11 @@ export default function WhitepaperPage() {
       </div>
       <p>
         NEAR Chain Signatures let a NEAR contract sign for other chains, including Solana. A Guard on NEAR is already the only signer for its own Solana
-        address on devnet: the rules live on NEAR, and the money can sit on Solana.
+        address on devnet. The rules live on NEAR, and the money can sit on Solana.
       </p>
 
       <h2 id="security">8. Security model</h2>
-      <p>Rows about the Guard and the Registry describe what runs on NEAR’s test network; the rest is how Svalin works today.</p>
+      <p>Rows about the Guard and the Registry describe what runs on NEAR’s test network. The rest is how Svalin works today.</p>
       <div className="table-wrap">
         <table>
           <thead>
@@ -341,7 +331,7 @@ export default function WhitepaperPage() {
           <tbody>
             <tr>
               <td>The agent is tricked by a prompt</td>
-              <td>Its key can only ask the Guard. Caps bound the loss; junk tokens and unknown recipients are refused.</td>
+              <td>Its key can only ask the Guard. Caps limit the loss, and junk tokens and unknown recipients are refused.</td>
             </tr>
             <tr>
               <td>The agent’s key is stolen</td>
@@ -378,8 +368,8 @@ export default function WhitepaperPage() {
       <h2 id="limits">9. Limitations</h2>
       <ul>
         <li>Grades measure sellability, not quality, and are not investment advice.</li>
-        <li>Solana prices are used as the data provider quotes them; the pool check covers NEAR only for now.</li>
-        <li>The recipient check sees recent history only, and there is no NEAR scam list yet.</li>
+        <li>Solana prices are used as the data provider quotes them. The pool check covers NEAR only for now.</li>
+        <li>The payee check sees recent history only, and there is no NEAR scam list yet.</li>
         <li>
           Exit value and exit prices cover NEAR for now and count only NEAR pools, so a token that also trades elsewhere could fetch more. Exit value
           assumes each position is sold on its own.

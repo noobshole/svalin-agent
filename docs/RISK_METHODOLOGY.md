@@ -223,8 +223,9 @@ look-alike imitates. Age and activity come from FastNEAR on NEAR (age is the acc
 successful receipt) and from up to 1,000 signatures on Solana (more than that counts as
 established).
 
-The free demo (`/v1/demo/check/{address}`) does not read the payer's history, the costly part of a
-check, so it does not catch look-alikes and says so in its reasons. The paid check does.
+The free demo (`/v1/demo/check/{address}`, and the free scan `/v1/demo/scan/{address}`) does not
+read the payer's history, the costly part of a check, so it does not catch look-alikes and says so
+in its reasons. The paid check does.
 
 ## Known limitations
 

@@ -111,7 +111,7 @@ describe("risk engine", () => {
     expect(report.metrics.largestVolatilePosition).toEqual({ symbol: "SOL (incl. staked)", pct: 80 });
     const concentration = report.findings.find((finding) => finding.kind === "concentration");
     expect(concentration?.severity).toBe("high");
-    expect(concentration?.action).toContain("Consider capping SOL exposure");
+    expect(concentration?.action).toContain("Consider keeping SOL near");
   });
 
   it("does not flag concentration in stablecoins", () => {
