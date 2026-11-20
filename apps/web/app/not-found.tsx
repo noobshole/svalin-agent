@@ -23,7 +23,7 @@ export default function NotFound() {
             .
           </p>
         </div>
-        <div className="w-full max-w-[min(100%,58vh)] lg:col-span-2 lg:justify-self-end">
+        <div className="w-full max-w-[min(100%,58vh)] lg:col-span-2 lg:justify-self-center">
           <Seal address="404" tone="soft" />
         </div>
       </div>
