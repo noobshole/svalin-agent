@@ -203,7 +203,6 @@ export function createSvalinMcpServer(client: SvalinClient) {
         "Call before paying ANY x402 service. Asks the URL for its price without paying, then answers allow, caution or block: a payee or price that changed since this service was first seen, a token that is not USDC, a price above what you expected, a payment for a different site, a redirect, and Svalin's check of the payee on Solana or NEAR (paid per call when this server has a wallet, otherwise the free trial). It never pays or signs.",
       inputSchema: {
         url: z
-          .string()
           .url()
           .refine((value) => value.startsWith("https://"), "Expected an https:// URL")
           .describe("The x402 URL you are about to pay for"),

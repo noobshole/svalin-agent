@@ -92,7 +92,7 @@ export const riskReportSchema = z.object({
   dataCoverage: z.number().int().min(0).max(100),
   dataSource: dataSourceSchema,
   methodologyVersion: z.string(),
-  generatedAt: z.string().datetime(),
+  generatedAt: z.iso.datetime(),
   /** Present on a free report whose next steps are left out, with how to get them. */
   locked: z.object({ nextSteps: z.literal(true), unlock: z.string().min(1) }).optional(),
 });
@@ -105,7 +105,7 @@ export const briefSchema = z.object({
   /** "template" or "llm:<model-id>" — who wrote the prose. Numbers always come from the engine. */
   narrator: z.string().min(1),
   risk: riskReportSchema,
-  generatedAt: z.string().datetime(),
+  generatedAt: z.iso.datetime(),
 });
 
 export type RiskSeverity = z.infer<typeof riskSeveritySchema>;

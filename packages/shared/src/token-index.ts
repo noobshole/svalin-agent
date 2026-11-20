@@ -75,7 +75,7 @@ const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
  * responses (archived beside the edition, identified by SHA-256) and the Svalin code commit.
  */
 export const indexProvenanceSchema = z.object({
-  code: z.object({ repository: z.string().url(), commit: z.string() }),
+  code: z.object({ repository: z.url(), commit: z.string() }),
   inputs: z.object({ pricesSha256: sha256Schema, poolsSha256: sha256Schema }),
 });
 
@@ -94,7 +94,7 @@ export const tokenNoteSchema = z.object({
 
 /** The published index file. Rows instead of objects keep it small enough for a browser. */
 export const nearTokenIndexSchema = z.object({
-  generatedAt: z.string().datetime(),
+  generatedAt: z.iso.datetime(),
   methodology: z.string(),
   counts: z.object({ A: z.number().int(), B: z.number().int(), C: z.number().int(), D: z.number().int(), F: z.number().int() }),
   provenance: indexProvenanceSchema.optional(),
@@ -110,7 +110,7 @@ export const nearTokenIndexSchema = z.object({
 const editionFileSchema = z.object({ path: z.string(), sha256: sha256Schema });
 
 export const indexEditionSchema = z.object({
-  generatedAt: z.string().datetime(),
+  generatedAt: z.iso.datetime(),
   methodology: z.string(),
   code: indexProvenanceSchema.shape.code,
   files: z.object({
@@ -136,9 +136,10 @@ export const gradeMigrationSchema = z.object({
   days: z.number().int().positive(),
   /** The sealed edition the window starts from (editions/<day> in the svalin-index repository). */
   sealedDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  from: z.string().datetime(),
+  from: z.iso.datetime(),
   tokens: z.number().int().nonnegative(),
-  matrix: z.record(tokenGradeSchema, z.record(migrationTargetSchema, z.number().int().nonnegative())),
+  // Partial: Zod 4's z.record would require every grade and target to be present.
+  matrix: z.partialRecord(tokenGradeSchema, z.partialRecord(migrationTargetSchema, z.number().int().nonnegative())),
   upgraded: z.number().int().nonnegative(),
   downgraded: z.number().int().nonnegative(),
   unchanged: z.number().int().nonnegative(),
@@ -149,7 +150,7 @@ export const gradeMigrationSchema = z.object({
 
 /** Published beside each edition. Windows appear once there are sealed editions old enough. */
 export const trackRecordSchema = z.object({
-  generatedAt: z.string().datetime(),
+  generatedAt: z.iso.datetime(),
   methodology: z.string(),
   windows: z.array(gradeMigrationSchema),
 });

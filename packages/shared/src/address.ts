@@ -34,13 +34,13 @@ export const chainFamilySchema = z.enum(["solana", "near"]);
 export const supportedChainKeySchema = z.enum(["solana", "near"]);
 
 export const solanaAddressSchema = z.string().regex(SOLANA_ADDRESS, "Invalid Solana address");
-export const nearAccountIdSchema = z.string().refine(isNearAccountId, { message: "Invalid NEAR account ID" });
+export const nearAccountIdSchema = z.string().refine(isNearAccountId, { error: "Invalid NEAR account ID" });
 
 /** Any wallet address Svalin understands (Solana base58 or a NEAR account ID). */
 export const walletAddressSchema = z
   .string()
   .refine((value) => detectAddressFamily(value) !== null, {
-    message: "Expected a Solana (base58) address or a NEAR account ID",
+    error: "Expected a Solana (base58) address or a NEAR account ID",
   });
 
 /** Token / mint address on any supported chain (NEAR token contracts are account IDs). */

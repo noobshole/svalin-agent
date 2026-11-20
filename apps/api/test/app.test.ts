@@ -1,5 +1,6 @@
 import { addressScanSchema, type ChainFamily } from "@svalin-agent/shared";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { createApp } from "../src/app.js";
 import { MAX_ROUTE_DESCRIPTION_LENGTH, paidRoutes, paymentNetworks, type PaidRouteKey } from "../src/catalog.js";
@@ -287,6 +288,10 @@ describe("startup guards", () => {
   it("needs both CDP keys or neither", () => {
     expect(() => testConfig({ CDP_API_KEY_ID: "key-id" })).toThrow(/CDP_API_KEY/);
     expect(() => testConfig({ CDP_API_KEY_SECRET: "secret" })).toThrow(/CDP_API_KEY/);
+  });
+
+  it("keeps Zod from generating code at runtime, which Workers and the website's CSP forbid", () => {
+    expect(z.config().jitless).toBe(true);
   });
 });
 
