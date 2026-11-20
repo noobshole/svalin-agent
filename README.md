@@ -114,7 +114,7 @@ Each step needs no account and no key.
 6. **The tests pass.**
 
    ```bash
-   pnpm install && pnpm build && pnpm test    # 218 API tests and 36 MCP tests
+   pnpm install && pnpm build && pnpm test    # 220 API tests and 36 MCP tests
    cd guard && cargo test                     # 201 tests: the vault, the registry, the check program
    ```
 
