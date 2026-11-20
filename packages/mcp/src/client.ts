@@ -79,8 +79,6 @@ export async function createSvalinClient(config: McpConfig, probe: typeof fetch 
   client.setSpendControls({ maxAmountPerPayment: `$${config.SVALIN_MAX_PRICE_USD}` });
   const asOption = ({ network, asset, amount, payTo }: PaymentRequirements): PaymentOption => ({ network, asset, amount: BigInt(amount), payTo });
   client.onBeforePaymentCreation(async ({ paymentRequired, selectedRequirements }) => {
-    const reason = budget.check(BigInt(selectedRequirements.amount));
-    if (reason) return { abort: true as const, reason };
     // The same guard as svalin_check_x402_payment, on this server's own payments to Svalin.
     const option = asOption(selectedRequirements);
     const blocked = judgePayment({
@@ -90,10 +88,16 @@ export async function createSvalinClient(config: McpConfig, probe: typeof fetch 
       pin: memory.get(service, option.network),
       memoryFile: memory.file,
     }).filter((entry) => entry.severity === "block");
-    return blocked.length > 0 ? { abort: true as const, reason: blocked.map((entry) => entry.message).join(" ") } : undefined;
+    if (blocked.length > 0) return { abort: true as const, reason: blocked.map((entry) => entry.message).join(" ") };
+    // Set aside before the payment is made, in the same step as the check: calls made at the same
+    // time cannot all fit under the cap before any of them counts.
+    const reason = budget.reserve(option.amount);
+    return reason ? { abort: true as const, reason } : undefined;
+  });
+  client.onPaymentCreationFailure(async ({ selectedRequirements }) => {
+    budget.release(BigInt(selectedRequirements.amount));
   });
   client.onAfterPaymentCreation(async ({ selectedRequirements }) => {
-    budget.commit(BigInt(selectedRequirements.amount));
     memory.remember(service, asOption(selectedRequirements));
   });
 

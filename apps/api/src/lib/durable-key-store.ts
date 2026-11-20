@@ -13,6 +13,7 @@ const METHODS = new Set<Method>([
   "issue",
   "extend",
   "claim",
+  "settled",
   "reserveNear",
   "pending",
   "claimNear",
@@ -56,6 +57,7 @@ export class DurableKeyStore implements KeyStore {
   issue: KeyStore["issue"] = (...args) => this.call("issue", args);
   extend: KeyStore["extend"] = (...args) => this.call("extend", args);
   claim: KeyStore["claim"] = (...args) => this.call("claim", args);
+  settled: KeyStore["settled"] = (...args) => this.call("settled", args);
   reserveNear: KeyStore["reserveNear"] = (...args) => this.call("reserveNear", args);
   pending: KeyStore["pending"] = (...args) => this.call("pending", args);
   claimNear: KeyStore["claimNear"] = (...args) => this.call("claimNear", args);

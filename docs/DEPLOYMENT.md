@@ -78,6 +78,23 @@ How Workers differ from a container host:
   is off: its schema check generates code at runtime, which Workers forbid.
 - The `"svalin_api_started"` log line appears on the first request after each deploy, in the
   Worker's **Logs** tab.
+- Usage counts go to Workers Analytics Engine (binding `USAGE`, dataset `svalin_usage`, made on
+  the first write). Each request is one data point: the route's name, how it ended (`paid_x402`,
+  `paid_key`, `free`, `payment_required`, `refused`, `error`), the error code or the recipient
+  check's verdict (`lookalike` when it caught one), the network a payment settled on, and the
+  chain of the address. Never the address, an IP, a key or the request. Writing never holds up or
+  fails a request; Workers Free takes 100,000 a day, and Cloudflare keeps them for three months.
+  To read them, make an API token with **Account Analytics: Read** (My Profile → API Tokens) and
+  ask the SQL API:
+
+  ```bash
+  curl "https://api.cloudflare.com/client/v4/accounts/<account id>/analytics_engine/sql" \
+    -H "Authorization: Bearer <token>" \
+    --data "SELECT toStartOfInterval(timestamp, INTERVAL '1' DAY) AS day, blob1 AS route, blob2 AS outcome,
+            blob3 AS reason, SUM(_sample_interval) AS calls FROM svalin_usage
+            WHERE timestamp > NOW() - INTERVAL '7' DAY
+            GROUP BY day, route, outcome, reason ORDER BY day, route"
+  ```
 
 **On Render:** Dashboard → **New** → **Blueprint** → choose this repository. `render.yaml` sets up
 the Docker build, the health check, a single instance, testnet payments and a generated
@@ -212,7 +229,10 @@ waits for its mainnet key.
       `LOCK_FREE_NEXT_STEPS=true`: the free scan's next steps then need Pro or a paid call.
 - [ ] Update `SVALIN_PAYEES` in `.github/workflows/monitor.yml` to the mainnet receiving accounts.
       The hourly Monitor workflow fails, and GitHub emails you, if a paid route ever names a payee
-      outside that list, the Index goes stale, or the website's security headers or scripts change.
+      outside that list, the Index goes stale, the website's security headers or scripts change, or
+      an edition on the ratings registry is not the one the Index robot sealed (retract it at once).
+      For a mainnet registry, also set `SVALIN_RATINGS_REGISTRY` and `SVALIN_NEAR_RPC` there, and
+      give the registry a challenge window of 6 hours or more.
 - [ ] With CDP keys set, run CDP's free validation check on `https://<api>/v1/risk/<address>` and
       fix any "required" failure. The x402 Bazaar lists endpoints after a settlement through the
       CDP facilitator and drops them after 30 days without one.

@@ -10,13 +10,14 @@ import {
   newSvalinKey,
   proPlanSchema,
   proReference,
+  type KeyPlan,
   type NearCheckout,
   type PortfolioOverview,
   type ProOffer,
   type ProPlan,
   type RiskReport,
 } from "@svalin-agent/shared";
-import { decodePaymentSignatureHeader } from "@x402/core/http";
+import { decodePaymentResponseHeader, decodePaymentSignatureHeader } from "@x402/core/http";
 import type { FacilitatorClient } from "@x402/core/server";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
@@ -40,6 +41,7 @@ import {
 } from "./lib/key-store.js";
 import { DemoRateLimiter, HourlyCounter, type DemoLimiter } from "./lib/rate-limit.js";
 import { TtlCache } from "./lib/ttl-cache.js";
+import { chainOf, noUsage, routeNamer, type UsageEvent, type UsageOutcome, type UsageRecorder } from "./lib/usage.js";
 import { AnthropicNarrator, TemplateNarrator, type Narrator } from "./narrate/narrator.js";
 import { LogLedger, SupabaseLedger, type PaymentLedger } from "./payments/ledger.js";
 import {
@@ -82,6 +84,8 @@ export type AppDependencies = {
   keyStore?: KeyStore;
   /** Looks up Pro payments on-chain; tests inject their own. */
   proPayments?: ProPaymentFinder;
+  /** Counts of requests per route and outcome (Cloudflare Workers use Analytics Engine); none by default. */
+  usage?: UsageRecorder;
 };
 
 /**
@@ -94,7 +98,11 @@ export type ProPaymentFinder = {
   near(offer: NonNullable<ProOffer["near"]>, since: number, unread: UnreadFilter): Promise<FoundPayment[]>;
 };
 
-type Variables = { paidByKey?: boolean };
+/**
+ * Set while a request runs: who paid, what the usage count needs to know about the answer, and
+ * `issuedPass`, the id of a pass this request made, named once its payment settles.
+ */
+type Variables = { paidByKey?: boolean; errorCode?: string; checkVerdict?: string; issuedPass?: string };
 
 /** Lookups of Pro payments per caller per hour (a checkout polls every 10 s), and for everyone per day. */
 const PRO_LOOKUPS_PER_HOUR = 120;
@@ -112,6 +120,22 @@ const DEMO_PREFIXES = ["/v1/demo/risk/", "/v1/demo/check/", "/v1/demo/exit/", "/
 const CHECK_PREFIXES = ["/v1/check/", "/v1/demo/check/"];
 const EXIT_PREFIXES = ["/v1/exit/", "/v1/demo/exit/"];
 const PROOF_PREFIXES = ["/v1/proof/", "/v1/demo/proof/"];
+/** Reasons that make a recipient check a caught look-alike. */
+const LOOKALIKE_REASONS = new Set(["lookalike", "imitates-known"]);
+const nameRoute = routeNamer(
+  [...PAID_PREFIXES, ...DEMO_PREFIXES],
+  [
+    "/",
+    "/openapi.json",
+    "/llms.txt",
+    "/v1/index/near-tokens",
+    "/v1/keys/me",
+    ...Object.keys(keyPlans).map((plan) => `/v1/keys/${plan}`),
+    "/v1/pro",
+    "/v1/pro/near",
+    "/v1/pro/activate",
+  ],
+);
 
 export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   const indexFeed = deps.indexFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexUrl);
@@ -157,6 +181,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   const getOverview = (address: string) => cache.getOrCompute(address, () => source.getOverview(address));
 
   const keyStore = deps.keyStore ?? new KeyStoreCore(new MemoryStorage());
+  const usage = deps.usage ?? noUsage;
   // This isolate's memory of refusals, so a caller who keeps asking does not keep reaching the store.
   const throttled = new HourlyCounter();
   const refusedKeys = new HourlyCounter();
@@ -205,11 +230,28 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     );
   });
 
+  // Counts only, once the answer is final (lib/usage.ts): never an address, an IP or a key.
+  app.use("*", async (c, next) => {
+    await next();
+    if (c.req.path === "/health" || c.req.method === "OPTIONS") return;
+    try {
+      usage.record(usageEvent(c));
+    } catch {
+      // Counting never changes an answer.
+    }
+  });
+
   // Validate the address BEFORE the paywall, so nobody is asked to pay for a request
   // that can only fail.
   app.use("/v1/*", async (c, next) => {
     const isPaid = PAID_PREFIXES.some((prefix) => c.req.path.startsWith(prefix));
     const isDemo = DEMO_PREFIXES.some((prefix) => c.req.path.startsWith(prefix));
+    // The paywall prices GET only, and Hono answers HEAD with the GET handler, so a HEAD request
+    // would run the paid work without paying. Paid routes answer GET only.
+    if (isPaid && c.req.method === "HEAD") {
+      c.header("Allow", "GET");
+      throw new ApiError(405, "method_not_allowed", "Paid routes answer GET only.", "Send the same request as GET.");
+    }
     if (!isPaid && !isDemo) return next();
 
     const address = lastPathSegment(c.req.path);
@@ -232,7 +274,8 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   });
 
   // Before the paywall: no payment for a pass that cannot be sold, or a renewal of a key that does
-  // not exist or is another kind of pass.
+  // not exist or is another kind of pass. After it: a renewal is recorded only once its payment has
+  // settled, and once per settled transaction.
   app.use("/v1/keys/*", async (c, next) => {
     if (c.req.method !== "POST") return next();
     if (config.payments.mode !== "x402") {
@@ -240,17 +283,80 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     }
     const plan = keyPlanSchema.safeParse(c.req.path.split("/").pop());
     const authorization = c.req.header("Authorization");
-    if (plan.success && authorization !== undefined) {
-      guardKeys(c);
-      const id = await keyId(bearerSecret(authorization));
-      const status = await keys(() => keyStore.status(id, Date.now(), passRules()));
-      if (!status) throw refuseKey(c, keyRefusal({ ok: false, reason: "unknown", until: null }, config.pro.callsPerDay));
-      if (status.plan !== plan.data) {
-        throw new ApiError(409, "other_plan", `This key is Svalin ${status.plan === "pro" ? "Pro" : "Business"}; renew it at POST /v1/keys/${status.plan}.`);
-      }
+    if (!plan.success || authorization === undefined) {
+      await next();
+      await nameSettlement(c);
+      return;
     }
-    return next();
+
+    guardKeys(c);
+    const key = bearerSecret(authorization);
+    const id = await keyId(key);
+    const status = await keys(() => keyStore.status(id, Date.now(), passRules()));
+    if (!status) throw refuseKey(c, keyRefusal({ ok: false, reason: "unknown", until: null }, config.pro.callsPerDay));
+    if (status.plan !== plan.data) {
+      throw new ApiError(409, "other_plan", `This key is Svalin ${status.plan === "pro" ? "Pro" : "Business"}; renew it at POST /v1/keys/${status.plan}.`);
+    }
+    await next();
+    await renewAfterSettle(c, key, id, plan.data);
   });
+
+  /**
+   * Runs after the paywall for a new pass: its settled transaction is recorded with it, so the same
+   * payment can never count for another pass or a Pro code too. The pass is sold either way.
+   */
+  async function nameSettlement(c: Context<{ Variables: Variables }>) {
+    const id = c.get("issuedPass");
+    const settled = settlementOf(c.res);
+    if (c.res.status !== 200 || !id || !settled) return;
+    const named = await keyStore.settled(id, settled.network, settled.transaction).catch(() => false);
+    if (!named) console.error(JSON.stringify({ level: "error", msg: "pass_settlement_unnamed", network: settled.network, transaction: settled.transaction }));
+  }
+
+  /**
+   * Runs after the paywall. Only a 200 that carries a successful settlement renews the pass: a
+   * payment that failed to settle, or a request answered with an error, changes nothing. The
+   * settled transaction is the payment's id, so the same settlement can never renew twice.
+   */
+  async function renewAfterSettle(c: Context, key: string, id: string, plan: KeyPlan) {
+    if (c.res.status !== 200) return;
+    const settled = settlementOf(c.res);
+    const headers = new Headers(c.res.headers);
+    headers.delete("Content-Length");
+    headers.set("Content-Type", "application/json; charset=utf-8");
+    const answer = (status: 200 | 503, body: unknown) => {
+      c.res = new Response(JSON.stringify(body), { status, headers });
+    };
+    if (!settled) {
+      // A 200 with no settlement means no payment was taken, so nothing is renewed or charged.
+      console.error(JSON.stringify({ level: "error", msg: "pass_renewal_without_settlement", plan }));
+      answer(503, new ApiError(503, "keys_unavailable", "The key could not be renewed. Try again; you are not charged.").toBody());
+      return;
+    }
+
+    const now = Date.now();
+    const { calls, days } = keyPlans[plan];
+    const price = Number(config.payments.keyPrices[plan].replace(/^\$/, ""));
+    const payment = { tx: settled.transaction, network: settled.network, atomic: usdcAtomic(price), at: now, days };
+    const renewed = await keyStore.extend(id, plan, payment, calls).catch(() => false);
+    if (!renewed) {
+      // Paid, but not recorded: logged with its transaction so it can be credited by hand.
+      console.error(JSON.stringify({ level: "error", msg: "pass_renewal_unrecorded", plan, network: payment.network, transaction: payment.tx }));
+      answer(503, {
+        ...new ApiError(
+          503,
+          "renewal_not_recorded",
+          "Your payment went through, but the renewal could not be saved.",
+          "It is logged with its transaction and will be credited by hand; you do not need to pay again.",
+        ).toBody(),
+        transaction: payment.tx,
+      });
+      return;
+    }
+    const status = await keyStore.status(id, now, passRules()).catch(() => null);
+    console.log(JSON.stringify({ level: "info", msg: "pass_renewed", plan, network: payment.network }));
+    answer(200, { key, status, note: "Renewed: the new days start where the current ones end." });
+  }
 
   // A Svalin key or Pro code pays for the call instead of x402. It runs after the gate, so a bad
   // address never uses a call, and a call that fails gives its call back.
@@ -350,28 +456,19 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
 
   // Paid over x402. A new key reaches the buyer only once the payment settles: if settling fails,
   // the paywall replaces this response, and the key is never seen by anyone. With a key in the
-  // Authorization header (checked before the paywall), the payment renews that key instead.
+  // Authorization header (checked before the paywall), the payment renews that key instead, but
+  // only after it settles: the /v1/keys/* middleware records the renewal and writes the answer.
   app.post("/v1/keys/:plan", async (c) => {
     const plan = keyPlanSchema.safeParse(c.req.param("plan"));
     if (!plan.success) {
       throw new ApiError(404, "unknown_plan", "There is no such Svalin pass.", "Passes: pro and business. GET / lists their prices.");
     }
+    if (c.req.header("Authorization") !== undefined) return c.json({ renewing: plan.data });
+
     const now = Date.now();
     const { calls, days } = keyPlans[plan.data];
     const price = Number(config.payments.keyPrices[plan.data].replace(/^\$/, ""));
     const payment = { tx: `x402-${crypto.randomUUID()}`, network: paidNetwork(c) ?? "unknown", atomic: usdcAtomic(price), at: now, days };
-
-    const authorization = c.req.header("Authorization");
-    if (authorization !== undefined) {
-      const key = bearerSecret(authorization);
-      const id = await keyId(key);
-      if (!(await keys(() => keyStore.extend(id, plan.data, payment, calls)))) {
-        throw new ApiError(503, "keys_unavailable", "The key could not be renewed. Try again; you are not charged.");
-      }
-      const status = await keys(() => keyStore.status(id, now, passRules()));
-      console.log(JSON.stringify({ level: "info", msg: "pass_renewed", plan: plan.data, network: payment.network }));
-      return c.json({ key, status, note: "Renewed: the new days start where the current ones end." });
-    }
 
     const record: PassRecord =
       plan.data === "pro"
@@ -382,6 +479,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     if (!(await keys(() => keyStore.issue(id, record)))) {
       throw new ApiError(503, "keys_unavailable", "The key could not be made. Try again; you are not charged.");
     }
+    c.set("issuedPass", id);
     console.log(JSON.stringify({ level: "info", msg: "pass_sold", plan: plan.data, network: payment.network }));
     return c.json({
       key,
@@ -574,25 +672,60 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
    * The free demo skips the payer's history, the costly part of a check, so free use cannot burn
    * the data budget.
    */
-  async function checkRecipient(c: Context, withPayerHistory = true) {
+  async function checkRecipient(c: Context<{ Variables: Variables }>, withPayerHistory = true) {
     if (!source.inspectRecipient) {
       throw new ApiError(501, "chain_not_supported", "This instance cannot check recipients.");
     }
     const recipient = c.req.param("address") ?? "";
     const { payer, amountUsd } = checkQuery(c, recipient);
     const signals = await source.inspectRecipient(recipient, withPayerHistory ? payer : null);
-    return assessRecipient({ ...signals, payer }, amountUsd, new Date(), { payerHistorySkipped: !withPayerHistory });
+    const check = assessRecipient({ ...signals, payer }, amountUsd, new Date(), { payerHistorySkipped: !withPayerHistory });
+    const caught = check.verdict === "block" && check.reasons.some((reason) => LOOKALIKE_REASONS.has(reason.code));
+    c.set("checkVerdict", caught ? "lookalike" : check.verdict);
+    return check;
+  }
+
+  /** What one finished request did, for the usage count. */
+  function usageEvent(c: Context<{ Variables: Variables }>): UsageEvent {
+    const { route, address } = nameRoute(c.req.path);
+    const status = c.res.status;
+    const paidByKey = status < 400 && c.get("paidByKey") === true;
+    const settled = status < 400 && !paidByKey ? settlementOf(c.res) : null;
+    const outcome: UsageOutcome =
+      status === 402
+        ? "payment_required"
+        : status >= 500
+          ? "error"
+          : status >= 400
+            ? "refused"
+            : paidByKey
+              ? "paid_key"
+              : settled
+                ? "paid_x402"
+                : "free";
+    return {
+      route,
+      outcome,
+      reason: (status >= 400 ? c.get("errorCode") : c.get("checkVerdict")) ?? "",
+      network: paidByKey ? "key" : (settled?.network ?? ""),
+      chain: chainOf(address),
+    };
   }
 
   /* -------------------------------- errors --------------------------------- */
 
-  app.notFound((c) => c.json({ error: "Route not found.", code: "not_found", hint: "GET / lists every endpoint." }, 404));
+  app.notFound((c) => {
+    c.set("errorCode", "not_found");
+    return c.json({ error: "Route not found.", code: "not_found", hint: "GET / lists every endpoint." }, 404);
+  });
 
   app.onError((error, c) => {
     if (error instanceof ApiError) {
+      c.set("errorCode", error.code);
       return c.json(error.toBody(), error.status);
     }
     console.error(JSON.stringify({ level: "error", msg: "unhandled", error: String(error), stack: (error as Error).stack }));
+    c.set("errorCode", "internal_error");
     return c.json({ error: "Internal server error.", code: "internal_error" }, 500);
   });
 
@@ -666,6 +799,19 @@ function paidNetwork(c: Context): string | null {
   if (!header) return null;
   try {
     return decodePaymentSignatureHeader(header).accepted.network;
+  } catch {
+    return null;
+  }
+}
+
+/** The settlement the paywall attached to a response, if it settled: its transaction and network. */
+function settlementOf(response: Response): { transaction: string; network: string } | null {
+  const header = response.headers.get("PAYMENT-RESPONSE") ?? response.headers.get("X-PAYMENT-RESPONSE");
+  if (!header) return null;
+  try {
+    const settled = decodePaymentResponseHeader(header);
+    if (!settled.success || !settled.transaction || !settled.network) return null;
+    return { transaction: String(settled.transaction), network: String(settled.network) };
   } catch {
     return null;
   }

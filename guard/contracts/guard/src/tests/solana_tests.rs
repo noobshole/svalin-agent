@@ -353,3 +353,67 @@ fn near_and_solana_payees_are_never_compared() {
     let near = pay(&mut guard, &SOL_POISONED.to_lowercase(), USDC);
     assert!(!near.reasons.contains(&Reason::ImitatesPastPayee), "{:?}", near.reasons);
 }
+
+#[test]
+fn approvals_count_toward_the_day_so_the_owner_alone_cannot_clear_past_it() {
+    let mut guard = solana_vault();
+    let held: Vec<u64> = (0..4)
+        .map(|i| sol_pay(&mut guard, SOL_PAY_TO, SOL_DESTINATION, 30 * USDC, START_MS + i * MINUTE_MS).expect_err("held").held_id.unwrap())
+        .collect();
+    as_owner(START_MS + 5 * MINUTE_MS);
+    for id in &held {
+        guard.approve(*id);
+    }
+    assert_eq!(guard.cleared_payments().len(), 3, "30 + 30 + 30 fits the day's 100; a fourth does not");
+    assert_eq!(guard.held_payments().len(), 1);
+    assert!(near_sdk::test_utils::get_logs().iter().any(|log| log.contains("\"approval_recorded\"")));
+    as_guardian(START_MS + 6 * MINUTE_MS);
+    guard.approve(held[3]);
+    assert_eq!(guard.cleared_payments().len(), 4, "with the guardian too, it may go past the day");
+}
+
+#[test]
+fn the_agent_cannot_spend_what_approvals_have_set_aside() {
+    let mut guard = solana_vault();
+    let held: Vec<u64> = (0..2)
+        .map(|i| sol_pay(&mut guard, SOL_PAY_TO, SOL_DESTINATION, 45 * USDC, START_MS + i * MINUTE_MS).expect_err("held").held_id.unwrap())
+        .collect();
+    as_owner(START_MS + 2 * MINUTE_MS);
+    for id in &held {
+        guard.approve(*id);
+    }
+    let now = guard.check("shop.near".into(), U128(20 * USDC), None);
+    assert!(now.reasons.contains(&Reason::OverDailyLimit), "{:?}", now.reasons);
+    assert_eq!(guard.status().spent_today, U128(0), "nothing went out yet");
+
+    as_agent(START_MS + 2 * HOUR_MS);
+    let later = guard.check("shop.near".into(), U128(20 * USDC), None);
+    assert!(!later.reasons.contains(&Reason::OverDailyLimit), "a lapsed approval no longer counts");
+}
+
+#[test]
+fn an_approval_past_lowered_limits_is_held_again() {
+    let mut guard = solana_vault();
+    let held_id = sol_pay(&mut guard, SOL_PAY_TO, SOL_DESTINATION, 30 * USDC, START_MS).expect_err("held").held_id.unwrap();
+    as_owner(START_MS + MINUTE_MS);
+    guard.approve(held_id);
+    guard.lower_limits(limits(10, 20, 5));
+    let again = sol_pay(&mut guard, SOL_PAY_TO, SOL_DESTINATION, 30 * USDC, START_MS + 2 * MINUTE_MS).expect_err("held again");
+    assert_eq!((again.outcome, again.reasons), (Outcome::Held, vec![Reason::OverPaymentLimit, Reason::OverDailyLimit]));
+    assert!(guard.cleared_payments().is_empty());
+    assert_eq!(guard.held_payments().len(), 1);
+    assert_eq!(guard.status().spent_today, U128(0));
+}
+
+#[test]
+fn an_approval_the_guardian_shared_is_paid_even_past_lowered_limits() {
+    let mut guard = solana_vault();
+    let held_id = sol_pay(&mut guard, SOL_PAY_TO, SOL_DESTINATION, 60 * USDC, START_MS).expect_err("held").held_id.unwrap();
+    as_owner(START_MS + MINUTE_MS);
+    guard.approve(held_id);
+    as_guardian(START_MS + MINUTE_MS);
+    guard.approve(held_id);
+    as_owner(START_MS + 2 * MINUTE_MS);
+    guard.lower_limits(limits(10, 20, 5));
+    sol_pay(&mut guard, SOL_PAY_TO, SOL_DESTINATION, 60 * USDC, START_MS + 3 * MINUTE_MS).expect("both approved it");
+}

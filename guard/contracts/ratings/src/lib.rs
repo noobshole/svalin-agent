@@ -111,9 +111,11 @@ pub struct Ratings {
 impl Ratings {
     /// Sets the registry up and, with `lock` (the default), deletes the key that deployed it. Deploy
     /// and initialise in one transaction from the registry's own account for that. The challenge
-    /// window is 6 hours unless set, and can never change afterwards.
+    /// window is 6 hours unless set, and can never change afterwards. Only the registry's own
+    /// account can call it, so nobody else can set up a registry that was deployed but not set up.
     #[init]
     pub fn new(owner: AccountId, publisher: Option<PublicKey>, lock: Option<bool>, challenge_ms: Option<u64>) -> Self {
+        require!(env::predecessor_account_id() == env::current_account_id(), "Only the registry's own account can set it up");
         let challenge_ms = challenge_ms.unwrap_or(CHALLENGE_MS);
         require!(
             (MIN_CHALLENGE_MS..=MAX_CHALLENGE_MS).contains(&challenge_ms),

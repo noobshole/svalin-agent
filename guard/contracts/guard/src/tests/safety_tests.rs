@@ -439,3 +439,185 @@ fn only_the_owners_device_can_send_it() {
     let (data, client, signature) = signed(&phone(), &answer_for(&guard.challenge_for(&PasskeyAction::Freeze)));
     guard.use_passkey(PasskeyAction::Freeze, data, client, signature);
 }
+
+#[test]
+#[should_panic(expected = "Above the limits a payment is approved from the wallet")]
+fn a_fingerprint_counts_approved_solana_payments_toward_the_day() {
+    let mut guard = with_passkey();
+    let held = held_for_a_known_payee(&mut guard);
+    // An approved Solana payment, still waiting for the agent, has set aside 99 of the day's 100.
+    let waiting = Held {
+        payee: format!("{SOLANA_PREFIX}{SOL_PAY_TO}"),
+        amount: U128(99 * USDC),
+        memo: None,
+        reasons: vec![],
+        at_ms: START_MS + MINUTE_MS,
+        approved_by: vec![],
+        purchase: None,
+    };
+    guard.cleared.insert(held + 100, waiting);
+    use_it(&mut guard, PasskeyAction::Approve { id: held }, START_MS + MINUTE_MS);
+}
+
+#[test]
+fn a_recovery_drops_every_change_the_old_key_queued() {
+    let mut guard = new_vault();
+    as_guardian(START_MS);
+    guard.freeze();
+    let recovery = guard.propose(Change::Recover { new_owner: id("alice-new.near") });
+    // Someone holding the old owner key queues a way out while the vault is frozen.
+    as_owner(START_MS + HOUR);
+    let unfreeze = guard.propose(Change::Unfreeze);
+    let withdraw = guard.propose(Change::Withdraw { to: id("thief.near"), amount: U128(USDC) });
+    as_guardian(START_MS + 8 * DAY_MS);
+    guard.execute(recovery);
+    assert!(guard.pending_changes().is_empty(), "the queued unfreeze and withdrawal end with the old key");
+    for queued in [unfreeze, withdraw] {
+        let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| guard.execute(queued)));
+        assert!(ran.is_err(), "change {queued} must not run");
+    }
+}
+
+#[test]
+#[should_panic(expected = "no longer holds that role")]
+fn a_recovery_started_by_a_replaced_guardian_never_runs() {
+    let mut guard = new_vault();
+    as_guardian(START_MS);
+    let recovery = guard.propose(Change::Recover { new_owner: id("mallory.near") });
+    as_owner(START_MS);
+    let replace = guard.propose(Change::SetGuardian { guardian: Some(id("carol.near")) });
+    as_owner(START_MS + DAY_MS);
+    guard.execute(replace);
+    as_owner(START_MS + 8 * DAY_MS);
+    guard.execute(recovery);
+}
+
+/* ------------------- leaving a guardian who blocks everything ------------------- */
+
+#[test]
+fn the_owner_can_leave_a_guardian_who_keeps_the_vault_frozen() {
+    let mut guard = new_vault();
+    as_guardian(START_MS);
+    guard.freeze();
+    as_owner(START_MS);
+    let leave = guard.propose(Change::LeaveGuardian);
+    // The guardian can neither cancel it nor stop it by freezing again.
+    as_guardian(START_MS + HOUR);
+    let cancelled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| guard.cancel(leave)));
+    assert!(cancelled.is_err(), "the guardian must not cancel it");
+    as_guardian(START_MS + HOUR);
+    guard.freeze();
+    assert_eq!(guard.pending_changes().len(), 1, "freezing again leaves it waiting");
+    as_owner(START_MS + 14 * DAY_MS);
+    guard.execute(leave);
+    let status = guard.status();
+    assert!(!status.frozen);
+    assert_eq!(status.guardian, None);
+    // The owner's withdrawal runs after its usual wait.
+    as_owner(START_MS + 14 * DAY_MS);
+    let withdraw = guard.propose(Change::Withdraw { to: owner(), amount: U128(USDC) });
+    as_owner(START_MS + 15 * DAY_MS);
+    guard.execute(withdraw);
+}
+
+#[test]
+#[should_panic(expected = "still waiting")]
+fn leaving_the_guardian_waits_twice_the_recovery_delay() {
+    let mut guard = new_vault();
+    as_owner(START_MS);
+    let leave = guard.propose(Change::LeaveGuardian);
+    as_owner(START_MS + 14 * DAY_MS - 1);
+    guard.execute(leave);
+}
+
+#[test]
+fn a_recovery_comes_before_a_stolen_owner_key_leaving_the_guardian() {
+    let mut guard = new_vault();
+    // A thief with the owner's key tries to shed the guardian; the guardian answers a day later.
+    as_owner(START_MS);
+    let leave = guard.propose(Change::LeaveGuardian);
+    as_guardian(START_MS + DAY_MS);
+    guard.freeze();
+    let recovery = guard.propose(Change::Recover { new_owner: id("alice-new.near") });
+    as_guardian(START_MS + 8 * DAY_MS);
+    guard.execute(recovery);
+    assert_eq!(guard.status().owner, id("alice-new.near"));
+    assert!(guard.pending_changes().is_empty());
+    as_owner(START_MS + 14 * DAY_MS);
+    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| guard.execute(leave)));
+    assert!(ran.is_err(), "the thief's leave ends with the recovery");
+}
+
+#[test]
+fn leaving_the_guardian_ends_a_recovery_it_started_too_late() {
+    let mut guard = new_vault();
+    as_owner(START_MS);
+    let leave = guard.propose(Change::LeaveGuardian);
+    as_guardian(START_MS + 8 * DAY_MS);
+    let recovery = guard.propose(Change::Recover { new_owner: id("mallory.near") });
+    as_owner(START_MS + 14 * DAY_MS);
+    guard.execute(leave);
+    assert!(guard.pending_changes().is_empty());
+    as_guardian(START_MS + 15 * DAY_MS);
+    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| guard.execute(recovery)));
+    assert!(ran.is_err(), "a recovery by the old guardian never runs");
+}
+
+#[test]
+fn the_owner_can_change_their_mind_about_leaving() {
+    let mut guard = new_vault();
+    as_owner(START_MS);
+    let leave = guard.propose(Change::LeaveGuardian);
+    as_owner(START_MS + HOUR);
+    guard.cancel(leave);
+    assert!(guard.pending_changes().is_empty());
+}
+
+#[test]
+#[should_panic(expected = "This vault has no guardian")]
+fn there_is_no_guardian_to_leave_without_one() {
+    call(vault(), other_key(), 0, START_MS);
+    let mut guard = Guard::new(owner(), token(), limits(50, 100, 5), None, Some(agent_key()), None, Some(false), None, None, None);
+    as_owner(START_MS);
+    guard.propose(Change::LeaveGuardian);
+}
+
+/* --------------------- a held new payee is checked first --------------------- */
+
+#[test]
+fn a_new_payee_the_rules_hold_is_checked_first_and_the_owner_sees_what_it_found() {
+    let mut guard = checked_vault();
+    // Over the new-payee limit, so the rules hold it; the check still runs first.
+    let decision = pay(&mut guard, "fresh.near", 10);
+    assert_eq!(decision.outcome, Outcome::Checking);
+    let held = answer(&mut guard, decision.held_id.unwrap(), Some(r#"{"exists":true,"contract":false,"age_ms":600000}"#), START_MS);
+    assert_eq!((held.outcome, held.reasons), (Outcome::Held, vec![Reason::NewPayeeOverLimit, Reason::NewAccount]));
+    assert_eq!(guard.held_payments().len(), 1);
+}
+
+#[test]
+fn a_payment_the_rules_hold_for_a_missing_account_is_refused() {
+    let mut guard = checked_vault();
+    let check = pay(&mut guard, "nobody.near", 10).held_id.unwrap();
+    let refused = answer(&mut guard, check, Some(r#"{"exists":false}"#), START_MS);
+    assert_eq!((refused.outcome, refused.reasons), (Outcome::Refused, vec![Reason::PayeeMissing]));
+    assert!(guard.held_payments().is_empty());
+}
+
+#[test]
+fn a_held_payment_says_when_no_check_was_left_for_the_day() {
+    let mut guard = checked_vault();
+    for n in 0..MAX_CHECKS_PER_DAY {
+        pay(&mut guard, &format!("shop{n}.near"), 1);
+    }
+    let held = pay(&mut guard, "bigshop.near", 10);
+    assert_eq!((held.outcome, held.reasons), (Outcome::Held, vec![Reason::NewPayeeOverLimit, Reason::TooManyChecks]));
+}
+
+#[test]
+fn check_previews_a_held_new_payee_as_checking_with_its_reasons() {
+    let guard = checked_vault();
+    call(id("anyone.near"), other_key(), 0, START_MS);
+    let preview = guard.check("bigshop.near".into(), U128(10 * USDC), None);
+    assert_eq!((preview.outcome, preview.reasons), (Outcome::Checking, vec![Reason::NewPayeeOverLimit]));
+}

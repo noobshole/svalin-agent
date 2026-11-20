@@ -4,47 +4,40 @@ import { describe, expect, it } from "vitest";
 import { createApp, type ProPaymentFinder } from "../src/app.js";
 import { MAX_ROUTE_DESCRIPTION_LENGTH, keyRouteDescription, KEY_PLAN_IDS } from "../src/catalog.js";
 import { ApiError } from "../src/lib/errors.js";
-import { KeyStoreCore, MemoryStorage } from "../src/lib/key-store.js";
+import { KeyStoreCore, MemoryStorage, keyId, type PassRecord } from "../src/lib/key-store.js";
 import type { FoundPayment } from "../src/payments/pro-payments.js";
 import { MockPortfolioSource } from "../src/sources/mock-source.js";
-import { PAY_TO_NEAR, PAY_TO_SOLANA, SOLANA_WALLET, decodeHeader, fakeFacilitator, testConfig } from "./helpers.js";
+import { PAY_TO_NEAR, PAY_TO_SOLANA, SOLANA_WALLET, acceptingFacilitator, decodeHeader, fakeFacilitator, paymentFor, testConfig } from "./helpers.js";
 
 const DEVNET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
 const config = testConfig({ PAY_TO_SOLANA, PAY_TO_NEAR, X402_ENV: "testnet" });
 
-/** A facilitator that accepts every payment, and settles it unless told not to. */
-function acceptingFacilitator(settles = true) {
-  const facilitator = fakeFacilitator();
-  facilitator.verify = async () => {
-    facilitator.verifyCalls += 1;
-    return { isValid: true, payer: "payer.testnet" } as never;
-  };
-  facilitator.settle = async (_payload, requirements) => {
-    facilitator.settleCalls += 1;
-    return (settles
-      ? { success: true, transaction: "settled-tx", network: requirements.network, payer: "payer.testnet" }
-      : { success: false, errorReason: "insufficient_funds", transaction: "", network: requirements.network }) as never;
-  };
-  return facilitator;
-}
-
-/** Pays the 402 a route answered, on NEAR testnet. */
-async function paymentFor(response: Response) {
-  const required = decodeHeader(response.headers.get("PAYMENT-REQUIRED"));
-  const accepted = required.accepts.find((accept: { network: string }) => accept.network === "near:testnet");
-  const payload = { x402Version: 2, resource: required.resource, accepted, payload: { signedDelegateAction: "signed" } };
-  return { "PAYMENT-SIGNATURE": Buffer.from(JSON.stringify(payload)).toString("base64") };
-}
-
-async function buyKey(app: ReturnType<typeof createApp>, plan = "business", renew?: string) {
+async function buyKey(app: ReturnType<typeof createApp>, plan = "business", renew?: string, signed = `signed-${crypto.randomUUID()}`) {
   const headers: Record<string, string> = renew ? { Authorization: `Bearer ${renew}` } : {};
   const unpaid = await app.request(`/v1/keys/${plan}`, { method: "POST", headers });
-  return app.request(`/v1/keys/${plan}`, { method: "POST", headers: { ...headers, ...(await paymentFor(unpaid)) } });
+  return app.request(`/v1/keys/${plan}`, { method: "POST", headers: { ...headers, ...(await paymentFor(unpaid, signed)) } });
 }
+
+const until = async (app: ReturnType<typeof createApp>, key: string) =>
+  Date.parse((await (await app.request("/v1/keys/me", { headers: { Authorization: `Bearer ${key}` } })).json()).until);
 
 const bearer = (key: string) => ({ Authorization: `Bearer ${key}` });
 
 describe("Svalin passes over x402", () => {
+  it("records the transaction that bought a pass, so that payment can never count as a Pro payment too", async () => {
+    const storage = new MemoryStorage();
+    const keyStore = new KeyStoreCore(storage);
+    const facilitator = acceptingFacilitator();
+    facilitator.transaction = "pass-tx";
+    const app = createApp(config, { facilitator, keyStore });
+    const { key } = await (await buyKey(app, "pro")).json();
+    const record = await storage.get<PassRecord>(`pass:${await keyId(key)}`);
+    expect(record?.payments.map((payment) => [payment.network, payment.tx])).toEqual([["near:testnet", "pass-tx"]]);
+    // The same transaction, found later as if a wallet had paid a Pro code with it.
+    const code = await keyId(newSvalinKey("svp_"));
+    expect(await keyStore.claim(code, [{ tx: "pass-tx", network: "near:testnet", atomic: "9000000", at: Date.now(), days: 30 }])).toBe(0);
+  });
+
   it("sells Svalin Business over x402 for its price", async () => {
     const app = createApp(config, { facilitator: acceptingFacilitator() });
     const unpaid = await app.request("/v1/keys/business", { method: "POST" });
@@ -78,6 +71,66 @@ describe("Svalin passes over x402", () => {
 
     const business = await (await buyKey(app, "business")).json();
     expect((await (await buyKey(app, "business", business.key)).json()).status.callsLeft).toBe(400_000);
+  });
+
+  it("renews only once the payment settles: a payment that fails to settle changes nothing", async () => {
+    const facilitator = acceptingFacilitator();
+    const app = createApp(config, { facilitator });
+    const { key } = await (await buyKey(app, "pro")).json();
+    const before = await until(app, key);
+
+    facilitator.settles = false;
+    const response = await buyKey(app, "pro", key);
+    expect(response.status).toBe(402);
+    expect(await until(app, key)).toBe(before);
+  });
+
+  it("renews once for one payment, even when it is sent many times at once", async () => {
+    const app = createApp(config, { facilitator: acceptingFacilitator() });
+    const { key } = await (await buyKey(app, "pro")).json();
+    const before = await until(app, key);
+
+    const headers = { Authorization: `Bearer ${key}` };
+    const unpaid = await app.request("/v1/keys/pro", { method: "POST", headers });
+    const paid = { ...headers, ...(await paymentFor(unpaid, "one-payment")) };
+    const answers = await Promise.all(Array.from({ length: 10 }, () => app.request("/v1/keys/pro", { method: "POST", headers: paid })));
+    expect(answers.filter((answer) => answer.status === 200)).toHaveLength(1);
+    expect(answers.filter((answer) => answer.status === 402)).toHaveLength(9);
+    expect(await until(app, key)).toBe(before + 30 * 86_400_000);
+  });
+
+  it("never renews twice for the same settled transaction", async () => {
+    const facilitator = acceptingFacilitator();
+    const app = createApp(config, { facilitator });
+    const { key } = await (await buyKey(app, "pro")).json();
+    const before = await until(app, key);
+
+    facilitator.transaction = "same-tx";
+    expect((await buyKey(app, "pro", key, "first")).status).toBe(200);
+    expect((await buyKey(app, "pro", key, "second")).status).toBe(200);
+    expect(await until(app, key)).toBe(before + 30 * 86_400_000);
+
+    // A transaction that renewed one pass is never credited to another.
+    const other = await (await buyKey(app, "pro")).json();
+    const refused = await buyKey(app, "pro", other.key, "third");
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toMatchObject({ code: "renewal_not_recorded", transaction: "same-tx" });
+  });
+
+  it("refuses HEAD on paid routes, so no paid work runs without a payment", async () => {
+    const source = new MockPortfolioSource();
+    let lookups = 0;
+    const overview = source.getOverview.bind(source);
+    source.getOverview = async (...args) => {
+      lookups += 1;
+      return overview(...args);
+    };
+    const app = createApp(config, { facilitator: acceptingFacilitator(), portfolioSource: source });
+    const head = await app.request(`/v1/risk/${SOLANA_WALLET}`, { method: "HEAD" });
+    expect(head.status).toBe(405);
+    expect(head.headers.get("Allow")).toBe("GET");
+    expect(head.headers.get("PAYMENT-REQUIRED")).toBeNull();
+    expect(lookups).toBe(0);
   });
 
   it("refuses to renew an unknown key, or another kind of pass, before any payment", async () => {

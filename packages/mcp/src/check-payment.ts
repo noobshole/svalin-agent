@@ -33,6 +33,8 @@ export type CheckPaymentResult = {
 };
 
 const NOTE = "Svalin only read this request. Nothing was paid or signed. Svalin's verdict is advice: the wallet that pays decides.";
+/** Payees Svalin checks per request, each once: a request listing many cannot run up many paid checks. */
+const MAX_PAYEE_CHECKS = 2;
 const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 /**
@@ -81,6 +83,29 @@ export async function checkX402Payment(client: SvalinClient, memory: PayeeMemory
   }
 
   const options: OptionResult[] = [];
+  // One check per payee and amount, and at most MAX_PAYEE_CHECKS of them for this request.
+  const payeeChecks = new Map<string, GuardReason[]>();
+  let checksMade = 0;
+  const checkPayee = async (option: PaymentOption): Promise<GuardReason[]> => {
+    const key = [option.network, option.payTo, option.amount.toString()].join("|");
+    const known = payeeChecks.get(key);
+    if (known) return known;
+    if (CHECKABLE_NETWORKS[option.network]) {
+      if (checksMade >= MAX_PAYEE_CHECKS) {
+        return [
+          {
+            code: "payee-not-checked",
+            severity: "caution",
+            message: `Svalin checks at most ${MAX_PAYEE_CHECKS} payees for one request, so this one is unverified. Check it on its own before paying it.`,
+          },
+        ];
+      }
+      checksMade += 1;
+    }
+    const found = await payeeReasons(client, option, input.payer);
+    payeeChecks.set(key, found);
+    return found;
+  };
   for (const option of request.options) {
     const reasons = judgePayment({
       requestedUrl: input.url,
@@ -92,7 +117,7 @@ export async function checkX402Payment(client: SvalinClient, memory: PayeeMemory
       maxUsd: input.maxUsd,
       memoryFile: memory.file,
     });
-    reasons.push(...(await payeeReasons(client, option, input.payer)));
+    reasons.push(...(await checkPayee(option)));
     const verdict = verdictOf(reasons);
     // First sight: remember the payee and price, unless the request already looks wrong.
     if (verdict !== "block") memory.remember(service, option);

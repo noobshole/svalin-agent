@@ -114,8 +114,8 @@ Each step needs no account and no key.
 6. **The tests pass.**
 
    ```bash
-   pnpm install && pnpm build && pnpm test    # 194 API tests and 34 MCP tests
-   cd guard && cargo test                     # 183 tests: the vault, the registry, the check program
+   pnpm install && pnpm build && pnpm test    # 209 API tests and 36 MCP tests
+   cd guard && cargo test                     # 201 tests: the vault, the registry, the check program
    ```
 
 ## How it works
@@ -218,9 +218,10 @@ sample data, and it refuses to start in production that way.
 | No fake data in production | The API refuses to start in production without a live data source |
 | Bounded agent spending | `svalin-mcp` enforces a per-call price cap and a session budget |
 | Broken data is not published | The Index refuses an edition that swings more than a market can in a few hours |
-| Grades cannot be forged | A vault asks the registry on NEAR to confirm each grade's proof |
+| Grades are checked, not trusted | A vault asks the registry on NEAR to confirm each grade's proof, and the Monitor checks each sealed edition against the Index robot's own copy |
 | No master key to a vault | Setting a vault up deletes the key that deployed it |
 | Deterministic scoring | The risk engine has no I/O and no LLM; methodology changes bump a version |
+| Usage is counted, callers are not | Counts per route and outcome only: never an address, an IP or a key ([how](docs/DEPLOYMENT.md)) |
 
 Found a security issue? Report it privately: see [SECURITY.md](SECURITY.md).
 

@@ -557,6 +557,10 @@ pub enum Change {
     WithdrawToken { token: AccountId, to: AccountId, amount: U128 },
     /// The guardian's way back in when the owner's key is lost: a new owner, after the recovery delay.
     Recover { new_owner: AccountId },
+    /// The owner's way out of a guardian who blocks everything: unfreezes the vault and removes the
+    /// guardian. The guardian cannot cancel it, and freezing does not stop it, but it waits twice the
+    /// recovery delay, so a guardian answering a stolen owner key with a recovery still comes first.
+    LeaveGuardian,
 }
 
 #[near(serializers = [borsh, json])]
@@ -812,11 +816,16 @@ impl Guard {
         self.roll_day();
         let payee = payee.to_string();
         let mut decision = self.decide(&payee, amount.0, purchase.as_ref());
-        if decision.outcome == Outcome::Paid && self.needs_check(&payee) {
-            if self.checks_today >= MAX_CHECKS_PER_DAY {
+        // A payee the vault has never paid is looked up first, also when the payment will be held,
+        // so the owner sees what the check found before approving it.
+        if matches!(decision.outcome, Outcome::Paid | Outcome::Held) && self.needs_check(&payee) {
+            if self.checks_today < MAX_CHECKS_PER_DAY {
+                return self.start_check(payee, amount, memo, purchase);
+            }
+            if decision.outcome == Outcome::Paid {
                 decision = Decision { outcome: Outcome::Held, reasons: vec![Reason::TooManyChecks], imitates: None, held_id: None };
             } else {
-                return self.start_check(payee, amount, memo, purchase);
+                decision.reasons.push(Reason::TooManyChecks);
             }
         }
         self.apply(payee, amount, memo, purchase, decision)
@@ -850,6 +859,25 @@ impl Guard {
         self.roll_day();
         let payee = format!("{SOLANA_PREFIX}{pay_to}");
         let cleared = if self.frozen { None } else { self.cleared_for(&payee, amount.0, purchase.as_ref()) };
+        if let Some(id) = cleared {
+            // The limits may have been lowered since the approval. Past them, an approval the
+            // guardian did not share is held again, so the owner's key alone cannot spend past the
+            // limits: the same rule as in `approve`.
+            let mut over = Vec::new();
+            if amount.0 > self.limits.per_payment.0 {
+                over.push(Reason::OverPaymentLimit);
+            }
+            if self.spent_today.saturating_add(amount.0) > self.limits.daily.0 {
+                over.push(Reason::OverDailyLimit);
+            }
+            let shared = self.guardian.as_ref().is_none_or(|guardian| self.cleared.get(&id).is_some_and(|held| held.approved_by.contains(guardian)));
+            if !over.is_empty() && !shared {
+                self.cleared.remove(&id);
+                emit("cleared_payment_held_again", json!({ "id": id, "payee": payee, "amount": amount, "reasons": over }));
+                let decision = Decision { outcome: Outcome::Held, reasons: over, imitates: None, held_id: None };
+                return PromiseOrValue::Value(SolanaDecision::new(self.apply(payee, amount, Some(memo), purchase, decision), None));
+            }
+        }
         let decision = match cleared {
             Some(_) => Decision { outcome: Outcome::Paid, reasons: vec![], imitates: None, held_id: None },
             None => self.decide(&payee, amount.0, purchase.as_ref()),
@@ -950,9 +978,9 @@ impl Guard {
         if let Some(purchase) = &purchase {
             check_purchase(purchase);
         }
-        let spent = if today() == self.day { self.spent_today } else { 0 };
-        let mut decision = self.decide_with(&payee, amount.0, spent, purchase.as_ref());
-        if decision.outcome == Outcome::Paid && self.needs_check(&payee) {
+        let mut decision = self.decide_with(&payee, amount.0, self.committed_today(), purchase.as_ref());
+        // Held too: the check runs first, and the reasons say why it would then be held.
+        if matches!(decision.outcome, Outcome::Paid | Outcome::Held) && self.needs_check(&payee) {
             decision.outcome = Outcome::Checking;
         }
         decision
@@ -969,12 +997,18 @@ impl Guard {
         emit("frozen", json!({ "by": env::predecessor_account_id(), "cancelled_changes": cancelled }));
     }
 
-    /// Cancels a pending change. Owner or guardian: each can stop what the other's key proposes.
+    /// Cancels a pending change. Owner or guardian: each can stop what the other's key proposes,
+    /// except that only the owner can cancel leaving the guardian.
     #[payable]
     pub fn cancel(&mut self, id: u64) {
         assert_one_yocto();
         self.require_owner_or_guardian();
-        require!(self.pending.remove(&id).is_some(), "No such pending change");
+        let pending = self.pending.get(&id).unwrap_or_else(|| env::panic_str("No such pending change"));
+        require!(
+            !matches!(pending.change, Change::LeaveGuardian) || env::predecessor_account_id() == self.owner,
+            "Only the owner can cancel leaving the guardian"
+        );
+        self.pending.remove(&id);
         emit("change_cancelled", json!({ "id": id, "by": env::predecessor_account_id() }));
     }
 
@@ -1095,7 +1129,7 @@ impl Guard {
                     "A new or changed payee is approved from the wallet, which shows who gets paid"
                 );
                 require!(
-                    held.amount.0 <= self.limits.per_payment.0 && self.spent_today.saturating_add(held.amount.0) <= self.limits.daily.0,
+                    held.amount.0 <= self.limits.per_payment.0 && self.committed_today().saturating_add(held.amount.0) <= self.limits.daily.0,
                     "Above the limits a payment is approved from the wallet"
                 );
                 self.approve_as(id, self.owner.clone());
@@ -1113,7 +1147,8 @@ impl Guard {
 
     /// Pays a held payment exactly as the agent asked. The owner approves one item, which cannot be
     /// changed behind their back; Svalin's reasons are stored with it. A Solana payment is cleared
-    /// instead: the agent's next request for exactly it, within an hour, is paid.
+    /// instead: the agent's next request for exactly it, within an hour, is paid. It counts toward
+    /// the day's limit from the approval, so approvals given one by one cannot pass the limit.
     ///
     /// When there is a guardian, a payment above the per-payment limit, or one that would take the
     /// day past its limit, needs both of them: two people on two devices, so neither a stolen owner
@@ -1172,9 +1207,13 @@ impl Guard {
                         check_passkey(passkey);
                         require!(Some(&passkey.device_key) != self.agent.as_ref(), "The device key cannot be the agent's key");
                     }
+                    Change::LeaveGuardian => require!(self.guardian.is_some(), "This vault has no guardian"),
                     _ => {}
                 }
-                self.delays.loosen_ms
+                match other {
+                    Change::LeaveGuardian => self.delays.recovery_ms.saturating_mul(2),
+                    _ => self.delays.loosen_ms,
+                }
             }
         };
         require!(self.pending.len() < MAX_QUEUE, "Too many changes are waiting");
@@ -1186,13 +1225,20 @@ impl Guard {
     }
 
     /// Carries out a change once its wait is over. Anyone may call it; nothing new is decided here.
+    /// It runs only while whoever proposed it still holds that role: a recovery needs the current
+    /// guardian, every other change the current owner.
     pub fn execute(&mut self, id: u64) {
         let pending = self.pending.get(&id).cloned().unwrap_or_else(|| env::panic_str("No such pending change"));
         require!(env::block_timestamp_ms() >= pending.ready_at_ms, "This change is still waiting");
+        let still_holds_the_role = match &pending.change {
+            Change::Recover { .. } => self.guardian.as_ref() == Some(&pending.proposed_by),
+            _ => pending.proposed_by == self.owner,
+        };
+        require!(still_holds_the_role, "Whoever proposed this change no longer holds that role; cancel it");
         if self.frozen {
             require!(
-                matches!(pending.change, Change::Unfreeze | Change::Recover { .. }),
-                "The vault is frozen: only unfreezing or a recovery can go ahead"
+                matches!(pending.change, Change::Unfreeze | Change::Recover { .. } | Change::LeaveGuardian),
+                "The vault is frozen: only unfreezing, a recovery or leaving the guardian can go ahead"
             );
         }
         self.pending.remove(&id);
@@ -1258,6 +1304,21 @@ impl Guard {
                 }
                 self.drop_passkey();
                 self.solana_withdrawal = None;
+                // The old key's queued changes and Solana approvals end with it, so nothing it set
+                // up (a withdrawal, an unfreeze) can run under the new owner.
+                self.pending.clear();
+                self.cleared.clear();
+            }
+            Change::LeaveGuardian => {
+                // A recovery the old guardian started ends with it.
+                if let Some(old) = self.guardian.take() {
+                    let started: Vec<u64> = self.pending.iter().filter(|(_, waiting)| waiting.proposed_by == old).map(|(id, _)| *id).collect();
+                    for started_id in started {
+                        self.pending.remove(&started_id);
+                    }
+                }
+                self.frozen = false;
+                self.strikes.clear();
             }
         }
         emit("change_executed", json!({ "id": id, "change": pending.change }));
@@ -1424,17 +1485,26 @@ impl Guard {
         );
 
         let mut decision = self.decide(&waiting.payee, waiting.amount.0, waiting.purchase.as_ref());
-        if decision.outcome == Outcome::Paid {
-            let hold = |reason: Reason| Decision { outcome: Outcome::Held, reasons: vec![reason], imitates: None, held_id: None };
-            decision = match report {
-                None => hold(Reason::CheckFailed),
+        if matches!(decision.outcome, Outcome::Paid | Outcome::Held) {
+            // What the check found: a payee that does not exist is refused, even one the rules
+            // would hold; a reason to wait holds the payment, or joins the reasons it is held for.
+            let concern = match report {
+                None => Some(Reason::CheckFailed),
                 Some(report) if !report.exists => {
-                    Decision { outcome: Outcome::Refused, reasons: vec![Reason::PayeeMissing], imitates: None, held_id: None }
+                    decision = Decision { outcome: Outcome::Refused, reasons: vec![Reason::PayeeMissing], imitates: None, held_id: None };
+                    None
                 }
-                Some(CheckReport { age_ms: None, .. }) => hold(Reason::AgeUnknown),
-                Some(CheckReport { age_ms: Some(age), .. }) if age < min_age_ms => hold(Reason::NewAccount),
-                Some(_) => decision,
+                Some(CheckReport { age_ms: None, .. }) => Some(Reason::AgeUnknown),
+                Some(CheckReport { age_ms: Some(age), .. }) if age < min_age_ms => Some(Reason::NewAccount),
+                Some(_) => None,
             };
+            if let Some(reason) = concern {
+                if decision.outcome == Outcome::Paid {
+                    decision = Decision { outcome: Outcome::Held, reasons: vec![reason], imitates: None, held_id: None };
+                } else {
+                    decision.reasons.push(reason);
+                }
+            }
         }
         self.apply(waiting.payee, waiting.amount, waiting.memo, waiting.purchase, decision)
     }
@@ -1585,7 +1655,7 @@ impl Guard {
             "This payment was held more than 7 days ago; reject it and let the agent ask again"
         );
         self.roll_day();
-        let over_limits = held.amount.0 > self.limits.per_payment.0 || self.spent_today.saturating_add(held.amount.0) > self.limits.daily.0;
+        let over_limits = held.amount.0 > self.limits.per_payment.0 || self.committed_today().saturating_add(held.amount.0) > self.limits.daily.0;
         let guardian = self.guardian.clone();
         match guardian {
             Some(guardian) if over_limits => {
@@ -1623,7 +1693,18 @@ impl Guard {
     }
 
     fn decide(&self, payee: &str, amount: u128, purchase: Option<&Purchase>) -> Decision {
-        self.decide_with(payee, amount, self.spent_today, purchase)
+        self.decide_with(payee, amount, self.committed_today(), purchase)
+    }
+
+    /// What today's limit already holds: what went out today, plus approved Solana payments the
+    /// agent may still collect within their hour. An approval counts from the moment it is given.
+    fn committed_today(&self) -> u128 {
+        let spent = if today() == self.day { self.spent_today } else { 0 };
+        let now = env::block_timestamp_ms();
+        self.cleared
+            .iter()
+            .filter(|(_, held)| now.saturating_sub(held.at_ms) <= CLEARED_MAX_AGE_MS)
+            .fold(spent, |sum, (_, held)| sum.saturating_add(held.amount.0))
     }
 
     /// The rules for one payment. `payee` is a NEAR account, or `solana:` and a Solana address; each
@@ -1906,13 +1987,14 @@ impl Guard {
         }
     }
 
-    /// Freezes the vault and cancels every pending change except a recovery; returns their ids.
+    /// Freezes the vault and cancels every pending change except a recovery and leaving the
+    /// guardian; returns their ids.
     fn freeze_now(&mut self) -> Vec<u64> {
         self.frozen = true;
         let cancelled: Vec<u64> = self
             .pending
             .iter()
-            .filter(|(_, pending)| !matches!(pending.change, Change::Recover { .. }))
+            .filter(|(_, pending)| !matches!(pending.change, Change::Recover { .. } | Change::LeaveGuardian))
             .map(|(id, _)| *id)
             .collect();
         for id in &cancelled {
@@ -1951,7 +2033,7 @@ impl Guard {
         if amount > self.limits.per_payment.0 {
             return refuse(Reason::OverPaymentLimit);
         }
-        if self.spent_today.saturating_add(amount) > self.limits.daily.0 {
+        if self.committed_today().saturating_add(amount) > self.limits.daily.0 {
             return refuse(Reason::OverDailyLimit);
         }
         if let Some(last) = self.last_paid.get(token.as_str()) {

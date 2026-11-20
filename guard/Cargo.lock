@@ -2419,7 +2419,7 @@ dependencies = [
 
 [[package]]
 name = "svalin-guard"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "near-sdk",
  "p256",
@@ -2435,7 +2435,7 @@ dependencies = [
 
 [[package]]
 name = "svalin-ratings"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "near-sdk",
  "svalin-proof",

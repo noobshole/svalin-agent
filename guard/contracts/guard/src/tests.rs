@@ -253,7 +253,7 @@ fn freezing_stops_payments_and_pending_changes_but_not_a_recovery() {
 }
 
 #[test]
-#[should_panic(expected = "only unfreezing or a recovery can go ahead")]
+#[should_panic(expected = "only unfreezing, a recovery or leaving the guardian can go ahead")]
 fn a_frozen_vault_runs_no_other_change() {
     let mut guard = new_vault();
     as_guardian(START_MS);
@@ -1126,7 +1126,7 @@ fn sets_up_a_vault_from_what_the_create_page_sends() {
     assert!(status.agent.is_some() && status.checker.is_some() && status.solana.is_some());
     let buying = status.buying.unwrap();
     assert_eq!((buying.pools.len(), buying.market_returns_tokens), (2, false));
-    assert_eq!(status.version, "0.2.0");
+    assert_eq!(status.version, "0.2.1");
     // Setting up asked to delete the key that signed it.
     let actions: Vec<String> = near_sdk::test_utils::get_created_receipts().into_iter().flat_map(|receipt| receipt.actions).map(|action| format!("{action:?}")).collect();
     assert!(actions.iter().any(|action| action.contains("DeleteKey")), "{actions:?}");
