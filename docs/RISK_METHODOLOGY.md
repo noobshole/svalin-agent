@@ -175,15 +175,22 @@ were checked against Rhea's own guide on 26 November 2026, and never change a gr
 - *Self-declared tests.* A token whose own name or symbol says it is a test or not to be bought
   ("Hoot Test 3 (Do not Buy)") is noted (`notes[contract].selfDeclaredTest`, with its name). Test
   tokens often trade under a real project's ticker.
-- *Holders.* The count comes from NearBlocks. It answers 0 for tokens it does not index (launchpad
-  tokens, for one); that now means unknown, not zero. Where NearBlocks has no count, or one below
-  it, the number of holders in FastNEAR's list of the 100 largest stands in as a lower bound
-  (`notes[contract].holdersAtLeast`, shown as "100+"). That list is never taken as a full count: it
-  can miss holders even when it ends in an empty account. NearBlocks' counts change rarely: over
-  the 17 editions of 19 October to 4 November, 102 of the 104 tokens with a count kept the same
-  number. Holder growth cannot be measured from it.
+- *Holders.* The count comes from [NearBlocks](https://nearblocks.io). A 0 from it means unknown,
+  not zero. Where NearBlocks has no count, or one below it, the number of holders in FastNEAR's
+  list of the 100 largest stands in as a lower bound (`notes[contract].holdersAtLeast`, shown as
+  "100+"). That list is never taken as a full count: it can miss holders even when it ends in an
+  empty account. A count NearBlocks caps (such as "10000+") is a lower bound too.
+- *NearBlocks API v3, from late November 2026.* NearBlocks retired its v1 API on 22 November 2026,
+  and with it the holder-count endpoint, so counts stopped refreshing until the Index moved to the
+  holder figure in its v3 token list. The v1 counts barely changed (over the 17 editions of
+  19 October to 4 November, 102 of the 104 tokens with a count kept the same number) and had none
+  for some tokens, launchpad tokens among them. The v3 list counts those too (HOOT 791 and
+  PEARL 322 on 26 November), and for the nine tokens graded D or better with fewer than 100
+  holders it matched FastNEAR's list exactly that day.
 - *Freshness.* Lookups are spread over runs. Tokens graded D or better are refreshed first, so
-  their figures are about a day old at most; the ~3,000 others rotate over about ten days.
+  their figures are about a day old at most, and their holder counts about two days, because
+  NearBlocks' free API allows only a few calls a minute. The ~3,000 others rotate over about ten
+  days.
 
 **Curated memecoins count as real money.** The yardstick tokens include the two curated NEAR
 memecoins, BLACKDRAGON and SHITZU, beside wNEAR, stablecoins and liquid staking. Measured on the

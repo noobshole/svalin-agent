@@ -62,8 +62,15 @@ export default function RatingsPage() {
             <p>
               <strong className="font-medium">Market cap</strong> is the quoted price times total supply, so a token with no backing can claim any number.{" "}
               <strong className="font-medium">Top 10 own</strong> is the share held by the largest holders, leaving out exchange pools and bridges.{" "}
-              <strong className="font-medium">Holders</strong> with a + is a lower bound, and a token marked <strong className="font-medium">Test token</strong> says so in its own on-chain
-              name.
+              <strong className="font-medium">Holders</strong> come from{" "}
+              <a className="link" href="https://nearblocks.io" rel="noreferrer" target="_blank">
+                NearBlocks
+              </a>{" "}
+              and{" "}
+              <a className="link" href="https://fastnear.com" rel="noreferrer" target="_blank">
+                FastNEAR
+              </a>
+              , and a count with a + is a lower bound. A token marked <strong className="font-medium">Test token</strong> says so in its own on-chain name.
             </p>
             <p>
               A grade says how easily a token can be sold. It says nothing about whether the project is good, and it is not financial advice. The index is rebuilt

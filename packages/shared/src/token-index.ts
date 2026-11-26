@@ -88,7 +88,7 @@ export const tokenNoteSchema = z.object({
   name: z.string().optional(),
   /** The token's own name or symbol says it is a test, or not to be bought. */
   selfDeclaredTest: z.literal(true).optional(),
-  /** The holder count is a lower bound, from FastNEAR's list of the largest holders, where NearBlocks has no count. */
+  /** The holder count is a lower bound, from FastNEAR's list of the largest holders where NearBlocks has no count, or capped by NearBlocks. */
   holdersAtLeast: z.literal(true).optional(),
   /** Curated, from late November 2026: the project behind the token, such as Rhea Finance. */
   project: z.string().optional(),
