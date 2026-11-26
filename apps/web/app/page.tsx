@@ -33,7 +33,7 @@ const QUESTIONS: { question: string; answer: ReactNode }[] = [
     question: "What is the Svalin Index?",
     answer: (
       <>
-        A grade for every NEAR token that Ref Finance prices, based on the real money in its trading pools. The grade says how much a $1,000 sale would lose,
+        A grade for every NEAR token that Rhea Finance (formerly Ref Finance) prices, based on the real money in its trading pools. The grade says how much a $1,000 sale would lose,
         and most tokens get an F because almost nothing stands behind their price. It is rebuilt every few hours, and Solana tokens are planned for early
         2027.{" "}
         <Link className="link" href="/ratings">
@@ -90,7 +90,7 @@ const QUESTIONS: { question: string; answer: ReactNode }[] = [
       <>
         Yes. Every Index edition is on GitHub with the data it was built from, so anyone can recompute the grades. Once a day an edition is sealed, and its
         fingerprint goes into the Svalin Registry on NEAR’s test network, where any contract can check a grade. The data comes from Helius for Solana, and
-        from FastNEAR and Ref Finance for NEAR.
+        from FastNEAR and Rhea Finance for NEAR.
       </>
     ),
   },

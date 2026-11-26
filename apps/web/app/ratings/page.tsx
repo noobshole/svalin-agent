@@ -7,7 +7,7 @@ import { TokenIndex, gradeTone } from "@/components/token-index";
 export const metadata: Metadata = {
   title: "Svalin Index — NEAR tokens graded by the real money behind them",
   description:
-    "Every NEAR token Ref Finance prices, graded by how much a $1,000 sale would lose given the real money in its pools. Rebuilt every few hours.",
+    "Every NEAR token Rhea Finance prices, graded by how much a $1,000 sale would lose given the real money in its pools. Rebuilt every few hours.",
 };
 
 const GRADES: TokenGrade[] = ["A", "B", "C", "D", "F"];
@@ -30,7 +30,7 @@ export default function RatingsPage() {
               <span className="dim">Is the</span> price real?
             </h1>
             <p className="lede">
-              A price is just a quote. Svalin grades every NEAR token that Ref Finance prices by how much a $1,000 sale would lose, given the real money in its
+              A price is just a quote. Svalin grades every NEAR token that Rhea Finance prices by how much a $1,000 sale would lose, given the real money in its
               trading pools.
             </p>
           </>

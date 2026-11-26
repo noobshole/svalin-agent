@@ -36,7 +36,7 @@ const nearSample: Holding[] = [
   { chain: "near", tokenAddress: "meta-pool.near", symbol: "stNEAR", name: "Staked NEAR", amount: 240, priceUsd: 7.34 },
   { chain: "near", tokenAddress: "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1", symbol: "USDC", name: "USD Coin", amount: 2100, priceUsd: 1 },
   { chain: "near", tokenAddress: "blackdragon.tkn.near", symbol: "BLACKDRAGON", name: "Black Dragon", amount: 52_000_000_000, priceUsd: 0.00000001 },
-  { chain: "near", tokenAddress: "token.v2.ref-finance.near", symbol: "REF", name: "Ref Finance", amount: 6400, priceUsd: 0.057 },
+  { chain: "near", tokenAddress: "token.rhealab.near", symbol: "RHEA", name: "Rhea Finance", amount: 14000, priceUsd: 0.026 },
 ];
 
 /**

@@ -152,8 +152,9 @@ export default function WhitepaperPage() {
         <Status kind="live" />
       </h3>
       <p>
-        The Index grades every NEAR token that Ref Finance prices by its <strong>real backing</strong>: the money its trading pools hold in tokens
-        Svalin trusts, such as NEAR and USDC. A sale can never take out more than that. The grade says how much a $1,000 sale would lose
+        The Index grades every NEAR token that Rhea Finance (formerly Ref Finance) prices by its <strong>real backing</strong>: the money its trading pools hold in tokens
+        Svalin trusts, such as NEAR and USDC. A sale can never take out more than that. The trusted tokens are graded the same way, on the other trusted tokens
+        in their pools. The grade says how much a $1,000 sale would lose
         to price movement.
       </p>
       <div className="table-wrap">

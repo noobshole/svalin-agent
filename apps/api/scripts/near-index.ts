@@ -1,8 +1,8 @@
 /**
- * Builds the Svalin Index for NEAR tokens: grades from Ref Finance's prices, classic pools and
+ * Builds the Svalin Index for NEAR tokens: grades from Rhea Finance's prices, classic pools and
  * concentrated-liquidity (DCL) pools, plus market cap, top-10 holder share and holder count for
- * tokens with real backing. Runs on a schedule (.github/workflows/build.yml in the svalin-index
- * repository) and locally:
+ * tokens with real backing, and the daily file behind the ratings page's small charts. Runs on a
+ * schedule (.github/workflows/build.yml in the svalin-index repository) and locally:
  *
  *   pnpm --filter @svalin-agent/api run index:near [data-dir]
  *
@@ -15,7 +15,18 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 
-import { nearTokenIndexSchema, tokenGradeFor, trackRecordSchema, type RatedTokenRow } from "@svalin-agent/shared";
+import { lookupToken } from "@svalin-agent/chain-config";
+import {
+  TOKEN_DAILY_DAYS,
+  nearTokenIndexSchema,
+  tokenDailySchema,
+  tokenGradeFor,
+  trackRecordSchema,
+  type RatedTokenRow,
+  type TokenDaily,
+} from "@svalin-agent/shared";
+
+import { addToDaily } from "../src/ratings/daily.js";
 
 import { editionAnomaly } from "../src/ratings/edition-guard.js";
 import { sealEdition, sha256Hex } from "../src/ratings/edition.js";
@@ -34,8 +45,10 @@ import {
 import { gradeMigration } from "../src/ratings/track-record.js";
 import { parseRefPools, poolDepth, type NearPriceList, type RefDclPool } from "../src/sources/near-source.js";
 
-const PRICES_URL = process.env.NEAR_PRICE_API_URL ?? "https://indexer.ref.finance/list-token-price";
-const POOLS_URL = process.env.NEAR_POOLS_API_URL ?? "https://indexer.ref.finance/list-top-pools";
+// Rhea Finance, formerly Ref Finance. Its old indexer.ref.finance host still answers, but its pool
+// list stopped taking in new pools (2,465 against Rhea's 3,175 on 26 November 2026).
+const PRICES_URL = process.env.NEAR_PRICE_API_URL ?? "https://api.rhea.finance/list-token-price";
+const POOLS_URL = process.env.NEAR_POOLS_API_URL ?? "https://api.rhea.finance/list-top-pools";
 const RPC_URL = process.env.NEAR_RPC_URL ?? "https://rpc.mainnet.fastnear.com";
 const FASTNEAR_URL = process.env.FASTNEAR_API_URL ?? "https://api.fastnear.com";
 const NEARBLOCKS_URL = process.env.NEARBLOCKS_API_URL ?? "https://api.nearblocks.io";
@@ -43,7 +56,9 @@ const DCL_CONTRACT = process.env.NEAR_DCL_CONTRACT ?? "dclv2.ref-labs.near";
 const DATA_DIR = resolve(process.argv[2] ?? "index-out");
 const STATS_FILE = resolve(DATA_DIR, "near-token-stats.json");
 const HISTORY_FILE = resolve(DATA_DIR, "inputs/history.json.gz");
-/** Sealed daily editions, compared with this one for the track record. */
+/** One point a day per token for the ratings page's charts; not part of the sealed edition. */
+const DAILY_FILE = resolve(DATA_DIR, "near-token-daily.json");
+/** Sealed daily editions: compared with this one for the track record, and the daily file's first fill. */
 const SEALED_URL = process.env.NEAR_INDEX_SEALED_URL ?? "https://raw.githubusercontent.com/noobshole/svalin-index/main/editions";
 const TRACK_WINDOWS = [1, 7, 30];
 
@@ -260,7 +275,7 @@ for (const [contract, cached] of cache) {
   });
 }
 
-// Seal the edition: archive the exact Ref Finance responses and record their hashes and the code
+// Seal the edition: archive the exact Rhea Finance responses and record their hashes and the code
 // commit, so anyone can recompute every grade (scripts/verify-index.ts).
 const code = { repository: "https://github.com/noobshole/svalin-agent", commit: process.env.SVALIN_COMMIT ?? "local" };
 const index = nearTokenIndexSchema.parse({
@@ -325,6 +340,53 @@ const rootArgs = {
 writeFileSync(resolve(DATA_DIR, "near-token-root.json"), `${JSON.stringify(rootArgs, null, 2)}\n`);
 writeFileSync(STATS_FILE, JSON.stringify(Object.fromEntries(cache)));
 
+/** A sealed daily edition from the record on main, or null when it cannot be read. */
+async function sealedEdition(sealedDay: string) {
+  const response = await fetch(`${SEALED_URL}/${sealedDay}/near-token-index.json`, { signal: AbortSignal.timeout(30_000) });
+  return response.ok ? nearTokenIndexSchema.parse(await response.json()) : null;
+}
+
+/**
+ * The registry tokens' rows for a sealed edition from before the Index graded them, worked out from
+ * the inputs archived with it. For the daily file only: their backing is that edition's pool depth,
+ * without the 24-hour low, which for these deep pools barely differs.
+ */
+async function registryRowsFromInputs(sealedDay: string): Promise<RatedTokenRow[]> {
+  const read = async (name: string) => {
+    const response = await fetch(`${SEALED_URL}/${sealedDay}/inputs/${name}.json.gz`, { signal: AbortSignal.timeout(30_000) });
+    return response.ok ? gunzipSync(Buffer.from(await response.arrayBuffer())).toString("utf8") : null;
+  };
+  const [sealedPrices, sealedPools, sealedDcl] = await Promise.all([read("prices"), read("pools"), read("dcl-pools")]);
+  if (!sealedPrices || !sealedPools) return [];
+  const quoted = JSON.parse(sealedPrices) as NearPriceList;
+  const sealedDepth = poolDepth(parseRefPools(sealedPools), quoted, sealedDcl ? (JSON.parse(sealedDcl) as RefDclPool[]) : []);
+  return rateNearTokens(quoted, sealedDepth).rows.filter((row) => lookupToken("near", row[0]));
+}
+
+// The daily file: this edition's prices and backing added to the last 30 days. Without one (the
+// first run, or a file that no longer reads), it is filled from the sealed daily editions first.
+function readDaily(): TokenDaily | null {
+  if (!existsSync(DAILY_FILE)) return null;
+  const parsed = tokenDailySchema.safeParse(JSON.parse(readFileSync(DAILY_FILE, "utf8")));
+  return parsed.success ? parsed.data : null;
+}
+let daily = readDaily();
+if (!daily) {
+  for (let back = TOKEN_DAILY_DAYS - 1; back >= 1; back -= 1) {
+    try {
+      const sealedDay = new Date(now - back * DAY_MS).toISOString().slice(0, 10);
+      const sealed = await sealedEdition(sealedDay);
+      if (!sealed) continue;
+      const gradesRegistry = sealed.rows.some((row) => lookupToken("near", row[0]));
+      daily = addToDaily(daily, gradesRegistry ? sealed : { ...sealed, rows: [...sealed.rows, ...(await registryRowsFromInputs(sealedDay))] });
+    } catch {
+      failures.set("daily backfill", (failures.get("daily backfill") ?? 0) + 1);
+    }
+  }
+}
+daily = addToDaily(daily, index);
+writeFileSync(DAILY_FILE, JSON.stringify(daily));
+
 // The track record: how grades moved since the editions sealed 1, 7 and 30 days ago. Only editions
 // graded by the same methodology are compared, and a sealed edition that cannot be read skips its
 // window rather than holding up this one.
@@ -332,10 +394,8 @@ const windows = [];
 for (const days of TRACK_WINDOWS) {
   const sealedDay = new Date(now - days * DAY_MS).toISOString().slice(0, 10);
   try {
-    const response = await fetch(`${SEALED_URL}/${sealedDay}/near-token-index.json`, { signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) continue;
-    const baseline = nearTokenIndexSchema.parse(await response.json());
-    if (baseline.methodology === index.methodology) windows.push(gradeMigration(baseline, index, days, sealedDay));
+    const baseline = await sealedEdition(sealedDay);
+    if (baseline?.methodology === index.methodology) windows.push(gradeMigration(baseline, index, days, sealedDay));
   } catch {
     failures.set("track-record", (failures.get("track-record") ?? 0) + 1);
   }
@@ -356,6 +416,7 @@ console.log(
     fingerprint: edition.fingerprint,
     root: rootArgs.root,
     trackRecordWindows: windows.map((window) => window.days),
+    dailyDays: daily.days.length,
     seconds: Math.round((Date.now() - now) / 1000),
     failures: Object.fromEntries(failures),
   }),

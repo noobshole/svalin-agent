@@ -96,9 +96,10 @@ describe("the proof routes", () => {
     expect(decodeHeader(paid.headers.get("PAYMENT-REQUIRED")).accepts[0].amount).toBe("2000");
     expect((await app.request("/v1/proof/z.near")).status).toBe(404);
     expect((await app.request("/v1/proof/bad..near")).status).toBe(400);
+    // A registry token gets a proof once an edition on NEAR grades it; this one does not.
     const trusted = await app.request("/v1/proof/wrap.near");
     expect(trusted.status).toBe(404);
-    expect(await trusted.json()).toMatchObject({ code: "trusted_token" });
+    expect(await trusted.json()).toMatchObject({ code: "not_in_edition" });
   });
 
   it("gives a free trial proof", async () => {

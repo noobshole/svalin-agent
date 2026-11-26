@@ -13,18 +13,18 @@ A wallet full of B-grade tokens can still carry high portfolio risk, for example
 
 ## Inputs
 
-- **Priced holdings** from the data source: Helius for Solana wallets; FastNEAR balances and Ref
-  Finance prices for NEAR accounts. Tokens without a reliable price are excluded from totals and
-  counted as `unpricedAssetCount`. Dust below $0.01 is dropped.
+- **Priced holdings** from the data source: Helius for Solana wallets; FastNEAR balances and Rhea
+  Finance (formerly Ref Finance) prices for NEAR accounts. Tokens without a reliable price are
+  excluded from totals and counted as `unpricedAssetCount`. Dust below $0.01 is dropped.
 - **Category** from a curated registry (`packages/chain-config`): `native`, `stablecoin`,
   `liquid-staking`, `major`, `meme`. Anything not in the registry is `long-tail`.
 - **Pool check for NEAR tokens outside the registry.** A quoted price alone is not trusted:
-  anyone can send an account a token whose Ref Finance price is fake or stale. Such a token is
+  anyone can send an account a token whose Rhea Finance price is fake or stale. Such a token is
   valued at no more than the registry tokens (wNEAR, stablecoins, liquid staking and so on) held
-  in its Ref pools, which is the most a sale of it could take out. Value on the other side of a
+  in its Rhea pools, which is the most a sale of it could take out. Value on the other side of a
   pool counts only if it is a registry token, so two junk tokens paired with each other add
   nothing. A token whose pools hold no registry token counts as unpriced. Registry tokens are not
-  checked. Both Ref pool types count: classic pools are read live, and the depth from
+  checked. Both Rhea pool types count: classic pools are read live, and the depth from
   concentrated-liquidity (DCL) pools comes from the latest Svalin Index edition, because the DCL
   contract cannot be paged inside a request. The bound is also capped at the backing the token has
   held for 24 hours in that edition (see the Svalin Index below), so a pool added this morning
@@ -106,9 +106,11 @@ threshold-width past it scores 100. Unpriced spam tokens can lower confidence by
 
 ## Svalin Index: NEAR token grades
 
-The [Svalin Index](https://svalin.noobshole.workers.dev/ratings) grades every NEAR token Ref Finance
-prices, except registry tokens, which are the yardstick. A token's **real backing** is the same pool
-check as above: the registry-token value in its Ref pools, classic and DCL. The grade answers how
+The [Svalin Index](https://svalin.noobshole.workers.dev/ratings) grades every NEAR token Rhea Finance
+prices. A token's **real backing** is the same pool check as above: the registry-token value on the
+other side of its Rhea pools, classic and DCL. Registry tokens are graded the same way, on the other
+registry tokens in their pools and never on themselves, so wNEAR counts the USDC and stNEAR beside
+it. The grade answers how
 much of a $1,000 sale would be lost to price movement, about `1000 / (backing + 1000)` in a
 constant-product pool. A check of a real trade uses its size instead (`saleLoss(backing, size)`):
 a $50,000 sale into $100,000 of backing loses about a third.
@@ -136,9 +138,39 @@ index is rebuilt every few hours by `apps/api/scripts/near-index.ts` and publish
 [svalin-index](https://github.com/noobshole/svalin-index) repository. Methodology
 `near-token-backing-v1` (from 22 October 2026) added DCL pools, the 24-hour hold and the burn
 exclusion; earlier editions are `near-token-backing-v0` and still verify with the current code.
+From late November 2026, under the same methodology, editions also grade the registry tokens, as
+above. Registry tokens are vetted and long established, so their backing counts from their first
+edition rather than after 24 hours, and their lowest backing in the last 24 hours still applies.
+Grades of every other token are unchanged, and editions from before still verify: the verifier
+leaves the registry tokens out of an edition that does not grade them. The circuit breaker that
+refuses a suspect edition leaves them out of its totals, so their deep pools can neither trip it
+nor hide a collapse across every other token. Reports still value registry tokens at full price.
+
+**Daily file.** Beside each edition, `near-token-daily.json` keeps one point a day per token for
+the last 30 days: its quoted price and the real backing its grade used, from the day's latest
+edition (`GET /v1/index/near-tokens/daily`). The ratings page draws them as small charts. It is
+built from the editions themselves, is not part of the sealed edition, and changes no grade. Its
+first fill came from the sealed daily editions, with the registry tokens' points worked out from
+the inputs archived with them.
+
+**Where the prices and pools come from.** Rhea Finance is the NEAR exchange and lending app formed
+when Ref Finance merged with Burrow in 2025; its API (`api.rhea.finance`) gives the price list and
+classic pools, and the DCL contract is still `dclv2.ref-labs.near`. Only Rhea's pools count, so
+a token that trades mostly on exchanges outside NEAR looks thinner here than it is, and a token
+Rhea does not price at all (HOT, for one) is not in the Index. Until 26 November 2026 the build
+read Ref's old `indexer.ref.finance` host, which still answers but whose pool list had stopped
+taking in new pools: 2,465 pools against Rhea's 3,175 that day. Switching moved two tokens from F
+to D and changed no other grade.
+
+**Rhea Finance's own tokens.** RHEA (`token.rhealab.near`) is Rhea Finance's token. REF and
+xREF were converted into it, and Burrow's BRRR holders were offered it, so the Index notes those
+three as replaced by RHEA (`notes[contract].replacedBy`). xRHEA (staked RHEA) and oRHEA (its
+reward token) cannot be transferred, so a pool sale of either cannot happen whatever its quoted
+price (`notes[contract].nonTransferable`). These notes are curated in `packages/chain-config`,
+were checked against Rhea's own guide on 26 November 2026, and never change a grade.
 
 **Market data, from 4 November 2026.** None of it changes a grade.
-- *Symbols.* Ref leaves many tokens without a symbol (39 of the 84 graded D or better on
+- *Symbols.* Rhea leaves many tokens without a symbol (39 of the 84 graded D or better on
   4 November, including the real HOOT, while 16 F-graded tokens carried "HOOT"). The Index then
   uses the symbol from the token's own `ft_metadata`, cleaned like any on-chain text.
 - *Self-declared tests.* A token whose own name or symbol says it is a test or not to be bought
@@ -183,7 +215,7 @@ what selling it would fetch, from the same constant-product model (`apps/api/src
 Quotes are given for $1K, $10K, $100K and any `amountUsd` the caller adds. They need nothing but
 an edition's backing, so every edition carries them implicitly and anyone can recompute them; the
 website shows the same numbers. Splitting a sale across several pools fetches the same as one sale
-into a pool of their combined depth, so the model holds across a token's Ref pools. It counts only
+into a pool of their combined depth, so the model holds across a token's Rhea pools. It counts only
 NEAR pools: a token that also trades on other chains or exchanges could fetch more there.
 
 **Track record.** Each edition also publishes `near-track-record.json`: how the grades of the
@@ -234,9 +266,9 @@ in its reasons. The paid check does.
 - Prices come from the data provider. On NEAR the pool check bounds what a thinly traded token
   can add, but a position is still shown at its quoted price up to that bound, which can be more
   than a large sale would really fetch; exit value estimates what it would fetch. A token that
-  trades only outside Ref Finance, or only against unvetted tokens, counts as unpriced.
+  trades only outside Rhea Finance, or only against unvetted tokens, counts as unpriced.
 - Solana prices are used as Helius quotes them; the pool check covers NEAR only.
-- Exit value and exit prices model a token's Ref pools as one constant-product pool. Concentrated
+- Exit value and exit prices model a token's Rhea pools as one constant-product pool. Concentrated
   liquidity can fill a small sale better and a large one worse than that, and a token that also
   trades on other chains or exchanges could fetch more there.
 - Positions inside DeFi protocols (LP tokens, lending deposits, perps) are only seen if they are
@@ -256,11 +288,11 @@ in its reasons. The paid check does.
   reader orders is shown as `[hidden name]` in reports, checks and the Index: prompt-injection
   phrasing, orders to move money ("send all…", "payment failed, pay again"), a link, or a long
   encoded message (Morse, base64). It is judged on the whole text, before the 32-character cut.
-  Over the 4,602 symbols Ref Finance listed on 28 October 2026 it hid none.
+  Over the 4,602 symbols Rhea Finance listed on 28 October 2026 it hid none.
 - Changes to weights, thresholds or chain coverage bump `methodologyVersion`, which every report
   carries. 2026-10.2 added NEAR accounts. 2026-10.3 added the pool check for NEAR tokens
   outside the registry. 2026-10.4 stopped rating wallets with nothing priced. 2026-10.5 added
-  Ref's concentrated-liquidity pools to the pool check, and 2026-10.6 capped it at backing that
+  Rhea's concentrated-liquidity pools to the pool check, and 2026-10.6 capped it at backing that
   has held for 24 hours. 2026-10.7 added exit value and the `exit-cost` finding, outside the
   score, and 2026-10.8 the `hidden-instructions` finding, also outside it. 2026-11.1 weights each
   long-tail NEAR token by its liquidity grade; the other weights and the thresholds are unchanged

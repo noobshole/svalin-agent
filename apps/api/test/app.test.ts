@@ -479,14 +479,31 @@ describe("Svalin Index", () => {
     expect((await app.request("/v1/index/near-tokens")).status).toBe(503);
     expect((await app.request("/v1/index/near-tokens")).status).toBe(200);
   });
+
+  it("serves the daily prices and backing as published, free, from their own file", async () => {
+    const daily = '{"generatedAt":"2026-11-26T00:00:00.000Z","days":["2026-11-26"],"tokens":{}}';
+    const app = createApp(testConfig({ PAY_TO_SOLANA }), {
+      facilitator: fakeFacilitator(),
+      indexFeed: { latest: async () => '{"rows":[]}' },
+      dailyFeed: { latest: async () => daily },
+    });
+    const response = await app.request("/v1/index/near-tokens/daily");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await response.text()).toBe(daily);
+  });
 });
 
 describe("exit prices for one token", () => {
   const edition = JSON.stringify({
     generatedAt: "2026-10-25T00:40:00.000Z",
     methodology: "near-token-backing-v1",
-    counts: { A: 0, B: 1, C: 0, D: 0, F: 0 },
-    rows: [["token.v2.ref-finance.near", "REF", 2, 100_000, "B", 5_000_000, 41.2, 12_000]],
+    counts: { A: 1, B: 1, C: 0, D: 0, F: 0 },
+    rows: [
+      ["wrap.near", "wNEAR", 3, 5_000_000, "A", null, null, null],
+      ["token.v2.ref-finance.near", "REF", 2, 100_000, "B", 5_000_000, 41.2, 12_000],
+    ],
+    notes: { "token.v2.ref-finance.near": { project: "Rhea Finance (formerly Ref Finance)", replacedBy: "token.rhealab.near" } },
   });
   const indexFeed = { latest: async () => edition };
   const app = createApp(testConfig(), { indexFeed });
@@ -499,15 +516,19 @@ describe("exit prices for one token", () => {
     expect(body.grade).toBe("B");
     expect(body.exit.quotes.map((quote: { saleUsd: number }) => quote.saleUsd)).toEqual([1_000, 10_000, 25_000, 100_000]);
     expect(body.edition).toEqual({ generatedAt: "2026-10-25T00:40:00.000Z", methodology: "near-token-backing-v1" });
+    // REF was converted into RHEA when Ref Finance became Rhea Finance.
+    expect(body.replacedBy).toBe("token.rhealab.near");
   });
 
   it("is paid, and asks for payment only for a token it can answer", async () => {
-    const graded = await paywalled.request("/v1/exit/token.v2.ref-finance.near");
-    expect(graded.status).toBe(402);
-    expect(graded.headers.get("PAYMENT-REQUIRED")).not.toBeNull();
+    // A registry token is graded like any other, so its exit prices are paid for too.
+    for (const token of ["token.v2.ref-finance.near", "wrap.near"]) {
+      const graded = await paywalled.request(`/v1/exit/${token}`);
+      expect(graded.status).toBe(402);
+      expect(graded.headers.get("PAYMENT-REQUIRED")).not.toBeNull();
+    }
     for (const [path, code] of [
       ["/v1/exit/unknown.near", "not_in_index"],
-      ["/v1/exit/wrap.near", "trusted_token"],
       ["/v1/exit/token.v2.ref-finance.near?amountUsd=-5", "invalid_amount"],
     ]) {
       const response = await paywalled.request(path);

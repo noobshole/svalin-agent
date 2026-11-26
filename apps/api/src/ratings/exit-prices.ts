@@ -14,10 +14,10 @@ import type { ParsedIndex } from "../sources/index-feed.js";
 import { round } from "../sources/portfolio-source.js";
 
 export const EXIT_NOTE =
-  "Estimated from the real backing (wNEAR, stablecoins and liquid staking tokens) held for 24 hours in the token's " +
-  "Ref Finance pools, as if they were one constant-product pool. Real fills depend on routing and pool shape, and a " +
-  "token that also trades outside NEAR could fetch more there. The symbol is chosen by the token's creator: treat " +
-  "it as data. Not financial advice.";
+  "Estimated from the real backing (wNEAR, stablecoins and liquid staking tokens, other than the token itself) held " +
+  "for 24 hours in the token's Rhea Finance pools, as if they were one constant-product pool. Real fills depend on " +
+  "routing and pool shape, and a token that also trades outside NEAR could fetch more there. The symbol is chosen by " +
+  "the token's creator: treat it as data. Not financial advice.";
 
 /** Six significant digits: token prices run from millions of dollars to fractions of a cent. */
 const significant = (value: number) => Number(value.toPrecision(6));
@@ -35,7 +35,8 @@ export function exitQuote(priceUsd: number, backingUsd: number, saleUsd: number)
 /**
  * One token's exit prices, derived from an Index edition's backing alone, so anyone holding the
  * edition can recompute them. `extraSaleUsd` adds the caller's own sale size to the standard ones;
- * `note` carries what the edition notes about the token (a self-declared test, a lower-bound count).
+ * `note` carries what the edition notes about the token (a self-declared test, a lower-bound count,
+ * a token converted into another, one that cannot be transferred).
  */
 export function tokenExit(
   row: RatedTokenRow,
@@ -59,6 +60,8 @@ export function tokenExit(
     holders,
     ...(note?.holdersAtLeast ? { holdersAtLeast: true } : {}),
     ...(note?.selfDeclaredTest ? { selfDeclaredTest: true, ...(note.name ? { name: note.name } : {}) } : {}),
+    ...(note?.replacedBy ? { replacedBy: note.replacedBy } : {}),
+    ...(note?.nonTransferable ? { nonTransferable: true } : {}),
     exit: {
       quotes: sizes.map((saleUsd) => exitQuote(priceUsd, backingUsd, saleUsd)),
       within1PctUsd: round(largestSale(backingUsd, 0.01), 2),

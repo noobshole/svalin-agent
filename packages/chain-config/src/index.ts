@@ -199,6 +199,34 @@ export function lookupToken(chain: SupportedChainKey, address: string): KnownTok
   return tokenIndex.get(`${chain}:${address}`);
 }
 
+/**
+ * Curated facts about NEAR tokens that a price list cannot show. Ref Finance merged with Burrow in
+ * 2025 and is now Rhea Finance: REF and xREF were converted to RHEA, BRRR holders were offered RHEA,
+ * and xRHEA (staked RHEA) and oRHEA (its reward token) cannot be transferred, so neither can be sold
+ * in a pool. Checked against guide.rhea.finance on 26 Nov 2026. The Index copies them into its
+ * notes; they never change a grade.
+ */
+export type NearTokenFact = {
+  /** The project behind the token. */
+  project: string;
+  /** The token was retired and converted into this one. */
+  replacedBy?: string;
+  /** The token cannot be transferred, so a pool sale is impossible whatever its price. */
+  nonTransferable?: true;
+};
+
+export const RHEA_TOKEN = "token.rhealab.near";
+
+export const NEAR_TOKEN_FACTS: Readonly<Record<string, NearTokenFact>> = {
+  [RHEA_TOKEN]: { project: "Rhea Finance (formerly Ref Finance and Burrow)" },
+  "xtoken.rhealab.near": { project: "Rhea Finance", nonTransferable: true },
+  "otoken.rhealab.near": { project: "Rhea Finance", nonTransferable: true },
+  "lst.rhealab.near": { project: "Rhea Finance" },
+  "token.v2.ref-finance.near": { project: "Rhea Finance (formerly Ref Finance)", replacedBy: RHEA_TOKEN },
+  "xtoken.ref-finance.near": { project: "Rhea Finance (formerly Ref Finance)", replacedBy: RHEA_TOKEN },
+  "token.burrow.near": { project: "Rhea Finance (formerly Burrow)", replacedBy: RHEA_TOKEN },
+};
+
 export function categoriseToken(chain: SupportedChainKey, address: string): AssetCategory {
   return lookupToken(chain, address)?.category ?? "long-tail";
 }

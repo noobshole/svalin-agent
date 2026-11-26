@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useProPass } from "@/components/pro-status";
 import { IndexDisc } from "@/components/seal";
+import { TokenTrend } from "@/components/token-trend";
 import { API_BASE_URL } from "@/lib/api";
 import { isRunning } from "@/lib/pro";
 import { INDEX_COUNTS_FALLBACK, indexCounts } from "@/lib/seal";
@@ -132,7 +133,7 @@ function Summary({ index }: { index: NearTokenIndex }) {
   const total = index.rows.length;
   const noBacking = index.rows.filter((row) => row[3] === 0).length;
   const stats = [
-    { label: "NEAR tokens graded", value: total.toLocaleString("en-US"), sub: "every token Ref Finance prices" },
+    { label: "NEAR tokens graded", value: total.toLocaleString("en-US"), sub: "every token Rhea Finance prices" },
     { label: "Grade F", value: `${Math.round((index.counts.F / total) * 100)}%`, sub: `${index.counts.F.toLocaleString("en-US")} tokens under $3K of real backing` },
     { label: "No real money at all", value: noBacking.toLocaleString("en-US"), sub: "a quoted price nobody can sell at" },
     {
@@ -194,12 +195,15 @@ function TokenTable({ rows, notes, edition }: { rows: RatedTokenRow[]; notes: No
   const [query, setQuery] = useState(linked);
   const [grade, setGrade] = useState<"All" | TokenGrade>("All");
   const [shown, setShown] = useState(PAGE);
+  // Tokens opened so far: only their panels draw the last 30 days, so the daily file loads on the first open.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set(linked ? [linked] : []));
   const table = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).has("q")) table.current?.scrollIntoView({ block: "start" });
   }, []);
 
+  const symbols = useMemo(() => new Map(rows.map((row) => [row[0], row[1]] as const)), [rows]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return rows.filter(
@@ -260,7 +264,14 @@ function TokenTable({ rows, notes, edition }: { rows: RatedTokenRow[]; notes: No
             const flagged = top10 !== null && top10 >= CONCENTRATION_FLAG_PCT;
             // A scanned token arrives with ?q=<contract> and opens on its exit prices.
             return (
-              <details className={cn("group", position > 0 && "border-t border-border")} key={contract} open={contract === linked}>
+              <details
+                className={cn("group", position > 0 && "border-t border-border")}
+                key={contract}
+                onToggle={(event) => {
+                  if (event.currentTarget.open && !opened.has(contract)) setOpened((before) => new Set(before).add(contract));
+                }}
+                open={contract === linked}
+              >
                 <summary className={cn("grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 py-3 lg:items-center", COLUMNS)}>
                   <div className="min-w-0">
                     <p className="flex items-center gap-1.5">
@@ -283,7 +294,7 @@ function TokenTable({ rows, notes, edition }: { rows: RatedTokenRow[]; notes: No
                   <Cell label="Holders" more value={!holders ? "—" : `${holders.toLocaleString("en-US")}${note?.holdersAtLeast ? "+" : ""}`} />
                   <Cell label="$10K sale fetches" more value={backingUsd > 0 ? formatUsd(saleProceeds(backingUsd, 10_000)) : "nothing"} />
                 </summary>
-                <ExitPanel edition={edition} note={note} row={row} />
+                <ExitPanel edition={edition} note={note} row={row} symbolOf={(other) => symbols.get(other)} trend={opened.has(contract)} />
               </details>
             );
           })
@@ -316,8 +327,21 @@ function Cell({ label, value, flagged = false, more = false }: { label: string; 
  * A token's exit prices: what selling it would actually fetch, how much can be sold near the
  * quoted price, and what the whole supply could fetch. The same numbers the API returns.
  */
-function ExitPanel({ row, note, edition }: { row: RatedTokenRow; note: TokenNote | undefined; edition: Edition }) {
-  const [, , priceUsd, backingUsd, grade, marketCap, top10, holders] = row;
+function ExitPanel({
+  row,
+  note,
+  edition,
+  symbolOf,
+  trend,
+}: {
+  row: RatedTokenRow;
+  note: TokenNote | undefined;
+  edition: Edition;
+  symbolOf: (contract: string) => string | undefined;
+  /** Draw the last 30 days; set once the token has been opened. */
+  trend: boolean;
+}) {
+  const [contract, symbol, priceUsd, backingUsd, grade, marketCap, top10, holders] = row;
   const pro = isRunning(useProPass().status);
   const backed = backingUsd > 0;
   const wholeSupply = !backed ? 0 : marketCap === null ? null : saleProceeds(backingUsd, marketCap);
@@ -342,6 +366,7 @@ function ExitPanel({ row, note, edition }: { row: RatedTokenRow; note: TokenNote
           Its own on-chain name{note.name ? <> is “{note.name}”</> : " says it is a test"}. Test tokens often trade under a real project’s ticker, so check the contract address.
         </p>
       ) : null}
+      <TokenAbout note={note} symbol={symbol} symbolOf={symbolOf} />
       <dl className="border-b border-border lg:hidden">
         <div className="line">
           <dt className="text-mutedForeground">Market cap</dt>
@@ -356,6 +381,7 @@ function ExitPanel({ row, note, edition }: { row: RatedTokenRow; note: TokenNote
           <dd>{!holders ? "—" : `${holders.toLocaleString("en-US")}${note?.holdersAtLeast ? "+" : ""}`}</dd>
         </div>
       </dl>
+      {trend ? <TokenTrend contract={contract} /> : null}
       <h3 className="subtitle">Exit prices</h3>
       <div className="grid gap-x-[var(--gap)] gap-y-4 sm:grid-cols-3">
         {EXIT_SALE_SIZES_USD.map((saleUsd) => {
@@ -380,12 +406,41 @@ function ExitPanel({ row, note, edition }: { row: RatedTokenRow; note: TokenNote
         ))}
       </dl>
       <p className="max-w-[50em] text-sm text-mutedForeground">
-        Estimated from the real money held for 24 hours in its Ref Finance pools. Real fills depend on routing, and a token that also trades outside NEAR could fetch more there.{" "}
+        Estimated from the real money held for 24 hours in its Rhea Finance pools. Real fills depend on routing, and a token that also trades outside NEAR could fetch more there.{" "}
         <Link className="link text-foreground" href="/docs">
           Use it in your app
         </Link>
       </p>
     </div>
+  );
+}
+
+/**
+ * What the Index knows about the token beyond its numbers: the project behind it, a token that was
+ * converted into another (REF into RHEA), or one that cannot be transferred (xRHEA, staked RHEA).
+ */
+function TokenAbout({ symbol, note, symbolOf }: { symbol: string; note: TokenNote | undefined; symbolOf: (contract: string) => string | undefined }) {
+  if (!note?.project) return null;
+  if (note.replacedBy) {
+    return (
+      <p className="max-w-[50em] text-sm">
+        {note.project} converted this old token into{" "}
+        <a className="link" href={`/ratings?q=${encodeURIComponent(note.replacedBy)}`}>
+          {symbolOf(note.replacedBy) ?? note.replacedBy}
+        </a>
+        .
+      </p>
+    );
+  }
+  if (note.nonTransferable) {
+    return (
+      <p className="max-w-[50em] text-sm text-riskMedium">
+        From {note.project}. {symbol} cannot be transferred, so it cannot be sold in a pool whatever its price, and none of the sales below can happen.
+      </p>
+    );
+  }
+  return (
+    <p className="max-w-[50em] text-sm">From {note.project}.</p>
   );
 }
 

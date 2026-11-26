@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { lookupToken } from "@svalin-agent/chain-config";
 import { indexEditionSchema, type IndexEdition, type NearTokenIndex } from "@svalin-agent/shared";
 
 import { parseRefPools, poolDepth, type NearPriceList, type RefDclPool } from "../sources/near-source.js";
@@ -7,7 +8,7 @@ import { heldDepth, rateNearTokens, type BackingHistory } from "./near-tokens.js
 
 /**
  * Sealing and checking Svalin Index editions. An edition is reproducible: its grades follow from
- * the archived Ref Finance responses by the open code at the recorded commit, and its fingerprint
+ * the archived Rhea Finance responses by the open code at the recorded commit, and its fingerprint
  * pins those files so they cannot be swapped after the fact. Used by the build and verify scripts
  * (Node only; the API never imports this).
  */
@@ -54,11 +55,13 @@ export type EditionFiles = { prices: string; pools: string; index: string; dclPo
 
 /**
  * Checks an edition against its files: every hash, the fingerprint, and every token's backing and
- * grade recomputed from the archived inputs. From near-token-backing-v1 that includes Ref's DCL
+ * grade recomputed from the archived inputs. From near-token-backing-v1 that includes Rhea's DCL
  * pools and the 24-hour hold: the archived history must end with exactly the backing the inputs
  * give, and each grade must follow from the history. Market cap, holder data, on-chain metadata
- * (symbols missing from Ref) and notes come from other APIs and are pinned by the index hash but
- * not recomputed.
+ * (symbols missing from Rhea) and notes come from other APIs and are pinned by the index hash but
+ * not recomputed. Editions from before late November 2026 did not grade the registry tokens
+ * (wNEAR, stablecoins, liquid staking), so for an edition without them they are left out of the
+ * recomputation too, and older editions still verify.
  */
 export function checkEdition(edition: IndexEdition, files: EditionFiles): EditionCheck {
   const problems: string[] = [];
@@ -79,6 +82,8 @@ export function checkEdition(edition: IndexEdition, files: EditionFiles): Editio
   const prices = JSON.parse(files.prices) as NearPriceList;
   const dclPools = edition.files.dclPools && files.dclPools ? (JSON.parse(files.dclPools) as RefDclPool[]) : [];
   const current = poolDepth(parseRefPools(files.pools), prices, dclPools);
+  const gradesRegistry = published.rows.some((row) => lookupToken("near", row[0]));
+  if (!gradesRegistry) for (const contract of current.keys()) if (lookupToken("near", contract)) current.delete(contract);
 
   let graded: ReadonlyMap<string, number> = current;
   if (edition.files.history && files.history) {
@@ -99,6 +104,7 @@ export function checkEdition(edition: IndexEdition, files: EditionFiles): Editio
   }
 
   const recomputed = rateNearTokens(prices, graded);
+  if (!gradesRegistry) recomputed.rows = recomputed.rows.filter((row) => !lookupToken("near", row[0]));
   const byContract = new Map(recomputed.rows.map((row) => [row[0], row]));
   for (const row of published.rows) {
     const again = byContract.get(row[0]);

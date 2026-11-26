@@ -71,7 +71,7 @@ export const ratedTokenSchema = z.tuple([
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 
 /**
- * What an edition was computed from, so anyone can recompute its grades: the exact Ref Finance
+ * What an edition was computed from, so anyone can recompute its grades: the exact Rhea Finance
  * responses (archived beside the edition, identified by SHA-256) and the Svalin code commit.
  */
 export const indexProvenanceSchema = z.object({
@@ -81,7 +81,7 @@ export const indexProvenanceSchema = z.object({
 
 /**
  * What a row cannot say about a token, kept beside the rows for the few tokens it applies to.
- * Like market data, notes come from outside Ref Finance and are not part of the grade.
+ * Like market data, notes come from outside Rhea Finance's price list and are not part of the grade.
  */
 export const tokenNoteSchema = z.object({
   /** The token's on-chain name, given when it warns about the token itself. */
@@ -90,6 +90,12 @@ export const tokenNoteSchema = z.object({
   selfDeclaredTest: z.literal(true).optional(),
   /** The holder count is a lower bound, from FastNEAR's list of the largest holders, where NearBlocks has no count. */
   holdersAtLeast: z.literal(true).optional(),
+  /** Curated, from late November 2026: the project behind the token, such as Rhea Finance. */
+  project: z.string().optional(),
+  /** Curated: the token was retired and converted into this one, as REF was into RHEA. */
+  replacedBy: z.string().optional(),
+  /** Curated: the token cannot be transferred, so it cannot be sold in a pool (xRHEA, staked RHEA). */
+  nonTransferable: z.literal(true).optional(),
 });
 
 /** The published index file. Rows instead of objects keep it small enough for a browser. */
@@ -117,7 +123,7 @@ export const indexEditionSchema = z.object({
     prices: editionFileSchema,
     pools: editionFileSchema,
     index: editionFileSchema,
-    /** Ref's concentrated-liquidity (DCL) pools, from near-token-backing-v1. */
+    /** Rhea Finance's concentrated-liquidity (DCL) pools, from near-token-backing-v1. */
     dclPools: editionFileSchema.optional(),
     /** The backing history the 24-hour hold was applied from, from near-token-backing-v1. */
     history: editionFileSchema.optional(),
@@ -155,6 +161,24 @@ export const trackRecordSchema = z.object({
   windows: z.array(gradeMigrationSchema),
 });
 
+/** How many days of points the daily file keeps. */
+export const TOKEN_DAILY_DAYS = 30;
+
+/** One token's points, one per day of `days`: [quoted prices, real backing], null where it was not in the Index. */
+export const tokenDailySeriesSchema = z.tuple([z.array(z.number().positive().nullable()), z.array(z.number().nonnegative().nullable())]);
+
+/**
+ * One point a day for each token over the last 30 days, for the small charts on the ratings page:
+ * the quoted price and the real backing its grade used, taken from the day's latest edition.
+ * Built from the editions themselves and published beside them; it never changes a grade.
+ */
+export const tokenDailySchema = z.object({
+  generatedAt: z.iso.datetime(),
+  /** The days the points are for, as YYYY-MM-DD in UTC, oldest first. */
+  days: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+  tokens: z.record(z.string(), tokenDailySeriesSchema),
+});
+
 /** One sale size: what it fetches, the share lost, and the average price per token received. */
 export const exitQuoteSchema = z.object({
   saleUsd: z.number().positive(),
@@ -181,6 +205,10 @@ export const tokenExitSchema = z.object({
   /** The token's own name says it is a test, or not to be bought; `name` is that on-chain name. */
   selfDeclaredTest: z.literal(true).optional(),
   name: z.string().optional(),
+  /** The token was retired and converted into this one (REF into RHEA). */
+  replacedBy: z.string().optional(),
+  /** The token cannot be transferred, so none of these sales can happen. */
+  nonTransferable: z.literal(true).optional(),
   exit: z.object({
     quotes: z.array(exitQuoteSchema),
     /** The largest sales that lose at most 1% and 5%: how much can leave near the quoted price. */
@@ -223,6 +251,8 @@ export type RatedTokenRow = z.infer<typeof ratedTokenSchema>;
 export type TokenNote = z.infer<typeof tokenNoteSchema>;
 export type GradeMigration = z.infer<typeof gradeMigrationSchema>;
 export type TrackRecord = z.infer<typeof trackRecordSchema>;
+export type TokenDaily = z.infer<typeof tokenDailySchema>;
+export type TokenDailySeries = z.infer<typeof tokenDailySeriesSchema>;
 export type NearTokenIndex = z.infer<typeof nearTokenIndexSchema>;
 export type IndexProvenance = z.infer<typeof indexProvenanceSchema>;
 export type IndexEdition = z.infer<typeof indexEditionSchema>;

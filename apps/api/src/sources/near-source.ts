@@ -29,14 +29,14 @@ export type FastNearAccount = {
   tokens?: { contract_id: string; balance: string }[];
 };
 
-/** Ref Finance `list-token-price`: token contract -> USD price, decimals and symbol. */
+/** Rhea Finance `list-token-price`: token contract -> USD price, decimals and symbol. */
 export type NearPriceList = Record<string, { price: string; decimal: number; symbol: string }>;
 
-/** A Ref Finance liquidity pool: the tokens it holds and their raw amounts, in the same order. */
+/** A Rhea Finance liquidity pool: the tokens it holds and their raw amounts, in the same order. */
 export type RefPool = { token_account_ids: string[]; amounts: string[] };
 
 /**
- * A Ref Finance concentrated-liquidity (DCL) pool: the fields Svalin reads from `list_pools` on
+ * A Rhea Finance concentrated-liquidity (DCL) pool: the fields Svalin reads from `list_pools` on
  * dclv2.ref-labs.near. `total_x` and `total_y` are the raw amounts it holds of each token.
  */
 export type RefDclPool = { token_x: string; token_y: string; total_x: string; total_y: string; state?: string };
@@ -64,12 +64,12 @@ export type NearSourceOptions = {
   apiUrl: string;
   /** NEAR JSON-RPC URL, used to read staking-pool balances. */
   rpcUrl: string;
-  /** Ref Finance token price list URL. */
+  /** Rhea Finance token price list URL. */
   priceUrl: string;
-  /** Ref Finance liquidity pool list URL, used to check what tokens outside the registry could sell for. */
+  /** Rhea Finance liquidity pool list URL, used to check what tokens outside the registry could sell for. */
   poolsUrl: string;
   /**
-   * Depth each token gets from Ref's concentrated-liquidity pools, published with every Svalin
+   * Depth each token gets from Rhea's concentrated-liquidity pools, published with every Svalin
    * Index edition (`near-dcl-depth.json`). Paging the DCL contract does not fit in a request.
    */
   dclDepthUrl?: string;
@@ -318,7 +318,7 @@ export class NearPortfolioSource implements PortfolioSource {
   }
 
   /**
-   * Pool depth per token. Ref's pool list is about 900 KB, so it is read only for accounts that
+   * Pool depth per token. Rhea's pool list is about 1.3 MB, so it is read only for accounts that
    * need it, priced once with the current price list, and the result is cached for five minutes.
    * Depth from concentrated-liquidity pools comes from the latest Index edition and is added on top;
    * if it cannot be read, tokens are valued on the classic pools alone, which can only lower them.
@@ -353,14 +353,23 @@ export class NearPortfolioSource implements PortfolioSource {
   }
 
   /**
-   * The address is a token contract Ref Finance prices: answer with its grade from the published
+   * The address is a token contract Rhea Finance prices: answer with its grade from the published
    * Svalin Index, where backing has to hold for 24 hours before it counts. A token too new for the
-   * Index is graded F until it has.
+   * Index is graded F until it has. A registry token gets its Index grade when the Index can be
+   * read, and no grade otherwise: reports count it at full value either way.
    */
   private async tokenError(contract: string, prices: NearPriceList): Promise<ApiError> {
     const known = lookupToken("near", contract);
     const symbol = known?.symbol ?? onChainLabel(prices[contract]?.symbol) ?? null;
-    if (known) return tokenAddressError({ chain: "near", address: contract, symbol, grade: null, backingUsd: null });
+    if (known) {
+      const indexed = await this.options.indexToken?.(contract).catch(() => undefined);
+      const row = indexed?.row;
+      return tokenAddressError(
+        indexed && row
+          ? { chain: "near", address: contract, symbol, grade: row[4], backingUsd: row[3], edition: indexed.edition }
+          : { chain: "near", address: contract, symbol, grade: null, backingUsd: null },
+      );
+    }
 
     if (this.options.indexToken) {
       let indexed: IndexedToken | undefined;
@@ -374,7 +383,7 @@ export class NearPortfolioSource implements PortfolioSource {
         const notice: TokenNotice = {
           chain: "near",
           address: contract,
-          // The Index fills in symbols Ref leaves out from the token's metadata; its placeholder ends in "…".
+          // The Index fills in symbols Rhea leaves out from the token's metadata; its placeholder ends in "…".
           symbol: symbol ?? (row[1].endsWith("…") ? null : row[1]),
           grade: row[4],
           backingUsd: row[3],
@@ -454,7 +463,7 @@ export class NearPortfolioSource implements PortfolioSource {
 /**
  * Pure mapping, exported for tests. `depth` comes from `poolDepth`: a token outside the registry
  * is valued at no more than its pools could pay out, and counts as unpriced if they hold nothing.
- * `graded` gives those tokens' liquidity grades, and a symbol where Ref has none; a token without
+ * `graded` gives those tokens' liquidity grades, and a symbol where Rhea has none; a token without
  * a grade is ungraded (null).
  */
 export function mapNearToOverview(
@@ -509,7 +518,7 @@ export function mapNearToOverview(
 
     const entry = prices[token.contract_id];
     const indexed = graded.get(token.contract_id);
-    // Ref's symbol first; for a token Ref leaves unnamed, the one the Index read from its metadata.
+    // Rhea's symbol first; for a token Rhea leaves unnamed, the one the Index read from its metadata.
     const label = onChainLabel(entry?.symbol) ?? indexed?.symbol ?? undefined;
     if (label === HIDDEN_NAME) hiddenNameCount += 1;
     const price = priceOf(prices, token.contract_id);
@@ -564,9 +573,11 @@ export function mapNearToOverview(
 }
 
 /**
- * For each token outside the registry, the USD value of registry tokens (wNEAR, stablecoins,
- * liquid staking and so on) in the pools it trades in: the most a sale of it could take out.
- * A token paired only with other unvetted tokens gets nothing, so fake liquidity does not count.
+ * For each token, the USD value of the registry tokens (wNEAR, stablecoins, liquid staking and so
+ * on) on the other side of the pools it trades in: the most a sale of it could take out. A registry
+ * token counts the other registry tokens in its pools, never itself. A token paired only with other
+ * unvetted tokens gets nothing, so fake liquidity does not count. Reports value registry tokens at
+ * full price and use this only for the others; the Index grades every token by it.
  */
 export function poolDepth(pools: RefPool[], prices: NearPriceList, dclPools: readonly RefDclPool[] = []): Map<string, number> {
   // USD per raw unit of each registry token, worked out once rather than per pool.
@@ -576,43 +587,40 @@ export function poolDepth(pools: RefPool[], prices: NearPriceList, dclPools: rea
     const price = priceOf(prices, contract);
     if (entry && price !== null && Number.isInteger(entry.decimal)) unitUsd.set(contract, price / 10 ** entry.decimal);
   }
-
-  const depth = new Map<string, number>();
-  for (const { token_account_ids: ids, amounts } of pools) {
-    if (!Array.isArray(ids) || !Array.isArray(amounts) || ids.length !== amounts.length) continue;
-
-    let registryUsd = 0;
-    for (let index = 0; index < ids.length; index += 1) {
-      const usd = unitUsd.get(ids[index]);
-      const amount = usd === undefined ? 0 : Number(amounts[index]);
-      if (usd !== undefined && Number.isFinite(amount) && amount > 0) registryUsd += amount * usd;
-    }
-    if (registryUsd <= 0) continue;
-
-    for (const id of ids) {
-      if (!REGISTRY_CONTRACTS.has(id)) depth.set(id, (depth.get(id) ?? 0) + registryUsd);
-    }
-  }
-
-  // A concentrated-liquidity pool holds its two tokens across price ranges. The registry token it
-  // holds is still the most a sale of the other token could take out.
   const reserveUsd = (contract: string, raw: string) => {
     const usd = unitUsd.get(contract);
     const amount = Number(raw);
     return usd !== undefined && Number.isFinite(amount) && amount > 0 ? amount * usd : 0;
   };
+
+  const depth = new Map<string, number>();
+  for (const { token_account_ids: ids, amounts } of pools) {
+    if (!Array.isArray(ids) || !Array.isArray(amounts) || ids.length !== amounts.length) continue;
+
+    const held = ids.map((id, index) => reserveUsd(id, amounts[index]));
+    const registryUsd = held.reduce((sum, usd) => sum + usd, 0);
+    if (registryUsd <= 0) continue;
+
+    for (let index = 0; index < ids.length; index += 1) {
+      const other = registryUsd - held[index];
+      if (other > 0) depth.set(ids[index], (depth.get(ids[index]) ?? 0) + other);
+    }
+  }
+
+  // A concentrated-liquidity pool holds its two tokens across price ranges. The registry token it
+  // holds is still the most a sale of the other token could take out.
   for (const { token_x: x, token_y: y, total_x: totalX, total_y: totalY, state } of dclPools) {
     if (state !== undefined && state !== "Running") continue;
     const xUsd = reserveUsd(x, totalX);
     const yUsd = reserveUsd(y, totalY);
-    if (!REGISTRY_CONTRACTS.has(x) && yUsd > 0) depth.set(x, (depth.get(x) ?? 0) + yUsd);
-    if (!REGISTRY_CONTRACTS.has(y) && xUsd > 0) depth.set(y, (depth.get(y) ?? 0) + xUsd);
+    if (yUsd > 0) depth.set(x, (depth.get(x) ?? 0) + yUsd);
+    if (xUsd > 0) depth.set(y, (depth.get(y) ?? 0) + xUsd);
   }
   return depth;
 }
 
 /**
- * Reads Ref's pool list, keeping only pools that hold a registry token. It pulls the two needed
+ * Reads Rhea's pool list, keeping only pools that hold a registry token. It pulls the two needed
  * fields out of the text instead of parsing the whole document, which roughly halves the CPU time
  * (Cloudflare Workers allow 10 ms per request on the free plan). If the format ever changes so
  * that nothing matches, it falls back to a full parse.

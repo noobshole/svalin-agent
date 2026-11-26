@@ -97,7 +97,7 @@ export const paidRoutes: Record<
       "Use before a contract or vault buys a NEAR token: its Svalin Index grade with a Merkle proof against the newest edition sealed on NEAR (Svalin Ratings registry). Any contract checks it with the registry's free verify call; the grade object goes straight into a Svalin Guard vault's request_buy. Read-only.",
     returns: "TokenProof",
     tags: ["near", "token", "liquidity", "proof", "agent"],
-    address: { description: "NEAR token contract, e.g. token.rhealab.near", example: "token.rhealab.near" },
+    address: { description: "NEAR token contract, e.g. token.rhealab.near (RHEA)", example: "token.rhealab.near" },
   },
 };
 
@@ -174,9 +174,17 @@ export function endpoints(config: AppConfig): Endpoint[] {
       method: "GET",
       path: "/v1/index/near-tokens",
       description:
-        "Svalin Index: every NEAR token Ref Finance prices, graded A-F by the real money in its pools, with market cap, top-10 holder share and holder count where known. Free, refreshed every few hours.",
+        "Svalin Index: every NEAR token Rhea Finance prices, graded A-F by the real money in its pools, with market cap, top-10 holder share and holder count where known. Free, refreshed every few hours.",
       price: null,
       returns: "NearTokenIndex",
+    },
+    {
+      method: "GET",
+      path: "/v1/index/near-tokens/daily",
+      description:
+        "The Index's last 30 days: one point a day per token, its quoted price and the real backing its grade used, oldest first. Free; it changes no grade.",
+      price: null,
+      returns: "TokenDaily",
     },
     {
       method: "GET",
@@ -284,7 +292,7 @@ export function serviceInfo(config: AppConfig): ServiceInfo {
         status: config.portfolio.source === "live" ? "live" : "sample-data",
         note:
           config.portfolio.source === "live"
-            ? "Live balances via FastNEAR, prices and pools via Ref Finance, validator stakes via NEAR RPC. Tokens outside the curated registry are valued at no more than their pools could pay out."
+            ? "Live balances via FastNEAR, prices and pools via Rhea Finance (formerly Ref Finance), validator stakes via NEAR RPC. Tokens outside the curated registry are valued at no more than their pools could pay out."
             : "Sample data — this instance has no live data source configured.",
       },
     ],
@@ -348,8 +356,8 @@ export function openApiDocument(config: AppConfig) {
     check: {},
     // An address with no report still gets its check, so a token is an answer, not an error.
     scan: {},
-    exit: { "404": { description: "Not graded, before any payment: a trusted token (trusted_token) or not in the latest Index edition (not_in_index)." } },
-    proof: { "404": { description: "No proof, before any payment: a trusted token (trusted_token) or not in the newest edition on NEAR (not_in_edition)." } },
+    exit: { "404": { description: "Not graded, before any payment: not in the latest Index edition (not_in_index)." } },
+    proof: { "404": { description: "No proof, before any payment: not in the newest edition on NEAR (not_in_edition)." } },
   };
   const paid = (key: PaidRouteKey) => ({
     get: {
@@ -447,6 +455,16 @@ export function openApiDocument(config: AppConfig) {
           },
         },
       },
+      "/v1/index/near-tokens/daily": {
+        get: {
+          summary: "The Index's last 30 days: each token's price and real backing, one point a day. Free.",
+          tags: ["free"],
+          responses: {
+            "200": { description: "TokenDaily: days (YYYY-MM-DD, oldest first) and, per contract, [prices, backing] with one entry per day, null where the token was not in the Index." },
+            "503": { description: "Daily file temporarily unavailable." },
+          },
+        },
+      },
       "/v1/demo/exit/{address}": {
         get: {
           summary: "Free, rate-limited exit prices for a NEAR token at $1K, $10K and $100K.",
@@ -455,7 +473,7 @@ export function openApiDocument(config: AppConfig) {
           responses: {
             "200": { description: "TokenExit" },
             "400": { description: "Invalid contract, or amountUsd, which needs the paid route." },
-            "404": { description: "Not graded: a trusted token (trusted_token) or not in the latest edition (not_in_index)." },
+            "404": { description: "Not graded: not in the latest edition (not_in_index)." },
             "429": { description: "Today's free calls are used up (back at 00:00 UTC)." },
             "503": { description: "Index temporarily unavailable." },
           },
@@ -475,7 +493,7 @@ export function openApiDocument(config: AppConfig) {
           responses: {
             "200": { description: "TokenProof" },
             "400": { description: "Invalid contract." },
-            "404": { description: "No proof: a trusted token (trusted_token) or not in the newest edition (not_in_edition)." },
+            "404": { description: "No proof: not in the newest edition (not_in_edition)." },
             "429": { description: "Today's free calls are used up (back at 00:00 UTC)." },
             "503": { description: "Proofs temporarily unavailable." },
           },
@@ -556,6 +574,7 @@ gets HTTP 422 with code "token_address" and, for NEAR tokens, the token's Svalin
 
 - GET ${config.publicBaseUrl}/v1/demo/risk/{address} — free, ${config.demo.perDay} calls a day per IP shared by every free route (X-Free-Remaining says how many are left)
 - GET ${config.publicBaseUrl}/v1/index/near-tokens — free: every NEAR token graded A-F by the real money behind its price
+- GET ${config.publicBaseUrl}/v1/index/near-tokens/daily — free: each token's price and real backing, one point a day for 30 days
 - GET ${config.publicBaseUrl}/v1/portfolio/{address} — ${prices.portfolio} USDC
 - GET ${config.publicBaseUrl}/v1/risk/{address} — ${prices.risk} USDC
 - GET ${config.publicBaseUrl}/v1/brief/{address} — ${prices.brief} USDC

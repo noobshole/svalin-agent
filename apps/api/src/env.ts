@@ -22,17 +22,20 @@ const envSchema = z.object({
   HELIUS_RPC_URL: optionalString,
   FASTNEAR_API_URL: z.url().default("https://api.fastnear.com"),
   NEAR_RPC_URL: z.url().default("https://rpc.mainnet.fastnear.com"),
-  NEAR_PRICE_API_URL: z.url().default("https://indexer.ref.finance/list-token-price"),
-  // Ref Finance pools, used to check what NEAR tokens outside the curated registry could sell for.
-  NEAR_POOLS_API_URL: z.url().default("https://indexer.ref.finance/list-top-pools"),
-  // Where the scheduled job publishes the latest Svalin Index edition for NEAR tokens.
+  // Rhea Finance (formerly Ref Finance) prices and pools. The pools show what NEAR tokens outside the
+  // curated registry could sell for.
+  NEAR_PRICE_API_URL: z.url().default("https://api.rhea.finance/list-token-price"),
+  NEAR_POOLS_API_URL: z.url().default("https://api.rhea.finance/list-top-pools"),
+  // Where the scheduled job publishes the latest Svalin Index edition for NEAR tokens, and the
+  // daily prices and backing behind the ratings page's small charts.
   NEAR_INDEX_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-token-index.json"),
+  NEAR_INDEX_DAILY_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-token-daily.json"),
   // The Svalin Ratings registry on NEAR that grade proofs are made against, and where its RPC and
   // the sealed editions are.
   NEAR_RATINGS_REGISTRY: z.string().default("svalin-ratings-v1.testnet"),
   NEAR_RATINGS_RPC_URL: z.url().default("https://rpc.testnet.fastnear.com"),
   NEAR_INDEX_SEALED_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/main/editions"),
-  // Depth from Ref's concentrated-liquidity pools, published with each edition.
+  // Depth from Rhea's concentrated-liquidity pools, published with each edition.
   NEAR_DCL_DEPTH_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-dcl-depth.json"),
   // Account age, activity and recent transfers on NEAR, for the recipient check.
   FASTNEAR_TX_API_URL: z.url().default("https://tx.main.fastnear.com"),
@@ -150,6 +153,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       nearPriceApiUrl: env.NEAR_PRICE_API_URL,
       nearPoolsApiUrl: env.NEAR_POOLS_API_URL,
       nearIndexUrl: env.NEAR_INDEX_URL,
+      nearIndexDailyUrl: env.NEAR_INDEX_DAILY_URL,
       nearDclDepthUrl: env.NEAR_DCL_DEPTH_URL,
       ratings: { registry: env.NEAR_RATINGS_REGISTRY, rpcUrl: env.NEAR_RATINGS_RPC_URL, sealedUrl: env.NEAR_INDEX_SEALED_URL.replace(/\/+$/, "") },
       fastnearTxApiUrl,

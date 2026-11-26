@@ -31,7 +31,7 @@ money, inside a contract.
 
 | Part | What it does | Where |
 | --- | --- | --- |
-| **Svalin Index** | Grades every priced NEAR token A to F by the real money in its pools. Rebuilt every few hours; one edition a day is sealed on NEAR. | [`apps/api`](apps/api), [svalin-index](https://github.com/noobshole/svalin-index) |
+| **Svalin Index** | Grades every NEAR token Rhea Finance prices, NEAR and USDC included, A to F by the real money in its pools, with 30 days of price and backing per token. Rebuilt every few hours; one edition a day is sealed on NEAR. | [`apps/api`](apps/api), [svalin-index](https://github.com/noobshole/svalin-index) |
 | **Checks** | Before paying an address: allow, caution or block. Wallet risk reports, exit prices and grade proofs. From $0.002 a call in USDC over x402 on NEAR or Solana, with 10 free calls a day. | [`apps/api`](apps/api), [`packages/mcp`](packages/mcp) |
 | **Svalin Guard** | A vault contract. The agent's key can only ask; the vault pays, holds or refuses by the owner's rules, on NEAR and on Solana, and buys a token only if its grade is proven against the sealed edition. | [`guard`](guard) |
 | **Website** | A free scan of any address (whether it is safe to pay, and a grade for the money it holds), the Index, docs and pricing. | [`apps/web`](apps/web) |
@@ -114,7 +114,7 @@ Each step needs no account and no key.
 6. **The tests pass.**
 
    ```bash
-   pnpm install && pnpm build && pnpm test    # 229 API tests and 36 MCP tests
+   pnpm install && pnpm build && pnpm test    # 236 API tests and 36 MCP tests
    cd guard && cargo test                     # 201 tests: the vault, the registry, the check program
    ```
 
@@ -136,7 +136,7 @@ A paid call:
 agent ── GET /v1/risk/{wallet} ──────────────▶ Svalin API
 agent ◀── 402 Payment Required: $0.002 USDC on Solana or NEAR
 agent ── retry with PAYMENT-SIGNATURE ───────▶ paywall ── verify / settle ──▶ facilitator
-agent ◀── 200 risk report ───────────────────── engine ◀── Helius (Solana) · FastNEAR + Ref Finance (NEAR)
+agent ◀── 200 risk report ───────────────────── engine ◀── Helius (Solana) · FastNEAR + Rhea Finance (NEAR)
 ```
 
 Invalid addresses are rejected before the paywall, and failed responses are never settled. The API
@@ -150,7 +150,7 @@ in it, by rules the owner set.
 | `GET /v1/demo/risk/{address}` | Free, 10 calls a day | Risk report |
 | `GET /v1/demo/check/{address}` | Free, shares the 10 | Recipient check, without the payer's history |
 | `GET /v1/demo/scan/{address}` | Free, shares the 10 | The check and the risk report together, for one free call. This is what the website's scan shows |
-| `GET /v1/index/near-tokens` | Free | The Svalin Index |
+| `GET /v1/index/near-tokens` · `/v1/index/near-tokens/daily` | Free | The Svalin Index; each token's price and backing, one point a day for 30 days |
 | `GET /v1/demo/exit/{contract}` · `/v1/demo/proof/{contract}` | Free, shares the 10 | Exit prices; a grade with its proof |
 | `GET /v1/portfolio/{address}` | $0.002 | Priced holdings and a risk category per token |
 | `GET /v1/risk/{address}` | $0.002 | Score, grade, exposure metrics and findings |
@@ -265,7 +265,7 @@ How NEAR is used:
 - **Website:** Next.js, React, Tailwind CSS, lucide-react, clsx, tailwind-merge and uqr.
 - **Guard:** near-sdk 5.30.0, serde, sha2, wasi-http-client, p256 (tests only), and a pinned copy
   of NEAR Connect (MIT) on the vault page. The demo agent uses only Node's own modules.
-- **Services:** Helius, FastNEAR, Ref Finance, the FastNEAR and x402.org facilitators, OutLayer,
+- **Services:** Helius, FastNEAR, Rhea Finance (formerly Ref Finance), the FastNEAR and x402.org facilitators, OutLayer,
   NEAR Chain Signatures, NEAR AI Cloud, Cloudflare Workers and GitHub Actions.
 - **AI assistance:** Svalin is built with an AI coding assistant (Claude Code), directed by its
   founder, and checked by the tests above and by live runs on testnet. When an Anthropic API key

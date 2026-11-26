@@ -1,10 +1,13 @@
-import { NEAR_BURN_ACCOUNTS, NEAR_SHARED_CUSTODY_ACCOUNTS, lookupToken } from "@svalin-agent/chain-config";
+import { NEAR_BURN_ACCOUNTS, NEAR_SHARED_CUSTODY_ACCOUNTS, NEAR_TOKEN_FACTS, lookupToken } from "@svalin-agent/chain-config";
 import { BACKING_HOLD_MS, tokenGradeFor, type NearTokenIndex, type RatedTokenRow, type TokenNote } from "@svalin-agent/shared";
 
 import { declaresItselfATest, onChainLabel } from "../lib/text.js";
 import type { NearPriceList } from "../sources/near-source.js";
 
-/** v1 counts Ref's concentrated-liquidity pools and grades only backing that has held for 24 hours. */
+/**
+ * v1 counts Rhea Finance's concentrated-liquidity pools and grades only backing that has held for
+ * 24 hours. From late November 2026 it grades the registry tokens too, by the same rule.
+ */
 export const NEAR_TOKEN_METHODOLOGY = "near-token-backing-v1";
 
 /**
@@ -16,7 +19,9 @@ export type BackingHistory = Record<string, { since: number; points: [number, nu
 /**
  * Adds this edition's backing to the history. A token without backing drops out, so backing that
  * appears or comes back starts its 24 hours again. With no earlier history (the first v1 edition),
- * every token that has backing counts as established.
+ * every token that has backing counts as established. So do registry tokens (wNEAR, stablecoins,
+ * liquid staking): they are vetted and long established, so the hold has no new pool to guard
+ * against, and the lowest backing they had over the last 24 hours still counts.
  */
 export function recordBacking(previous: BackingHistory | null, depth: ReadonlyMap<string, number>, now: number): BackingHistory {
   const history: BackingHistory = {};
@@ -25,7 +30,7 @@ export function recordBacking(previous: BackingHistory | null, depth: ReadonlyMa
     if (backing <= 0) continue;
     const prior = previous?.[contract];
     history[contract] = {
-      since: prior ? prior.since : previous === null ? 0 : now,
+      since: prior ? prior.since : previous === null || lookupToken("near", contract) ? 0 : now,
       points: [...(prior?.points ?? []).filter(([at]) => at < now && now - at <= BACKING_HOLD_MS), [now, backing]],
     };
   }
@@ -60,10 +65,10 @@ export type TokenStats = {
 };
 
 /**
- * Grades every NEAR token Ref Finance prices, except registry tokens (wNEAR, stablecoins, liquid
- * staking and the two curated memecoins), which are the yardstick. `depth` is `poolDepth` over
- * Ref's pools: the registry-token value in each token's pools, the same figure Svalin's reports
- * use to cap long-tail holdings.
+ * Grades every NEAR token Rhea Finance prices. `depth` is `poolDepth` over Rhea's pools: the value
+ * of registry tokens (wNEAR, stablecoins, liquid staking and the two curated memecoins) on the other
+ * side of each token's pools, the same figure Svalin's reports use to cap long-tail holdings. A
+ * registry token is graded on the other registry tokens in its pools, under its curated symbol.
  */
 export function rateNearTokens(
   prices: NearPriceList,
@@ -76,12 +81,16 @@ export function rateNearTokens(
 
   for (const [contract, entry] of Object.entries(prices)) {
     const priceUsd = Number(entry.price);
-    if (lookupToken("near", contract) || !Number.isFinite(priceUsd) || priceUsd <= 0) continue;
+    if (!Number.isFinite(priceUsd) || priceUsd <= 0) continue;
     const backingUsd = Math.round(depth.get(contract) ?? 0);
     const extra = stats.get(contract);
-    // Ref leaves many launchpad tokens without a symbol; the token's own metadata usually has one.
+    // Rhea leaves many launchpad tokens without a symbol; the token's own metadata usually has one.
     // Agents read the Index too: a symbol written as instructions is shown as [hidden name].
-    const symbol = onChainLabel(entry.symbol, 24) ?? onChainLabel(extra?.symbol ?? undefined, 24) ?? `${contract.slice(0, 10)}…`;
+    const symbol =
+      lookupToken("near", contract)?.symbol ??
+      onChainLabel(entry.symbol, 24) ??
+      onChainLabel(extra?.symbol ?? undefined, 24) ??
+      `${contract.slice(0, 10)}…`;
     const note: TokenNote = {};
     if (declaresItselfATest(extra?.name ?? undefined) || declaresItselfATest(extra?.symbol ?? undefined) || declaresItselfATest(entry.symbol)) {
       note.selfDeclaredTest = true;
@@ -89,6 +98,7 @@ export function rateNearTokens(
       if (name) note.name = name;
     }
     if (extra?.holdersAtLeast && extra.holders !== null) note.holdersAtLeast = true;
+    if (Object.hasOwn(NEAR_TOKEN_FACTS, contract)) Object.assign(note, NEAR_TOKEN_FACTS[contract]);
     if (Object.keys(note).length > 0) notes[contract] = note;
     rows.push([
       contract,

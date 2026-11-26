@@ -110,7 +110,7 @@ export default function DocsPage() {
       <h2 id="chains">Chains and data</h2>
       <p>
         Svalin covers Solana and NEAR, for wallets and payments. The Svalin Index grades NEAR tokens today; Solana tokens are planned for early 2027. The data
-        comes from Helius for Solana, and from FastNEAR and Ref Finance for NEAR.
+        comes from Helius for Solana, and from FastNEAR and Rhea Finance (formerly Ref Finance) for NEAR.
       </p>
 
       <h2 id="next">Where to go next</h2>

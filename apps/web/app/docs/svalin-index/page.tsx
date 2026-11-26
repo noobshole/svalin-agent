@@ -19,7 +19,7 @@ export default function IndexDocsPage() {
         ["proofs", "Proofs on NEAR"],
         ["try", "Try it"],
       ]}
-      lede="Every NEAR token Ref Finance prices, graded by the real money behind its price."
+      lede="Every NEAR token Rhea Finance prices, graded by the real money behind its price."
       path="/docs/svalin-index"
       title="Svalin Index"
     >
@@ -56,7 +56,12 @@ export default function IndexDocsPage() {
       <h2 id="backing">Real backing</h2>
       <p>
         Real backing is the money a token’s trading pools hold in tokens Svalin trusts, such as NEAR and USDC. A sale can never take out more than that. Only
-        trusted money counts, so pools where fake tokens trade against each other add nothing.
+        trusted money counts, so pools where fake tokens trade against each other add nothing. The trusted tokens are graded too, on the other trusted tokens
+        in their pools, so NEAR counts the USDC beside it and never itself.
+      </p>
+      <p>
+        Prices and pools come from Rhea Finance, the NEAR exchange formerly called Ref Finance. Only Rhea’s pools count, so a token that trades mostly on
+        exchanges outside NEAR, or one Rhea does not price at all, can look thinner here than it is.
       </p>
       <p>Backing also has to hold for 24 hours. A pool added this morning cannot lift a grade today, and a pool pulled for an hour still lowers it.</p>
 
@@ -64,6 +69,10 @@ export default function IndexDocsPage() {
       <p>
         Every token also has exit prices: what selling $1K, $10K or $100K of it would actually fetch, how much can be sold close to the quoted price, and the most
         its whole supply could fetch. They need nothing but an edition’s data, so anyone can recompute them.
+      </p>
+      <p>
+        Each token also shows its price and real backing over the last 30 days, one point a day. <code>GET /v1/index/near-tokens/daily</code> returns them
+        for every token.
       </p>
 
       <h2 id="editions">Editions you can verify</h2>
