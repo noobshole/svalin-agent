@@ -110,9 +110,8 @@ The [Svalin Index](https://svalin.noobshole.workers.dev/ratings) grades every NE
 prices. A token's **real backing** is the same pool check as above: the registry-token value on the
 other side of its Rhea pools, classic and DCL. Registry tokens are graded the same way, on the other
 registry tokens in their pools and never on themselves, so wNEAR counts the USDC and stNEAR beside
-it. The grade answers how
-much of a $1,000 sale would be lost to price movement, about `1000 / (backing + 1000)` in a
-constant-product pool. A check of a real trade uses its size instead (`saleLoss(backing, size)`):
+it. The grade answers how much of a $1,000 sale would be lost to price movement, about
+`1000 / (backing + 1000)` in a constant-product pool. A check of a real trade uses its size instead (`saleLoss(backing, size)`):
 a $50,000 sale into $100,000 of backing loses about a third.
 
 | Grade | Real backing | A $1,000 sale loses |
