@@ -7,6 +7,7 @@ import {
   holdersFromTop,
   marketCapUsd,
   mergeHolderCounts,
+  nearBlocksHolderCount,
   rateNearTokens,
   recordBacking,
   top10Share,
@@ -173,6 +174,33 @@ describe("NEAR token index", () => {
     expect(mergeHolderCounts(38, 39)).toEqual({ holders: 39, atLeast: true });
     expect(mergeHolderCounts(0, undefined)).toEqual({ holders: null, atLeast: false });
     expect(mergeHolderCounts(16_285, null)).toEqual({ holders: 16_285, atLeast: false });
+    // A count NearBlocks capped stays a lower bound.
+    expect(mergeHolderCounts(10_000, 100, true)).toEqual({ holders: 10_000, atLeast: true });
+  });
+
+  it("reads a token's holder count from NearBlocks' v3 token list, for that exact contract only", () => {
+    // /v3/fts?search=token.rhealab.near on 26 Nov 2026 (other fields left out): the search also
+    // matches RHEA's staking and reward tokens.
+    const list = {
+      data: [
+        { contract: "token.rhealab.near", symbol: "RHEA", holders: "17225" },
+        { contract: "otoken.rhealab.near", symbol: "ORHEA", holders: "1054" },
+        { contract: "xtoken.rhealab.near", symbol: "XRHEA", holders: "1084" },
+      ],
+      meta: {},
+    };
+    expect(nearBlocksHolderCount(list, "token.rhealab.near")).toEqual({ holders: 17_225, atLeast: false });
+    expect(nearBlocksHolderCount(list, "xtoken.rhealab.near")).toEqual({ holders: 1_084, atLeast: false });
+    expect(nearBlocksHolderCount(list, "rhealab.near")).toBeNull();
+    expect(nearBlocksHolderCount({ data: [{ contract: "a.near", holders: "10000+" }] }, "a.near")).toEqual({ holders: 10_000, atLeast: true });
+    // 0, a missing count and anything that is not a count are unknown, not zero.
+    for (const holders of ["0", undefined, "many", "-5", 12.5]) {
+      expect(nearBlocksHolderCount({ data: [{ contract: "a.near", holders }] }, "a.near")).toBeNull();
+    }
+    expect(nearBlocksHolderCount({ data: [] }, "a.near")).toBeNull();
+    // Not a token list (an error body, say): fail, so the cached count is kept.
+    expect(() => nearBlocksHolderCount({ message: "This endpoint is currently unavailable." }, "a.near")).toThrow();
+    expect(() => nearBlocksHolderCount(null, "a.near")).toThrow();
   });
 
   it("works out market cap at the quoted price from raw supply and decimals", () => {

@@ -137,13 +137,29 @@ export function holdersFromTop(holders: { balance: string }[]): number | null {
 }
 
 /**
- * One holder count from both sources. NearBlocks counts every holder but answers 0 for tokens it
- * does not index (launchpad tokens, for one), and its counts change rarely, so a 0 from it is
- * unknown, not zero. FastNEAR's list gives a lower bound; it stands when NearBlocks has no count
- * or a count below it.
+ * A token's holder count from NearBlocks' token list (`/v3/fts?search=<contract>`), which replaced
+ * the count endpoint NearBlocks retired with its v1 API on 22 November 2026. The search also
+ * matches other tokens, so only the exact contract counts. Counts come as strings, and NearBlocks
+ * may cap one ("10000+"), which makes it a lower bound. Null when the token is not listed or
+ * counted 0: unknown, not zero. Throws on a response that is not a token list, so a cached count
+ * is kept rather than replaced by nothing.
  */
-export function mergeHolderCounts(nearBlocks: number | null | undefined, listed: number | null | undefined) {
-  if (nearBlocks && nearBlocks >= (listed ?? 0)) return { holders: nearBlocks, atLeast: false };
+export function nearBlocksHolderCount(body: unknown, contract: string): { holders: number; atLeast: boolean } | null {
+  const tokens = (body as { data?: unknown } | null)?.data;
+  if (!Array.isArray(tokens)) throw new Error("NearBlocks did not return a token list");
+  const token: unknown = tokens.find((item) => (item as { contract?: unknown } | null)?.contract === contract);
+  const match = /^(\d+)(\+?)$/.exec(String((token as { holders?: unknown } | undefined)?.holders ?? "").trim());
+  const holders = Number(match?.[1]);
+  return match && Number.isSafeInteger(holders) && holders > 0 ? { holders, atLeast: match[2] === "+" } : null;
+}
+
+/**
+ * One holder count from both sources. NearBlocks counts every holder; `nearBlocksAtLeast` marks a
+ * count it capped. FastNEAR's list gives a lower bound; it stands when NearBlocks has no count or a
+ * count below it.
+ */
+export function mergeHolderCounts(nearBlocks: number | null | undefined, listed: number | null | undefined, nearBlocksAtLeast = false) {
+  if (nearBlocks && nearBlocks >= (listed ?? 0)) return { holders: nearBlocks, atLeast: nearBlocksAtLeast };
   if (listed && listed > 0) return { holders: listed, atLeast: true };
   return { holders: null, atLeast: false };
 }

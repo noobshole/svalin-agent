@@ -8,7 +8,8 @@
  *
  * Supply, holder and metadata lookups barely move, and the public NEAR APIs rate limit bursts, so
  * they are kept in data-dir/near-token-stats.json and refreshed a few per run: tokens graded D or
- * better first, so their figures are at most about a day old, then the ~3,000 others in rotation.
+ * better first, so their figures are at most about a day old (holder counts, which NearBlocks
+ * limits to a few calls a minute, about two days), then the ~3,000 others in rotation.
  * The backing history behind the 24-hour hold is read back from the previous edition's archive.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -35,6 +36,7 @@ import {
   holdersFromTop,
   marketCapUsd,
   mergeHolderCounts,
+  nearBlocksHolderCount,
   rateNearTokens,
   recordBacking,
   top10Share,
@@ -71,9 +73,11 @@ const LOUDEST_CLAIMS = 25;
 const BUDGET = {
   supply: Number(process.env.INDEX_SUPPLY_BUDGET ?? 60),
   topHolders: Number(process.env.INDEX_TOP_HOLDERS_BUDGET ?? 60),
-  holderCount: Number(process.env.INDEX_HOLDER_COUNT_BUDGET ?? 8),
+  holderCount: Number(process.env.INDEX_HOLDER_COUNT_BUDGET ?? 12),
   metadata: Number(process.env.INDEX_METADATA_BUDGET ?? 60),
 };
+/** NearBlocks' free API answers 429 to more than a few calls a minute, so holder counts are spaced out. */
+const NEARBLOCKS_SPACING_MS = 10_000;
 /** Token metadata rarely changes: read again after a week. */
 const METADATA_MAX_AGE_MS = 7 * DAY_MS;
 
@@ -85,8 +89,10 @@ type CachedStats = {
   /** From the same FastNEAR list as the top-10 share: holders in it, a lower bound on all holders. */
   listedHolders?: number | null;
   top10At?: number;
-  /** NearBlocks' count; null when it could not say (it answers 0 for tokens it does not index). */
+  /** NearBlocks' count; null when it could not say (the token is not in its list, or counted 0). */
   holders?: number | null;
+  /** NearBlocks capped the count ("10000+"), so it is a lower bound. */
+  holdersCapped?: true;
   holdersAt?: number;
   symbol?: string | null;
   name?: string | null;
@@ -156,12 +162,10 @@ async function topHolders(contract: string) {
   return body.accounts ?? [];
 }
 
-/** NearBlocks' holder count. It answers 0 for tokens it does not index, so 0 means unknown. */
-async function nearBlocksHolders(contract: string): Promise<number | null> {
-  const response = await get(`${NEARBLOCKS_URL}/v1/fts/${encodeURIComponent(contract)}/holders/count`);
-  const body = (await response.json()) as { holders?: { count?: string }[] };
-  const count = Number(body.holders?.[0]?.count);
-  return Number.isInteger(count) && count > 0 ? count : null;
+/** NearBlocks' holder count, from its v3 token list (see nearBlocksHolderCount). */
+async function nearBlocksHolders(contract: string) {
+  const response = await get(`${NEARBLOCKS_URL}/v3/fts?search=${encodeURIComponent(contract)}&limit=25`);
+  return nearBlocksHolderCount(await response.json(), contract);
 }
 
 /**
@@ -250,20 +254,21 @@ for (const contract of stalest(backed, (c) => entry(c).top10At, BUDGET.topHolder
     noteFailure("top holders", error);
   }
 }
-for (const contract of stalest(gradedAtLeastD, (c) => entry(c).holdersAt, BUDGET.holderCount, now, gradedFirst)) {
+for (const [at, contract] of stalest(gradedAtLeastD, (c) => entry(c).holdersAt, BUDGET.holderCount, now, gradedFirst).entries()) {
+  if (at > 0) await sleep(NEARBLOCKS_SPACING_MS);
   try {
-    Object.assign(entry(contract), { holders: await nearBlocksHolders(contract), holdersAt: now });
+    const count = await nearBlocksHolders(contract);
+    Object.assign(entry(contract), { holders: count?.holders ?? null, holdersCapped: count?.atLeast || undefined, holdersAt: now });
   } catch (error) {
     noteFailure("holder count", error);
   }
-  await sleep(1_500);
 }
 
 const stats = new Map<string, TokenStats>();
 for (const [contract, cached] of cache) {
   const price = prices[contract];
   // Counts cached before 4 Nov 2026 stored NearBlocks' 0 as a fact; it means unknown.
-  const { holders, atLeast } = mergeHolderCounts(cached.holders, cached.listedHolders);
+  const { holders, atLeast } = mergeHolderCounts(cached.holders, cached.listedHolders, cached.holdersCapped);
   stats.set(contract, {
     fdvUsd: cached.supply && price ? marketCapUsd(cached.supply, price.decimal, Number(price.price)) : null,
     top10Pct: cached.top10Pct ?? null,
