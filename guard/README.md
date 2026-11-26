@@ -257,11 +257,13 @@ VAULT=<your vault> AGENT_KEY=~/.svalin/my-agent.json node buy-exam.mjs results-b
 ```
 
 The exams' agent is a script, so no model or AI account is needed. To let a model make the agent's
-choices in `exam.mjs`, add `MODEL=z-ai/glm-5.3-flash` and your own [NEAR AI Cloud](https://near.ai)
-key in `NEAR_AI_API_KEY`, or `PROVIDER=openrouter` with an OpenRouter key in `OPENROUTER_API_KEY` and
-any model's OpenRouter name, such as a Claude, GPT, Grok or Hermes model. Each exam's first lines
-say what the vault needs. Three look-alikes or forged grades within an hour freeze the vault, and
-each exam makes one.
+choices in `exam.mjs`, add `MODEL=` with a model's name on [NEAR AI Cloud](https://near.ai) and your
+own key in `NEAR_AI_API_KEY`. A model NEAR AI runs in a TEE, such as `z-ai/glm-5.3-flash`, signs its
+own answers. Claude, GPT, Gemini, Grok and Kimi run at their makers, so NEAR AI's attested gateway
+signs each request and answer instead, and the exam says which one it checked. `PROVIDER=openrouter`
+with an OpenRouter key in `OPENROUTER_API_KEY` takes any model's OpenRouter name, with nothing
+signed. Each exam's first lines say what the vault needs. Three look-alikes or forged grades within
+an hour freeze the vault. Each exam makes one, or two when a model asks again after a refusal.
 
 Your own agent, built on any model and run from your code, a framework or an AI coding assistant,
 signs `request_payment`, `request_solana_payment` or `request_buy` as the vault's account with its

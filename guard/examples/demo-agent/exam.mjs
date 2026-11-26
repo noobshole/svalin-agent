@@ -6,6 +6,8 @@
 // With MODEL set (for example MODEL=z-ai/glm-5.3-flash), a model on NEAR AI Cloud makes the agent's
 // choices instead of the script: whether to pay each quote, and whether to act on what the data says.
 // The model's attestation is checked first, and each of its answers is checked against its signature.
+// A model NEAR AI passes on to its maker (Claude, GPT, Gemini and others) runs in no TEE: the exam
+// then checks NEAR AI's gateway attestation instead, and the gateway's signature on each answer.
 // With PROVIDER=openrouter as well, the model is an ordinary hosted one on OpenRouter: a real model
 // makes the choices, but nothing about it is attested or signed, and the exam says so.
 //
@@ -13,7 +15,8 @@
 // seller: the first purchase checks the seller in a TEE and locks its terms, and the tricks run
 // against those terms. To run it again on the same vault, give the seller another port with
 // SELLER_PORT: the service is named by its URL, so it starts with no locked terms. Each run makes one
-// look-alike refusal at most, and three within an hour freeze the vault.
+// look-alike refusal, or two when a model asks again after it, and three within an hour freeze the
+// vault: leave an hour between runs on the same vault.
 import { writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -59,7 +62,8 @@ if (MODEL && PROVIDER === "openrouter") {
 } else if (MODEL) {
   model = new NearAiModel({ model: MODEL });
   attestation = await model.attest();
-  console.log(`Model ${MODEL} on NEAR AI Cloud: attested (Intel TDX${attestation.gpu ? " and NVIDIA GPU" : ""} evidence), signing key ${attestation.signers[0].slice(0, 16)}…`);
+  if (attestation.mode === "tee") console.log(`Model ${MODEL} on NEAR AI Cloud: attested (Intel TDX${attestation.gpu ? " and NVIDIA GPU" : ""} evidence), signing key ${attestation.signers[0].slice(0, 16)}…`);
+  else console.log(`Model ${MODEL} through NEAR AI Cloud: it runs at its maker, in no TEE. NEAR AI's gateway is attested (Intel TDX) and signs each request and answer, signing key ${attestation.signers[0].slice(0, 16)}…`);
 }
 
 function report(scene, payment) {
@@ -81,7 +85,7 @@ try {
       const result = await agent.run(`Your user wants the NEAR price for ${day} from this service.`, url);
       rows.push({ ...scene, status: result.last.status, steps: result.steps, payments: result.payments });
       for (const step of result.steps) {
-        const proof = step.verified ? "signed in its TEE, checked" : `not verified: ${step.problem}`;
+        const proof = step.verified ? (attestation.mode === "tee" ? "signed in its TEE, checked" : "signed by the attested gateway, checked") : `not verified: ${step.problem}`;
         console.log(`${scene.trick}, the model: ${step.action}${step.path ? ` ${step.path}` : ""}. "${step.reason}" (${proof})`);
       }
       for (const payment of result.payments) report(scene, payment);
