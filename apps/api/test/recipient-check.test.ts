@@ -203,7 +203,13 @@ describe("NEAR history", () => {
     },
   ];
 
-  function nearSource(view: "wallet" | "contract" | "missing", txApiDown = false) {
+  /** Reads of the payee's own history made through the last source, refused ones included. */
+  let payeeReads = 0;
+
+  /** `refusals`: how many of the payee's history reads FastNEAR refuses before answering. */
+  function nearSource(view: "wallet" | "contract" | "missing", txApiDown = false, refusals = 0) {
+    payeeReads = 0;
+    let refused = 0;
     const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
       const target = String(url);
       if (target.includes("prices.example")) return Response.json({ "token.v2.ref-finance.near": { price: "0.05", decimal: 18, symbol: "REF" } });
@@ -219,6 +225,11 @@ describe("NEAR history", () => {
         if (body.account_id === payer) {
           return Response.json({ account_txs: ["h1", "h2", "h3", "h4"].map((hash) => ({ transaction_hash: hash })), txs_count: 4 });
         }
+        payeeReads += 1;
+        if (refused < refusals) {
+          refused += 1;
+          return Response.json({ error: { code: -429, message: "Rate limits exceeded." } }, { status: 429 });
+        }
         if (body.desc === false) {
           return Response.json({ account_txs: [{ transaction_hash: "c1", tx_block_timestamp: String((NOW.getTime() - 2 * DAY) * 1e6) }] });
         }
@@ -233,10 +244,34 @@ describe("NEAR history", () => {
         priceUrl: "https://prices.example/list",
         poolsUrl: "https://pools.example/list",
         txApiUrl: "https://tx.example",
+        txRetryDelaysMs: [0, 0],
       },
       fetchImpl,
     );
   }
+
+  it("tries a refused history read again, and keeps what it learnt for the next check", async () => {
+    const source = nearSource("wallet", false, 2);
+    const first = await source.inspectRecipient("friend.near", null);
+    expect([first.createdAt, first.transactions]).toEqual([NOW.getTime() - 2 * DAY, 3]);
+    // Two reads, each refused once and then answered.
+    expect(payeeReads).toBe(4);
+    payeeReads = 0;
+    const again = await source.inspectRecipient("friend.near", null);
+    expect([again.createdAt, again.transactions]).toEqual([first.createdAt, first.transactions]);
+    expect(payeeReads).toBe(0);
+  });
+
+  it("says the history is unavailable when every try is refused, and keeps no answer", async () => {
+    const source = nearSource("wallet", false, 99);
+    const signals = await source.inspectRecipient("friend.near", null);
+    expect([signals.createdAt, signals.transactions]).toEqual([null, null]);
+    expect(codes(assessRecipient(signals, 20, NOW))).toContain("history-unavailable");
+    // Three tries each, and the next check asks again.
+    expect(payeeReads).toBe(6);
+    await source.inspectRecipient("friend.near", null);
+    expect(payeeReads).toBe(12);
+  });
 
   it("reads age, activity and the payer's recent transfers, relayed ones included", async () => {
     const signals = await nearSource("wallet").inspectRecipient("friend.near", payer);

@@ -156,6 +156,23 @@ describe("NEAR payments", () => {
     expect(found).toEqual([{ tx: "7USoPGh4w221dS8FMoSvK78VHJz6Nn7tTBUDZouZkQ5y", network: "near:testnet", atomic: "4000", at }]);
   });
 
+  it("tries a refused read again, and answers 502 when FastNEAR keeps refusing", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const lookup = (refusals: number) => {
+      let calls = 0;
+      const fetchImpl = (async (url: string) => {
+        calls += 1;
+        if (calls <= refusals) return Response.json({ error: { code: -429 } }, { status: 429 });
+        return url.endsWith("/v0/account") ? Response.json({ account_txs: [] }) : Response.json({ transactions: [] });
+      }) as typeof fetch;
+      return nearPaymentsReceived({ txApiUrl: "https://tx", network: "near:testnet", payTo: "svalin-agent.testnet", token: TESTNET_USDC, since: 0, fetchImpl, retryDelaysMs: [0, 0] });
+    };
+    await expect(lookup(2)).resolves.toEqual([]);
+    await expect(lookup(3)).rejects.toMatchObject({ status: 502, code: "upstream_error" });
+    vi.restoreAllMocks();
+  });
+
   it("reads back page by page to the checkout, fetches only unread transactions, and leaves the newest for later", async () => {
     const now = 1_800_000_000_000;
     const since = now - 2 * 86_400_000;

@@ -36,6 +36,9 @@ const envSchema = z.object({
   NEAR_DCL_DEPTH_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-dcl-depth.json"),
   // Account age, activity and recent transfers on NEAR, for the recipient check.
   FASTNEAR_TX_API_URL: z.url().default("https://tx.main.fastnear.com"),
+  // A FastNEAR API key for the transactions API (the free trial key works). Without one, FastNEAR
+  // refuses many reads made from Cloudflare Workers, and payee checks lose the account's history.
+  FASTNEAR_API_KEY: optionalString,
   PORTFOLIO_CACHE_SECONDS: z.coerce.number().int().nonnegative().default(60),
 
   X402_ENV: z.enum(["mainnet", "testnet"]).optional(),
@@ -150,6 +153,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       nearDclDepthUrl: env.NEAR_DCL_DEPTH_URL,
       ratings: { registry: env.NEAR_RATINGS_REGISTRY, rpcUrl: env.NEAR_RATINGS_RPC_URL, sealedUrl: env.NEAR_INDEX_SEALED_URL.replace(/\/+$/, "") },
       fastnearTxApiUrl,
+      fastnearApiKey: env.FASTNEAR_API_KEY,
       cacheSeconds: env.PORTFOLIO_CACHE_SECONDS,
     },
 

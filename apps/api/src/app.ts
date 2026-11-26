@@ -154,6 +154,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
             dclDepthUrl: config.portfolio.nearDclDepthUrl,
             indexToken: (contract) => indexedToken(indexFeed, contract),
             txApiUrl: config.portfolio.fastnearTxApiUrl,
+            txApiKey: config.portfolio.fastnearApiKey,
           }),
         })
       : new MockPortfolioSource());
@@ -190,7 +191,15 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     solana: (offer, reference, unread) =>
       solanaPaymentsByReference({ rpcUrl: config.pro.solanaRpcUrl, network: offer.network, reference, payTo: offer.payTo, mint: offer.mint, unread }),
     near: (offer, since, unread) =>
-      nearPaymentsReceived({ txApiUrl: config.pro.nearTxApiUrl, network: offer.network, payTo: offer.payTo, token: offer.token, since, unread }),
+      nearPaymentsReceived({
+        txApiUrl: config.pro.nearTxApiUrl,
+        apiKey: config.portfolio.fastnearApiKey,
+        network: offer.network,
+        payTo: offer.payTo,
+        token: offer.token,
+        since,
+        unread,
+      }),
   };
   /** Only payments on the networks Svalin takes now count, so test-network passes end at the switch. */
   const passRules = (): PassRules => ({

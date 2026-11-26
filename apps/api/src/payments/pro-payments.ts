@@ -4,6 +4,7 @@
  * The buyer's wallet is never connected and never asked to sign anything.
  */
 import { ApiError } from "../lib/errors.js";
+import { fastNearTx } from "../lib/fastnear.js";
 import { callFetch } from "../lib/fetch.js";
 
 type FetchLike = typeof fetch;
@@ -147,26 +148,24 @@ export async function nearPaymentsReceived(options: {
   unread?: UnreadFilter;
   now?: number;
   fetchImpl?: FetchLike;
+  /** A FastNEAR API key; see lib/fastnear.ts. */
+  apiKey?: string;
+  /** The waits before retrying a refused read (tests use none). */
+  retryDelaysMs?: readonly number[];
 }): Promise<FoundPayment[]> {
   const fetchImpl = options.fetchImpl ?? callFetch;
   const post = async <T>(path: string, body: object): Promise<T> => {
-    let response: Response;
-    try {
-      response = await fetchImpl(`${options.txApiUrl}${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(10_000),
-      });
-    } catch (error) {
-      console.error(JSON.stringify({ level: "error", msg: "pro_lookup_error", chain: "near", path, error: String(error).slice(0, 200) }));
-      throw new ApiError(502, "upstream_unavailable", "The NEAR network did not answer. Try again in a minute.");
-    }
-    if (!response.ok) {
-      console.error(JSON.stringify({ level: "error", msg: "pro_lookup_error", chain: "near", path, status: response.status }));
+    const result = await fastNearTx<T>(
+      { baseUrl: options.txApiUrl, apiKey: options.apiKey, fetchImpl, retryDelaysMs: options.retryDelaysMs },
+      path,
+      body,
+    );
+    if (result.ok) return result.body;
+    console.error(JSON.stringify({ level: "error", msg: "pro_lookup_error", chain: "near", path, reason: result.reason }));
+    if (result.reason.startsWith("HTTP ")) {
       throw new ApiError(502, "upstream_error", "The NEAR network could not be read. Try again in a minute.");
     }
-    return (await response.json()) as T;
+    throw new ApiError(502, "upstream_unavailable", "The NEAR network did not answer. Try again in a minute.");
   };
 
   const settled = (options.now ?? Date.now()) - NEAR_SETTLE_MS;

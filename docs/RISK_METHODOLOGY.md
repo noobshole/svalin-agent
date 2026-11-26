@@ -221,7 +221,9 @@ transactions (system transfers, and token balance changes per owner). If any par
 cannot be read, the check says so and cautions, because a gap could hide the very payment a
 look-alike imitates. Age and activity come from FastNEAR on NEAR (age is the account's first
 successful receipt) and from up to 1,000 signatures on Solana (more than that counts as
-established).
+established). A FastNEAR read that is refused or fails is tried twice more, after a wait of 1
+second and then 2 more. Once read, an account's age is kept for a day and its transaction count for 10 minutes, so
+checking the same account again gives the same answer without a new read.
 
 The free demo (`/v1/demo/check/{address}`, and the free scan `/v1/demo/scan/{address}`) does not
 read the payer's history, the costly part of a check, so it does not catch look-alikes and says so

@@ -13,8 +13,10 @@ import {
 
 import { ApiError, tokenAddressError } from "../lib/errors.js";
 import type { RecipientSignals } from "../risk/check.js";
+import { fastNearTx } from "../lib/fastnear.js";
 import { callFetch } from "../lib/fetch.js";
 import { HIDDEN_NAME, onChainLabel } from "../lib/text.js";
+import { TtlCache } from "../lib/ttl-cache.js";
 import type { IndexedToken } from "./index-feed.js";
 import { finaliseAssets, formatUnits, round, type PortfolioSource } from "./portfolio-source.js";
 
@@ -81,6 +83,10 @@ export type NearSourceOptions = {
    * and recent transfers for the recipient check.
    */
   txApiUrl?: string;
+  /** A FastNEAR API key for the transactions API. Without one, reads from Cloudflare are often refused. */
+  txApiKey?: string;
+  /** The waits before retrying a refused transactions API read (tests use none). */
+  txRetryDelaysMs?: readonly number[];
 };
 
 /** The parts of FastNEAR transactions API responses the recipient check reads. */
@@ -108,10 +114,18 @@ const PAYER_HISTORY = 20;
 const TX_BATCH = 20;
 const IMPLICIT_ACCOUNT = /^([0-9a-f]{64}|0x[0-9a-f]{40})$/;
 const FT_TRANSFERS = new Set(["ft_transfer", "ft_transfer_call"]);
+/** An account's creation time does not change, so a read is kept for a day. */
+const CREATED_TTL_MS = 24 * 60 * 60_000;
+/** Its transaction count only grows, so a count a few minutes old can only understate it. */
+const TX_COUNT_TTL_MS = 10 * 60_000;
+const ACCOUNTS_KEPT = 2_000;
 
 export class NearPortfolioSource implements PortfolioSource {
   private prices: { at: number; data: Promise<NearPriceList> } | undefined;
   private depth: { at: number; data: Promise<Map<string, number>> } | undefined;
+  /** Answers FastNEAR gave about payees, so checking one again needs no new read. Failures are never kept. */
+  private readonly created: TtlCache<number>;
+  private readonly txCounts: TtlCache<number>;
 
   constructor(
     private readonly options: NearSourceOptions,
@@ -120,7 +134,10 @@ export class NearPortfolioSource implements PortfolioSource {
     private readonly priceTtlMs = 60_000,
     private readonly now: () => number = Date.now,
     private readonly poolsTtlMs = 5 * 60_000,
-  ) {}
+  ) {
+    this.created = new TtlCache<number>(CREATED_TTL_MS, ACCOUNTS_KEPT, now);
+    this.txCounts = new TtlCache<number>(TX_COUNT_TTL_MS, ACCOUNTS_KEPT, now);
+  }
 
   supports(family: ChainFamily) {
     return family === "near";
@@ -168,12 +185,11 @@ export class NearPortfolioSource implements PortfolioSource {
   }
 
   async inspectRecipient(recipient: string, payer: string | null): Promise<RecipientSignals> {
-    const [prices, view, latest, first, history] = await Promise.all([
+    const [prices, view, createdAt, transactions, history] = await Promise.all([
       this.priceList(),
       this.viewAccount(recipient),
-      this.txApi<TxAccountPage>("/v0/account", { account_id: recipient, limit: 1 }),
-      // Its first successful receipt: the transaction that created the account.
-      this.txApi<TxAccountPage>("/v0/account", { account_id: recipient, is_real_receiver: true, is_success: true, desc: false, limit: 1 }),
+      this.createdAt(recipient),
+      this.transactionCount(recipient),
       payer ? this.payerHistory(payer) : Promise.resolve(null),
     ]);
 
@@ -182,15 +198,13 @@ export class NearPortfolioSource implements PortfolioSource {
     else if (!view) kind = IMPLICIT_ACCOUNT.test(recipient) ? "unused" : "missing";
     else if (view.code_hash && view.code_hash !== EMPTY_CODE_HASH) kind = "contract";
 
-    const createdNs = Number(first?.account_txs?.[0]?.tx_block_timestamp);
-    const transactions = latest?.txs_count;
     return {
       chain: "near",
       recipient,
       payer,
       kind,
-      createdAt: Number.isFinite(createdNs) && createdNs > 0 ? Math.floor(createdNs / 1e6) : null,
-      transactions: typeof transactions === "number" && Number.isInteger(transactions) ? transactions : null,
+      createdAt,
+      transactions,
       transactionsAtLeast: false,
       payerSentTo: history?.sentTo ?? null,
       payerReceivedFrom: history?.receivedFrom ?? null,
@@ -225,20 +239,44 @@ export class NearPortfolioSource implements PortfolioSource {
     throw new ApiError(502, "upstream_error", "NEAR data provider could not read the account.");
   }
 
-  /** A FastNEAR transactions API read, or null if it is not configured or does not answer. */
+  /** When the account was created, from its first successful receipt (ms), or null if unread. */
+  private async createdAt(account: string): Promise<number | null> {
+    const kept = this.created.get(account);
+    if (kept !== undefined) return kept;
+    const first = await this.txApi<TxAccountPage>("/v0/account", { account_id: account, is_real_receiver: true, is_success: true, desc: false, limit: 1 });
+    const ns = Number(first?.account_txs?.[0]?.tx_block_timestamp);
+    if (!Number.isFinite(ns) || ns <= 0) return null;
+    const at = Math.floor(ns / 1e6);
+    this.created.set(account, at);
+    return at;
+  }
+
+  /** How many transactions the account has, or null if unread. */
+  private async transactionCount(account: string): Promise<number | null> {
+    const kept = this.txCounts.get(account);
+    if (kept !== undefined) return kept;
+    const latest = await this.txApi<TxAccountPage>("/v0/account", { account_id: account, limit: 1 });
+    const count = latest?.txs_count;
+    if (typeof count !== "number" || !Number.isInteger(count)) return null;
+    this.txCounts.set(account, count);
+    return count;
+  }
+
+  /** A FastNEAR transactions API read, retried when refused, or null if it is not configured or does not answer. */
   private async txApi<T>(path: string, body: object): Promise<T | null> {
     if (!this.options.txApiUrl) return null;
-    try {
-      const response = await this.fetchImpl(`${this.options.txApiUrl}${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-      return response.ok ? ((await response.json()) as T) : null;
-    } catch {
-      return null;
-    }
+    const result = await fastNearTx<T>(
+      {
+        baseUrl: this.options.txApiUrl,
+        apiKey: this.options.txApiKey,
+        fetchImpl: this.fetchImpl,
+        timeoutMs: this.timeoutMs,
+        retryDelaysMs: this.options.txRetryDelaysMs,
+      },
+      path,
+      body,
+    );
+    return result.ok ? result.body : null;
   }
 
   /**
