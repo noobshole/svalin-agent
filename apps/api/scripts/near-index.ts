@@ -27,7 +27,6 @@ import {
 } from "@svalin-agent/shared";
 
 import { addToDaily } from "../src/ratings/daily.js";
-
 import { editionAnomaly } from "../src/ratings/edition-guard.js";
 import { sealEdition, sha256Hex } from "../src/ratings/edition.js";
 import { editionTree, treeBytes, treeRoot } from "../src/ratings/merkle.js";

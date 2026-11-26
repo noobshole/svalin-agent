@@ -68,8 +68,8 @@ How Workers differ from a container host:
 - Workers Free allows 10 ms of CPU time per request, with some leeway for occasional overruns.
   Most reports use under 2 ms. The first NEAR report each minute parses Rhea Finance's price list
   (about 4 ms), and the first one every five minutes that holds tokens outside the registry also
-  reads Rhea's pool list (about 1.3 MB, under 5 ms). A very large wallet can exceed the limit and fail; a failed
-  request is never charged. Workers Paid raises the limit.
+  reads Rhea's pool list (about 1.3 MB, under 5 ms). A very large wallet can exceed the limit and
+  fail; a failed request is never charged. Workers Paid raises the limit.
 - The free-scan limit is keyed on `CF-Connecting-IP`, which callers cannot set, so
   `TRUSTED_PROXY_HOPS` is not used.
 - The free-scan limits are kept in one Durable Object (binding `DEMO_LIMITER`), so every Worker
