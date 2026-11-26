@@ -1,4 +1,3 @@
-import { lookupToken } from "@svalin-agent/chain-config";
 import {
   AGENT_KEY_PREFIX,
   PRO_CODE_PREFIX,
@@ -79,6 +78,8 @@ export type AppDependencies = {
   demoLimiter?: DemoLimiter;
   /** Latest published Svalin Index edition; fetched from NEAR_INDEX_URL by default. */
   indexFeed?: IndexFeed;
+  /** The Index's daily prices and backing, for the ratings page's charts; from NEAR_INDEX_DAILY_URL by default. */
+  dailyFeed?: IndexFeed;
   /** Grade proofs against the Svalin Ratings registry on NEAR. */
   ratingsRegistry?: RatingsRegistry;
   /** Svalin keys and Pro codes (Cloudflare Workers use a Durable Object); in memory by default. */
@@ -130,6 +131,7 @@ const nameRoute = routeNamer(
     "/openapi.json",
     "/llms.txt",
     "/v1/index/near-tokens",
+    "/v1/index/near-tokens/daily",
     "/v1/keys/me",
     ...Object.keys(keyPlans).map((plan) => `/v1/keys/${plan}`),
     "/v1/pro",
@@ -140,6 +142,7 @@ const nameRoute = routeNamer(
 
 export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   const indexFeed = deps.indexFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexUrl);
+  const dailyFeed = deps.dailyFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexDailyUrl);
   const ratingsRegistry = deps.ratingsRegistry ?? new RatingsRegistry(config.portfolio.ratings);
   const source =
     deps.portfolioSource ??
@@ -418,10 +421,18 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     return c.json(await scanAddress(c, false));
   });
 
-  // The Svalin Index: every NEAR token Ref Finance prices, graded by the real money behind it.
+  // The Svalin Index: every NEAR token Rhea Finance prices, graded by the real money behind it.
   app.get("/v1/index/near-tokens", async (c) => {
     const body = await indexFeed.latest();
     c.header("Cache-Control", "public, max-age=300");
+    return c.body(body, 200, { "Content-Type": "application/json; charset=utf-8" });
+  });
+
+  // One point a day per token over the last 30 days, served as published: parsing it here would
+  // cost more CPU time than a Worker request is allowed.
+  app.get("/v1/index/near-tokens/daily", async (c) => {
+    const body = await dailyFeed.latest();
+    c.header("Cache-Control", "public, max-age=900");
     return c.body(body, 200, { "Content-Type": "application/json; charset=utf-8" });
   });
 
@@ -651,10 +662,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   async function gradeProof(raw: string) {
     const contract = raw.trim().toLowerCase();
     if (!isNearAccountId(contract)) {
-      throw new ApiError(400, "invalid_contract", "Not a NEAR token contract.", "Grade proofs cover NEAR tokens, for example token.rhealab.near.");
-    }
-    if (lookupToken("near", contract)) {
-      throw new ApiError(404, "trusted_token", "This is one of the trusted tokens Svalin values others against, so it has no grade.");
+      throw new ApiError(400, "invalid_contract", "Not a NEAR token contract.", "Grade proofs cover NEAR tokens, for example token.rhealab.near (RHEA).");
     }
     return ratingsRegistry.proof(contract);
   }
@@ -663,15 +671,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   async function gradedToken(raw: string) {
     const contract = raw.trim().toLowerCase();
     if (!isNearAccountId(contract)) {
-      throw new ApiError(400, "invalid_contract", "Not a NEAR token contract.", "Exit prices cover NEAR tokens, for example token.v2.ref-finance.near.");
-    }
-    if (lookupToken("near", contract)) {
-      throw new ApiError(
-        404,
-        "trusted_token",
-        "This is one of the trusted tokens Svalin values others against, so it has no grade.",
-        "wNEAR, stablecoins and liquid staking tokens count at full value in Svalin reports.",
-      );
+      throw new ApiError(400, "invalid_contract", "Not a NEAR token contract.", "Exit prices cover NEAR tokens, for example token.rhealab.near (RHEA).");
     }
     const { index, row, note } = await indexedToken(indexFeed, contract);
     if (!row) {
@@ -679,7 +679,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
         404,
         "not_in_index",
         "This token is not in the latest Svalin Index edition.",
-        "The Index grades every NEAR token Ref Finance prices. A token without a Ref price has no pool to sell into.",
+        "The Index grades every NEAR token Rhea Finance prices. A token without a Rhea price has no pool to sell into.",
       );
     }
     return { index, row, note };

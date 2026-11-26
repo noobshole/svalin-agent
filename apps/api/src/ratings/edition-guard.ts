@@ -1,3 +1,4 @@
+import { lookupToken } from "@svalin-agent/chain-config";
 import type { NearTokenIndex } from "@svalin-agent/shared";
 
 /**
@@ -5,11 +6,15 @@ import type { NearTokenIndex } from "@svalin-agent/shared";
  * half their graded tokens, or most of their real money, so an edition that does is far likelier to
  * come from a broken or manipulated data source. Such an edition is refused and the previous one
  * stays published. Rising backing is held back by the 24-hour hold, so a sudden jump is suspect too.
+ * The graded and backing checks leave out the registry tokens (wNEAR, stablecoins, liquid staking):
+ * their few deep pools would otherwise hide a collapse across every other token, and editions
+ * from before late November 2026 do not grade them.
  * Returns why the new edition looks wrong, or null when it looks like a normal market.
  */
 export function editionAnomaly(previous: NearTokenIndex, next: NearTokenIndex): string | null {
-  const graded = (index: NearTokenIndex) => index.rows.filter((row) => row[4] !== "F").length;
-  const backing = (index: NearTokenIndex) => index.rows.reduce((sum, row) => sum + row[3], 0);
+  const unvetted = (index: NearTokenIndex) => index.rows.filter((row) => !lookupToken("near", row[0]));
+  const graded = (index: NearTokenIndex) => unvetted(index).filter((row) => row[4] !== "F").length;
+  const backing = (index: NearTokenIndex) => unvetted(index).reduce((sum, row) => sum + row[3], 0);
   const usd = (value: number) => `$${Math.round(value).toLocaleString("en-US")}`;
 
   if (next.rows.length < previous.rows.length * 0.7) {

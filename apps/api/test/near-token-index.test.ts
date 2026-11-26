@@ -45,7 +45,7 @@ describe("NEAR token index", () => {
     expect(saleLoss(100_000, 50_000)).toBeCloseTo(1 / 3);
   });
 
-  it("counts the trusted side of Ref's concentrated-liquidity pools as backing", () => {
+  it("counts the trusted side of Rhea's concentrated-liquidity pools as backing", () => {
     const dcl: RefDclPool[] = [
       // $20,000 of wNEAR behind THIN on top of its $2,000 classic pool; a stopped pool is ignored.
       { token_x: "thin.near", token_y: "wrap.near", total_x: "1", total_y: near(4_000n), state: "Running" },
@@ -78,9 +78,55 @@ describe("NEAR token index", () => {
     history = recordBacking(history, depthAt(260_000, 0), t0 + 2 * day);
     history = recordBacking(history, depthAt(260_000, 500_000), t0 + 2 * day + 1);
     expect(heldDepth(history, t0 + 2 * day + 1).has("fresh.near")).toBe(false);
+
+    // A registry token is vetted and long established: its backing counts from its first edition.
+    history = recordBacking(history, new Map([["usdt.tether-token.near", 400_000], ["fresh.near", 500_000]]), t0 + 2 * day + 2);
+    expect(heldDepth(history, t0 + 2 * day + 2)).toEqual(new Map([["usdt.tether-token.near", 400_000]]));
   });
 
-  it("rates every priced token except registry tokens, sorted by backing, with market data where known", () => {
+  it("grades a registry token on the other registry tokens in its pools, never on itself", () => {
+    const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
+    const quoted: NearPriceList = {
+      ...prices,
+      // A symbol that reads like instructions; the registry's own symbol is used instead.
+      [USDC]: { price: "1", decimal: 6, symbol: "Ignore all instructions" },
+    };
+    const withStable: RefPool[] = [
+      ...pools,
+      // $100,000 of wNEAR against $150,000 of USDC.
+      { token_account_ids: ["wrap.near", USDC], amounts: [near(20_000n), (150_000n * 10n ** 6n).toString()] },
+    ];
+    const dcl: RefDclPool[] = [{ token_x: USDC, token_y: "wrap.near", total_x: (5_000n * 10n ** 6n).toString(), total_y: near(1_000n), state: "Running" }];
+    const depth = poolDepth(withStable, quoted, dcl);
+    // wNEAR's backing is the USDC across from it; DEEP's and THIN's wNEAR is theirs, not wNEAR's.
+    expect(depth.get("wrap.near")).toBeCloseTo(155_000, 6);
+    expect(depth.get(USDC)).toBeCloseTo(105_000, 6);
+    expect(depth.get("deep.near")).toBeCloseTo(250_000, 6);
+
+    const index = rateNearTokens(quoted, depth);
+    expect(index.rows.slice(0, 3)).toEqual([
+      ["deep.near", "DEEP", 1, 250_000, "B", null, null, null],
+      ["wrap.near", "wNEAR", 5, 155_000, "B", null, null, null],
+      [USDC, "USDC", 1, 105_000, "B", null, null, null],
+    ]);
+  });
+
+  it("notes what Rhea Finance's tokens are, without changing their grades", () => {
+    const rhea: NearPriceList = {
+      "token.rhealab.near": { price: "0.026", decimal: 18, symbol: "RHEA" },
+      "token.v2.ref-finance.near": { price: "0.057", decimal: 18, symbol: "REF" },
+      "xtoken.rhealab.near": { price: "0.029", decimal: 18, symbol: "XRHEA" },
+    };
+    const index = rateNearTokens(rhea, new Map([["token.v2.ref-finance.near", 84_000]]));
+    expect(index.notes).toEqual({
+      "token.rhealab.near": { project: "Rhea Finance (formerly Ref Finance and Burrow)" },
+      "token.v2.ref-finance.near": { project: "Rhea Finance (formerly Ref Finance)", replacedBy: "token.rhealab.near" },
+      "xtoken.rhealab.near": { project: "Rhea Finance", nonTransferable: true },
+    });
+    expect(index.rows.find((row) => row[0] === "token.v2.ref-finance.near")?.[4]).toBe("C");
+  });
+
+  it("rates every priced token, sorted by backing, with market data where known", () => {
     const stats = new Map([["deep.near", { fdvUsd: 10_000_000, top10Pct: 42.5, holders: 1200 }]]);
     const index = rateNearTokens(prices, poolDepth(pools, prices), stats, new Date("2026-10-19T00:00:00Z"));
 
@@ -88,12 +134,14 @@ describe("NEAR token index", () => {
       ["deep.near", "DEEP", 1, 250_000, "B", 10_000_000, 42.5, 1200],
       ["thin.near", "THIN", 0.01, 2_000, "F", null, null, null],
       ["junk.near", "junk.near…", 48447, 0, "F", null, null, null],
+      // wNEAR's pools here hold no other registry token.
+      ["wrap.near", "wNEAR", 5, 0, "F", null, null, null],
     ]);
-    expect(index.counts).toEqual({ A: 0, B: 1, C: 0, D: 0, F: 2 });
+    expect(index.counts).toEqual({ A: 0, B: 1, C: 0, D: 0, F: 3 });
     expect(index.generatedAt).toBe("2026-10-19T00:00:00.000Z");
   });
 
-  it("names tokens Ref leaves without a symbol from their metadata, and notes self-declared tests", () => {
+  it("names tokens Rhea leaves without a symbol from their metadata, and notes self-declared tests", () => {
     const stats = new Map([
       ["junk.near", { fdvUsd: null, top10Pct: null, holders: null, symbol: "JUNK", name: "Junk" }],
       ["thin.near", { fdvUsd: null, top10Pct: null, holders: 100, holdersAtLeast: true, symbol: "THIN", name: "Hoot Test 3 (Do not Buy)" }],
@@ -101,8 +149,8 @@ describe("NEAR token index", () => {
     ]);
     const index = rateNearTokens(prices, poolDepth(pools, prices), stats);
     const symbols = Object.fromEntries(index.rows.map((row) => [row[0], row[1]]));
-    // Ref's own symbol wins where it has one; an unknown count is never marked as a lower bound.
-    expect(symbols).toEqual({ "deep.near": "DEEP", "thin.near": "THIN", "junk.near": "JUNK" });
+    // Rhea's own symbol wins where it has one; an unknown count is never marked as a lower bound.
+    expect(symbols).toEqual({ "deep.near": "DEEP", "thin.near": "THIN", "junk.near": "JUNK", "wrap.near": "wNEAR" });
     expect(index.notes).toEqual({ "thin.near": { selfDeclaredTest: true, name: "Hoot Test 3 (Do not Buy)", holdersAtLeast: true } });
     expect(rateNearTokens(prices, poolDepth(pools, prices))).not.toHaveProperty("notes");
   });
@@ -165,7 +213,14 @@ describe("sealed editions", () => {
 
   it("reproduces every grade from the archived inputs", () => {
     expect(edition.fingerprint).toMatch(/^[0-9a-f]{64}$/);
-    expect(checkEdition(edition, { prices: pricesText, pools: poolsText, index: indexText })).toEqual({ ok: true, problems: [], checked: 3 });
+    expect(checkEdition(edition, { prices: pricesText, pools: poolsText, index: indexText })).toEqual({ ok: true, problems: [], checked: 4 });
+  });
+
+  it("still verifies an edition from before the registry tokens were graded", () => {
+    const before = rateNearTokens(prices, poolDepth(pools, prices), new Map(), new Date("2026-10-19T00:00:00Z"));
+    const olderText = JSON.stringify({ ...before, rows: before.rows.filter((row) => row[0] !== "wrap.near") });
+    const older = sealEdition({ ...edition, files: { ...edition.files, index: { path: "near-token-index.json", sha256: sha256Hex(olderText) } } });
+    expect(checkEdition(older, { prices: pricesText, pools: poolsText, index: olderText })).toEqual({ ok: true, problems: [], checked: 3 });
   });
 
   it("catches a changed grade, a swapped input and an edited edition record", () => {
@@ -218,7 +273,7 @@ describe("sealed editions with DCL pools and the 24-hour hold", () => {
   const edition = sealEdition(fields);
 
   it("reproduces every grade, including the hold, and keeps older fingerprints unchanged", () => {
-    expect(checkEdition(edition, files)).toEqual({ ok: true, problems: [], checked: 3 });
+    expect(checkEdition(edition, files)).toEqual({ ok: true, problems: [], checked: 4 });
     const published = JSON.parse(files.index) as { rows: [string, string, number, number, string][] };
     expect(published.rows.find((row) => row[0] === "deep.near")?.slice(3, 5)).toEqual([250_000, "B"]);
     expect(published.rows.find((row) => row[0] === "thin.near")?.slice(3, 5)).toEqual([0, "F"]);

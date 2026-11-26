@@ -58,7 +58,7 @@ export class RatingsRegistry {
         404,
         "not_in_edition",
         `This token is not in the edition of ${edition.day} on NEAR.`,
-        "Editions grade every NEAR token Ref Finance prices; a token priced since then is in the next one.",
+        "Editions grade every NEAR token Rhea Finance prices; a token priced since then is in the next one.",
       );
     }
     const row = tree.rows[index];

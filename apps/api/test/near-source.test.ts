@@ -330,13 +330,19 @@ describe("NEAR source", () => {
     expect(overview.assets.find((entry) => entry.category === "native")).not.toHaveProperty("liquidityGrade");
   });
 
-  it("gives no grade to the trusted tokens, and skips the pool list for them", async () => {
+  it("gives a trusted token its Index grade, none when the Index cannot be read, and skips the pool list", async () => {
     const { source, calls } = fakeUpstream({ account });
     await expect(source.getOverview(USDC)).rejects.toMatchObject({
       status: 422,
       token: { symbol: "USDC", grade: null, backingUsd: null },
     });
-    expect(calls.pools).toBe(0);
+    const graded = fakeUpstream({ account }, { indexToken: inIndex([USDC, "USDC", 1, 1_250_000, "A", null, null, null]) });
+    await expect(graded.source.getOverview(USDC)).rejects.toMatchObject({
+      token: { symbol: "USDC", grade: "A", backingUsd: 1_250_000, edition: EDITION },
+    });
+    const offline = fakeUpstream({ account }, { indexToken: async () => Promise.reject(new Error("down")) });
+    await expect(offline.source.getOverview(USDC)).rejects.toMatchObject({ token: { grade: null } });
+    expect(calls.pools + graded.calls.pools + offline.calls.pools).toBe(0);
   });
 
   it("surfaces upstream failures as ApiError", async () => {

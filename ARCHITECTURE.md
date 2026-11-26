@@ -9,7 +9,7 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
                  ┌──────────────┐  x402-paying fetch   ┌──────────────┐  Solana  ┌──────────────────┐
  Claude/Cursor ─▶│ packages/mcp │─────────────────────▶│   apps/api   │─────────▶│ Helius DAS       │
                  └──────────────┘                      │  (Hono)      │  NEAR    ├──────────────────┤
- any x402 agent ──────────────────────────────────────▶│              │─────────▶│ FastNEAR, Ref,   │
+ any x402 agent ──────────────────────────────────────▶│              │─────────▶│ FastNEAR, Rhea,  │
                                                        │              │          │ NEAR RPC         │
                                                        │              │ verify/  ├──────────────────┤
                                                        │              │ settle ─▶│ facilitators     │
@@ -55,30 +55,32 @@ pnpm workspace + Turborepo. One API, one web app, one MCP server, two shared pac
 
 - `PortfolioSource` (`sources/portfolio-source.ts`) is the only way data enters.
   `ChainRouterSource` picks the source by address: Helius for Solana, `NearPortfolioSource` for
-  NEAR (FastNEAR balances, Ref Finance prices with a 60-second cache, validator stakes read over
+  NEAR (FastNEAR balances, Rhea Finance prices with a 60-second cache, validator stakes read over
   NEAR RPC). Mock serves both for dev/tests. A new data source implements this interface without
   touching routes or the engine.
 - On NEAR a quoted price alone is not trusted, because anyone can send an account a token whose
-  Ref Finance price is fake or stale. A token outside the curated registry is valued at no more
-  than the registry tokens (wNEAR, stablecoins, liquid staking and so on) in its Ref pools, and
+  Rhea Finance price is fake or stale. A token outside the curated registry is valued at no more
+  than the registry tokens (wNEAR, stablecoins, liquid staking and so on) in its Rhea pools, and
   counts as unpriced if they hold none (`poolDepth` in `sources/near-source.ts`). The pool list
-  (about 900 KB) is fetched only for accounts that need it and cached for five minutes. If it
+  (about 1.3 MB) is fetched only for accounts that need it and cached for five minutes. If it
   cannot be read the request fails, so the caller is not charged for a report that might be wrong.
-  Depth from Ref's concentrated-liquidity (DCL) pools is added from `near-dcl-depth.json`, which
+  Depth from Rhea's concentrated-liquidity (DCL) pools is added from `near-dcl-depth.json`, which
   the Index build publishes, because paging the DCL contract does not fit in a request. The
   result is capped at the backing each token has held for 24 hours in the latest edition.
 - The Svalin Index is built outside the API: `apps/api/scripts/near-index.ts` runs on a schedule (every few hours) in the
   [svalin-index](https://github.com/noobshole/svalin-index) repository's workflow, grades every
-  Ref-priced NEAR token with the same `poolDepth` over classic and DCL pools, grades only backing
+  Rhea-priced NEAR token with the same `poolDepth` over classic and DCL pools (a registry token on
+  the other registry tokens in its pools), grades only backing
   that has held for 24 hours (`recordBacking` and `heldDepth` in `src/ratings/near-tokens.ts`), adds market cap
   and holder data (cached between runs, since the public NEAR APIs rate limit bursts) and publishes
-  the edition to that repository's `latest` branch. `GET /v1/index/near-tokens` serves the latest
-  edition as published (`sources/index-feed.ts`, cached ten minutes), so the API never rebuilds it
-  inside a request.
+  the edition to that repository's `latest` branch, with `near-token-daily.json`: each token's
+  price and backing, one point a day for 30 days (`src/ratings/daily.ts`). `GET /v1/index/near-tokens`
+  and `/v1/index/near-tokens/daily` serve them as published (`sources/index-feed.ts`, cached ten
+  minutes), so the API never rebuilds or even parses them inside a request.
 - Addresses (`packages/shared/src/address.ts`): Solana base58 or a NEAR account ID. Anything
   lowercase can be a NEAR account name, so a mistyped name passes the format gate; the NEAR
   source answers 404 for accounts that do not exist, and the payment is not settled. A token is
-  not a wallet either: the NEAR source answers 422 `token_address` for a contract in Ref Finance's
+  not a wallet either: the NEAR source answers 422 `token_address` for a contract in Rhea Finance's
   price list, with its grade from the latest Index edition (graded F if it is too new for the
   Index, and from live pool depth if the Index cannot be read), and the Helius source
   reads the account's owner alongside the first balance page and answers 422 for a token mint,

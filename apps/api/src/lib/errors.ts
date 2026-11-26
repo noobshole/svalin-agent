@@ -35,7 +35,7 @@ export function tokenAddressError(token: TokenNotice, explanation?: string): Api
     const test = token.selfDeclaredTest ? " Its own on-chain name says it is a test or not to be bought." : "";
     hint = `Liquidity grade ${token.grade} in the Svalin Index${edition}: $${token.backingUsd.toLocaleString("en-US")} of real backing in its pools.${test} What selling it would fetch: GET /v1/exit/${token.address} (free trial: /v1/demo/exit/${token.address}).`;
   } else if (token.chain === "near") {
-    hint = "It is one of the trusted tokens Svalin values others against, so it has no grade.";
+    hint = "It is one of the trusted tokens Svalin values others against, counted at full value in reports.";
   } else {
     hint = "Svalin Index grades cover NEAR tokens so far.";
   }

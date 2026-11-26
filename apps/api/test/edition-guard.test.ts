@@ -34,4 +34,13 @@ describe("edition circuit breaker", () => {
     expect(editionAnomaly(before, edition(40, 4_000, 30_000))).toMatch(/fell from \$4,000,000 to \$1,200,000/);
     expect(editionAnomaly(before, edition(40, 4_000, 400_000))).toMatch(/rose/);
   });
+
+  it("leaves the registry tokens out, so their deep pools neither trip it nor hide a collapse", () => {
+    const vetted = [row("wrap.near", 6_000_000, "A"), row("usdt.tether-token.near", 500_000, "B")];
+    const withVetted = (index: NearTokenIndex): NearTokenIndex => ({ ...index, rows: [...vetted, ...index.rows] });
+    // The first edition that grades them is not a sudden rise in real money.
+    expect(editionAnomaly(before, withVetted(edition(40, 4_000)))).toBeNull();
+    // And their $6.5M does not cover for the rest losing most of theirs.
+    expect(editionAnomaly(withVetted(before), withVetted(edition(40, 4_000, 30_000)))).toMatch(/fell from \$4,000,000/);
+  });
 });

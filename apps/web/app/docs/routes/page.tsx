@@ -72,6 +72,12 @@ export default async function RoutesPage() {
             </tr>
             <tr>
               <td>
+                <code>GET /v1/index/near-tokens/daily</code>
+              </td>
+              <td>Each token’s price and real backing, one point a day for the last 30 days</td>
+            </tr>
+            <tr>
+              <td>
                 <code>GET /v1/demo/exit/{"{address}"}</code>
               </td>
               <td>A NEAR token’s exit prices at $1K, $10K and $100K. Uses the same free calls</td>
