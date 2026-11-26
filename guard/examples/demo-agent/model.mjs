@@ -5,11 +5,17 @@
 //   ed25519 signing key from it. The report carries Intel TDX and NVIDIA GPU evidence; this client
 //   checks the nonce and that the report is there, and leaves the hardware quote to NEAR AI's own
 //   verifiers (see the README).
+//   Models NEAR AI passes on to their makers (Claude, GPT, Gemini, Grok and others) have no model
+//   attestation: they run at their maker, not in a TEE. For those, attest() keeps the signing key of
+//   NEAR AI's gateway instead, from the gateway's own attestation (Intel TDX, with our nonce). The
+//   gateway signs the hashes of each request it passed on and each answer it passed back, so an
+//   answer can still be checked as unaltered, but not as computed in a TEE.
 // - chat(): sends the exact request bytes and keeps the exact response bytes, so their SHA-256 can
 //   be compared with what the model signed.
-// - signature(): fetches the model's signature over "<model>:<sha256 request>:<sha256 response>",
-//   checks the signed text against our own hashes, checks the ed25519 signature, and checks that
-//   the signer is the key from the attestation.
+// - signature(): fetches the model's signature over "<model>:<sha256 request>:<sha256 response>"
+//   (or, for a model at its maker, the gateway's over "<sha256 request>:<sha256 response>"), checks
+//   the signed text against our own hashes, checks the ed25519 signature, and checks that the
+//   signer is the key from the attestation.
 //
 // The API key comes from NEAR_AI_API_KEY or ~/.svalin/near-ai.env and is never printed.
 //
@@ -41,12 +47,15 @@ export const loadApiKey = () => keyFrom("NEAR_AI_API_KEY", "near-ai.env");
 
 /** One chat completion on an OpenAI-compatible API; keeps the exact bytes sent and received. */
 async function complete(api, headers, model, messages, { temperature = 0, maxTokens = 1000, json = true } = {}) {
-  const body = JSON.stringify({ model, messages, temperature, max_tokens: maxTokens, ...(json ? { response_format: { type: "json_object" } } : {}) });
+  // temperature null leaves it out, for models that take only their default (OpenAI's GPT-6).
+  const body = JSON.stringify({ model, messages, ...(temperature === null ? {} : { temperature }), max_tokens: maxTokens, ...(json ? { response_format: { type: "json_object" } } : {}) });
   // Asking again after a dropped connection makes a new answer; only the one that arrives is used.
   const response = await steadyFetch(`${api}/chat/completions`, { method: "POST", headers: { ...headers, "Content-Type": "application/json", "Accept-Encoding": "identity" }, body }, { timeoutMs: 180_000 });
   const raw = Buffer.from(await response.arrayBuffer());
   // A model that does not take the JSON setting is asked again without it; the prompt asks for JSON anyway.
   if (response.status === 400 && json && /response_format/i.test(raw.toString("utf8"))) return complete(api, headers, model, messages, { temperature, maxTokens, json: false });
+  // A model that takes only its default temperature is asked again with none set.
+  if (response.status === 400 && temperature !== null && /'?temperature'?/i.test(raw.toString("utf8"))) return complete(api, headers, model, messages, { temperature: null, maxTokens, json });
   if (!response.ok) throw new Error(`${new URL(api).hostname} answered ${response.status}: ${raw.toString("utf8").slice(0, 200)}`);
   const result = JSON.parse(raw.toString("utf8"));
   return {
@@ -72,27 +81,51 @@ export class NearAiModel {
     this.model = model;
     this.apiKey = apiKey;
     this.signers = new Set();
+    /** "tee" when the model runs in a TEE and signs its own answers, "gateway" when only NEAR AI's gateway signs. */
+    this.mode = null;
   }
 
   headers(extra = {}) {
     return { Accept: "application/json", Authorization: `Bearer ${this.apiKey}`, "x-no-aliasing": "true", ...extra };
   }
 
-  /** The model's attestation report, asked for with a fresh nonce; keeps its signing keys. */
-  async attest() {
+  /** An attestation report, asked for with a fresh nonce: the model's own, or with no model, the gateway's. */
+  async report(params) {
     const nonce = randomBytes(32).toString("hex");
-    const query = new URLSearchParams({ model: this.model, provider: "near", include_tls_fingerprint: "false", signing_algo: "ed25519", nonce });
+    const query = new URLSearchParams({ ...params, include_tls_fingerprint: "false", signing_algo: "ed25519", nonce });
     const response = await steadyFetch(`${API}/attestation/report?${query}`, { headers: this.headers() }, { timeoutMs: 60_000 });
-    const report = await response.json();
-    const reports = report.model_attestations ?? [];
-    if (!response.ok || reports.length === 0) throw new Error(`${this.model} has no NEAR model attestation (${response.status})`);
-    for (const entry of reports) {
+    return { nonce, status: response.status, ok: response.ok, report: await response.json().catch(() => ({})) };
+  }
+
+  /** Keeps the ed25519 signing key of each attested entry, after checking our nonce and the Intel TDX quote. */
+  keep(entries, nonce) {
+    for (const entry of entries) {
       if (entry.request_nonce !== undefined && entry.request_nonce !== nonce) throw new Error("The attestation report does not echo our nonce");
       if (!entry.intel_quote) throw new Error("The attestation report has no Intel TDX quote");
       if (entry.signing_algo === "ed25519" && entry.signing_address) this.signers.add(hex(entry.signing_address));
     }
     if (this.signers.size === 0) throw new Error("The attestation report names no ed25519 signing key");
-    return { model: this.model, nonce, signers: [...this.signers], gpu: reports.some((entry) => Boolean(entry.nvidia_payload)) };
+  }
+
+  /** The model's attestation if it runs in a TEE, or else the gateway's; keeps the signing keys. */
+  async attest() {
+    const own = await this.report({ model: this.model, provider: "near" });
+    const reports = own.report.model_attestations ?? [];
+    if (own.ok && reports.length > 0) {
+      this.keep(reports, own.nonce);
+      this.mode = "tee";
+      return { model: this.model, mode: this.mode, nonce: own.nonce, signers: [...this.signers], gpu: reports.some((entry) => Boolean(entry.nvidia_payload)) };
+    }
+    // Only a model NEAR AI says it cannot attest, one it passes on to its maker, falls back to the
+    // gateway. Any other failure stops here, so a TEE model is never reported as running elsewhere.
+    if (!/no provider found that supports attestation/i.test(String(own.report?.error?.message ?? ""))) throw new Error(`${this.model} has no NEAR model attestation (${own.status})`);
+    const gateway = await this.report({});
+    const entry = gateway.report.gateway_attestation;
+    // The nonce must come back: an old report could name a key that is no longer the gateway's.
+    if (!gateway.ok || !entry || entry.request_nonce !== gateway.nonce) throw new Error(`${this.model} has no model attestation (${own.status}), and the gateway's did not come back with our nonce (${gateway.status})`);
+    this.keep([entry], gateway.nonce);
+    this.mode = "gateway";
+    return { model: this.model, mode: this.mode, nonce: gateway.nonce, signers: [...this.signers], gpu: false };
   }
 
   /** One chat completion; returns the answer and the hashes of the exact bytes sent and received. */
@@ -111,9 +144,11 @@ export class NearAiModel {
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
     if (!body) return { verified: false, problem: "no signature" };
-    const expected = `${this.model}:${answer.requestHash}:${answer.responseHash}`;
+    const tee = this.mode === "tee";
+    const expected = tee ? `${this.model}:${answer.requestHash}:${answer.responseHash}` : `${answer.requestHash}:${answer.responseHash}`;
     const check = { kind: body.signature_kind, signer: hex(body.signing_address), text: body.text, signature: hex(body.signature) };
-    if (body.signature_kind !== "provider_tee") return { ...check, verified: false, problem: "not signed inside the model's TEE" };
+    if (tee && body.signature_kind !== "provider_tee") return { ...check, verified: false, problem: "not signed inside the model's TEE" };
+    if (!tee && body.signature_kind !== "gateway") return { ...check, verified: false, problem: "not signed by NEAR AI's gateway" };
     if (body.text !== expected) return { ...check, verified: false, problem: "the signed text is not our request and answer" };
     if (!this.signers.has(check.signer)) return { ...check, verified: false, problem: "the signer is not the attested key" };
     const valid = verify(null, Buffer.from(body.text, "utf8"), ed25519Key(check.signer), Buffer.from(check.signature, "hex"));

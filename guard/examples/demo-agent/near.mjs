@@ -191,8 +191,8 @@ export async function settled(hash, sender, done = () => false) {
       last = { events, failures, value };
       if (done(events, value) || failures.length > 0) return last;
     } catch (error) {
-      // A transaction the node has not seen yet: try again shortly.
-      if (!String(error).includes("UNKNOWN_TRANSACTION") && !String(error).includes("TIMEOUT")) throw error;
+      // A transaction the node has not seen yet, or is still running: try again shortly.
+      if (!/UNKNOWN_TRANSACTION|TIMEOUT|"PENDING"/.test(String(error))) throw error;
     }
     await new Promise((resolve) => setTimeout(resolve, 6_000));
   }
