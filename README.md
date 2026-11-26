@@ -265,9 +265,9 @@ How NEAR is used:
 - **Website:** Next.js, React, Tailwind CSS, lucide-react, clsx, tailwind-merge and uqr.
 - **Guard:** near-sdk 5.30.0, serde, sha2, wasi-http-client, p256 (tests only), and a pinned copy
   of NEAR Connect (MIT) on the vault page. The demo agent uses only Node's own modules.
-- **Services:** Helius, FastNEAR, Rhea Finance (formerly Ref Finance), the FastNEAR and x402.org
-  facilitators, OutLayer, NEAR Chain Signatures, NEAR AI Cloud, Cloudflare Workers and GitHub
-  Actions.
+- **Services:** Helius, FastNEAR, Rhea Finance (formerly Ref Finance), NearBlocks (the Index's
+  holder counts), the FastNEAR and x402.org facilitators, OutLayer, NEAR Chain Signatures, NEAR AI
+  Cloud, Cloudflare Workers and GitHub Actions.
 - **AI assistance:** Svalin is built with an AI coding assistant (Claude Code), directed by its
   founder, and checked by the tests above and by live runs on testnet. When an Anthropic API key
   is configured, `/v1/brief` uses Claude to word its summary; no model computes a score, a grade
