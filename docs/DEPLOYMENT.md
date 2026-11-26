@@ -6,7 +6,14 @@ Steps marked **(test)** confirm the previous step worked.
 ## 1. Accounts and wallets
 
 - [ ] A [Helius](https://dashboard.helius.dev) API key for live Solana data (the free plan works).
-      NEAR data (FastNEAR, Ref Finance and NEAR RPC) needs no key.
+      NEAR data (FastNEAR, Ref Finance and NEAR RPC) needs no key on your own server.
+- [ ] On Cloudflare Workers, a **FastNEAR API key** too. Without a key, FastNEAR shares one small
+      limit among everyone calling it from Cloudflare and refuses many reads, so payee checks lose
+      the account's history and answer Caution. Sign in at
+      [dashboard.fastnear.com](https://dashboard.fastnear.com) and create a key: the free trial
+      gives 500,000 calls that never expire, up to 1,000 a minute. The key becomes
+      `FASTNEAR_API_KEY`. Svalin sends it only to FastNEAR's transactions API: a payee check uses
+      2 to 6 calls, and finding a Pro payment made on NEAR a few more.
 - [ ] Two **receiving wallets**, used only for Svalin payments:
   - a Solana wallet (Phantom or Solflare). Its public address becomes `PAY_TO_SOLANA`.
   - a NEAR account (for example `svalin-pay.near`, created in Meteor or MyNearWallet). Its
@@ -53,8 +60,8 @@ host.
 - [ ] After the first deploy, open the Worker's **Settings → Variables and Secrets**. Add
       `HELIUS_API_KEY` as a **Secret**, and `PAY_TO_SOLANA` and `PUBLIC_BASE_URL` (the Worker's
       `https://svalin-api.<your-subdomain>.workers.dev` address) as text variables. Later add
-      `PAY_TO_NEAR`, and `NEAR_FACILITATOR_API_KEY` as a Secret. `NODE_ENV` and `X402_ENV` come
-      from `wrangler.toml`.
+      `PAY_TO_NEAR`, and `NEAR_FACILITATOR_API_KEY` and `FASTNEAR_API_KEY` as Secrets. `NODE_ENV`
+      and `X402_ENV` come from `wrangler.toml`.
 
 How Workers differ from a container host:
 
@@ -148,7 +155,10 @@ Settings → Instance Type).
       `"svalin_api_started"` with `"facilitators"` listing the Solana facilitator (`"x402.org"`
       on testnet, `"payai"` on mainnet), plus `"near"` once `PAY_TO_NEAR` is set and `"cdp"`
       first if you set CDP keys. A line saying `Failed to fetch supported kinds from facilitator`
-      means that facilitator is unreachable or its keys are wrong; the others keep working.
+      means that facilitator is unreachable or its keys are wrong; the others keep working. It
+      also shows `"fastnearKey": "on"` once `FASTNEAR_API_KEY` is set (the key itself is never
+      logged). A `"fastnear_tx_failed"` line names a FastNEAR read that was refused, with its HTTP
+      status: many with status 429 mean the key is missing or its limit is used up.
 - [ ] **(test)** `https://<api>/` shows `"payments": { "enabled": true, ... }` with Solana, and
       NEAR too once `PAY_TO_NEAR` is set.
 - [ ] **(test)** `https://<api>/v1/demo/risk/<any Solana address>` returns a report with

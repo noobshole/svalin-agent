@@ -302,9 +302,10 @@ describe("startup log", () => {
       ANTHROPIC_API_KEY: "anthropic-secret-value",
       NEAR_FACILITATOR_API_KEY: "near-secret-value",
       WEB_FORWARDING_SECRET: "forwarding-secret-value-0123456789",
+      FASTNEAR_API_KEY: "fastnear-secret-value",
     };
     const summary = startupSummary(testConfig({ PAY_TO_SOLANA, PAY_TO_NEAR, X402_ENV: "testnet", ...keys }));
-    expect(summary).toMatchObject({ payments: "x402", facilitators: ["near", "x402.org"], webVisitorForwarding: "on" });
+    expect(summary).toMatchObject({ payments: "x402", facilitators: ["near", "x402.org"], webVisitorForwarding: "on", fastnearKey: "on" });
     const logged = JSON.stringify(summary);
     for (const value of Object.values(keys)) expect(logged).not.toContain(value);
   });

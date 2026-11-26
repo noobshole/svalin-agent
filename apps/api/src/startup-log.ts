@@ -13,5 +13,6 @@ export function startupSummary(config: AppConfig) {
     facilitators: config.payments.mode === "x402" ? facilitatorClients(config).map((entry) => entry.name) : [],
     narrator: config.narrator.anthropicApiKey ? `llm:${config.narrator.model}` : "template",
     webVisitorForwarding: config.demo.forwardingSecret ? "on" : "off",
+    fastnearKey: config.portfolio.fastnearApiKey ? "on" : "off",
   };
 }
