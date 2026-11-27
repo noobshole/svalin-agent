@@ -174,7 +174,7 @@ export function endpoints(config: AppConfig): Endpoint[] {
       method: "GET",
       path: "/v1/index/near-tokens",
       description:
-        "Svalin Index: every NEAR token Rhea Finance prices, graded A-F by the real money in its pools, with market cap, top-10 holder share and holder count where known. Free, refreshed every few hours.",
+        "Svalin Index: every NEAR token Rhea Finance prices, graded A-F by the real money in its pools, with market cap, top-10 holder share and holder count where known. Free, refreshed every few hours. ?methodology=near-token-backing-v2 returns the trial edition of the next methodology, which reads every pool from NEAR at one block and says why each grade changed.",
       price: null,
       returns: "NearTokenIndex",
     },
@@ -449,8 +449,18 @@ export function openApiDocument(config: AppConfig) {
         get: {
           summary: "Svalin Index: NEAR tokens graded by the real money behind their price. Free.",
           tags: ["free"],
+          parameters: [
+            {
+              name: "methodology",
+              in: "query",
+              required: false,
+              description: "near-token-backing-v1 (the default, current) or near-token-backing-v2 (on trial: pools read from NEAR at one block, and a reason for each grade change).",
+              schema: { type: "string", enum: ["near-token-backing-v1", "near-token-backing-v2"] },
+            },
+          ],
           responses: {
-            "200": { description: "NearTokenIndex: rows of [contract, symbol, priceUsd, backingUsd, grade, marketCapUsd, top10Pct, holders]." },
+            "200": { description: "NearTokenIndex: rows of [contract, symbol, priceUsd, backingUsd, grade, marketCapUsd, top10Pct, holders]. The v2 trial adds `changes`: each grade changed since the previous sealed edition, with its reason." },
+            "400": { description: "Unknown methodology." },
             "503": { description: "Index temporarily unavailable." },
           },
         },
@@ -573,7 +583,7 @@ trusted. It is read-only: it never asks for keys, approvals or signatures.
 gets HTTP 422 with code "token_address" and, for NEAR tokens, the token's Svalin Index grade.
 
 - GET ${config.publicBaseUrl}/v1/demo/risk/{address} — free, ${config.demo.perDay} calls a day per IP shared by every free route (X-Free-Remaining says how many are left)
-- GET ${config.publicBaseUrl}/v1/index/near-tokens — free: every NEAR token graded A-F by the real money behind its price
+- GET ${config.publicBaseUrl}/v1/index/near-tokens — free: every NEAR token graded A-F by the real money behind its price (?methodology=near-token-backing-v2 for the trial of the next methodology)
 - GET ${config.publicBaseUrl}/v1/index/near-tokens/daily — free: each token's price and real backing, one point a day for 30 days
 - GET ${config.publicBaseUrl}/v1/portfolio/{address} — ${prices.portfolio} USDC
 - GET ${config.publicBaseUrl}/v1/risk/{address} — ${prices.risk} USDC

@@ -11,6 +11,15 @@ import type { NearPriceList } from "../sources/near-source.js";
 export const NEAR_TOKEN_METHODOLOGY = "near-token-backing-v1";
 
 /**
+ * v2, on trial beside v1: every Rhea Finance pool read from NEAR at one block instead of Rhea's list
+ * of top pools, and each grade change since the previous sealed edition given one reason. The grade
+ * bands, the trusted tokens and the 24-hour hold are v1's.
+ */
+export const NEAR_TOKEN_METHODOLOGY_V2 = "near-token-backing-v2";
+
+export const NEAR_TOKEN_METHODOLOGIES: readonly string[] = [NEAR_TOKEN_METHODOLOGY, NEAR_TOKEN_METHODOLOGY_V2];
+
+/**
  * Per token with backing: since when it has had backing without a break, and the backing seen in
  * each edition within the hold window, as [time in ms, USD].
  */
@@ -75,6 +84,7 @@ export function rateNearTokens(
   depth: ReadonlyMap<string, number>,
   stats: ReadonlyMap<string, TokenStats> = new Map(),
   now: Date = new Date(),
+  methodology: string = NEAR_TOKEN_METHODOLOGY,
 ): NearTokenIndex {
   const rows: RatedTokenRow[] = [];
   const notes: Record<string, TokenNote> = {};
@@ -118,7 +128,7 @@ export function rateNearTokens(
 
   return {
     generatedAt: now.toISOString(),
-    methodology: NEAR_TOKEN_METHODOLOGY,
+    methodology,
     counts,
     rows,
     ...(Object.keys(notes).length > 0 ? { notes } : {}),

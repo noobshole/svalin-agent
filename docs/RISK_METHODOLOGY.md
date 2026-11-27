@@ -230,6 +230,61 @@ against grade now (or gone from the Index), with counts of upgrades, downgrades 
 all their backing. Only editions of the same methodology are compared, and the matrix is
 recomputable from any two sealed editions (`apps/api/src/ratings/track-record.ts`).
 
+### The v2 trial: `near-token-backing-v2`
+
+v2 runs beside v1 as a trial from 1 December 2026. v1 stays the published grade, and the only one
+put on NEAR in the ratings registry that vaults read, until v2 replaces it. v2 keeps v1's trusted tokens, grade
+bands, prices (Rhea's list) and 24-hour hold, and changes three things.
+
+**Every pool, read from NEAR at one block.** v2 reads every classic pool on `v2.ref-finance.near`
+and every DCL pool at one final NEAR block, instead of Rhea's list of top pools. The contract held
+9,024 pools on 27 November 2026, and the list showed 3,175. The block's height and hash are part of
+the sealed edition, so anyone can read the same block from an archive node and check that the
+archived pools are exactly what NEAR held (`index:verify <dir> --chain`). That day, 3,174 of the
+listed pools held exactly the same amounts on NEAR, and the last one had traded between the two
+reads. At the same prices and without the 24-hour hold, the extra pools gave 54 tokens more backing
+that day and changed one grade: AURORA, from C to B.
+
+**Why each grade changed.** Each edition lists every grade that changed since the latest sealed
+edition before its day (`changes` in the index file), with one reason:
+- `price`: the prices of the tokens backing it moved, mostly NEAR's, with the same money in its pools;
+- `money-out` or `money-in`: money left or came into its pools, at the same prices;
+- `price-and-money`: both moved;
+- `method`: the earlier edition used another methodology, as on v2's first day.
+
+Two what-ifs decide it. Price alone: the earlier money, valued at the prices of every run in
+today's 24 hours. Money alone: the money at every point in today's 24 hours, valued at the earlier
+prices. Each takes the lowest value, as the grade does, and whichever alone lands on today's grade
+is the reason. When both do, or neither does, it is `price-and-money`. Tokens new to the Index or
+gone from it are not listed.
+
+A grade uses the lowest backing of the last 24 hours, which can come from a run hours earlier, at
+that run's prices. So v2 keeps the backing detail (`inputs/backing-detail.json.gz`, hashed in the
+edition): for every point of the history, how much of each trusted token backed the token, and
+each run's prices. The earlier money is then the very point the earlier grade came from. Where the
+detail does not reach that point, as in v2's first days, the reason is estimated from this
+edition's pools at both editions' prices and marked `estimated`. Over the 36 sealed v1 editions
+from 23 October to 27 November 2026, the 24-hour low set one of the two grades in 64 of 180 grade
+changes, and those are the changes an estimate can misread. The reasons need only the two
+editions' archived files (`apps/api/src/ratings/grade-changes.ts` and `backing-detail.ts`;
+`index:verify <dir> --previous <sealed edition>`).
+
+**A second opinion beside the grade.** `near-intents-quotes.json` gives what NEAR Intents' 1Click
+API would pay in USDC for $1,000 of each token it lists, and the grade band that loss falls in.
+These are dry quotes: nothing is signed or sent. A swap also pays pool and route fees that grades
+leave out, so one band apart is expected. Two bands or more, or no route for a token graded C or
+better, is flagged (`disagrees`). Intents can sell a bridged token such as ETH or BTC on its home
+chain, so it can pay far more than NEAR's pools suggest. The quotes are kept outside the grade and
+the sealed fingerprint, because they cannot be checked again later and Intents lists only a few
+dozen NEAR tokens.
+
+During the trial, v2 is published to the `latest-v2` branch of the svalin-index repository and
+sealed daily into `editions-v2/`. `GET /v1/index/near-tokens?methodology=near-token-backing-v2`
+returns it, and `near-methodology-trial.json` compares each run's two editions token by token. v2
+reuses v1's market data. Its first run starts from v1's backing history, so on its first day a
+token is graded on the lowest of v1's backing over the last 24 hours and v2's own, and backing that
+only v2 sees waits its 24 hours.
+
 ## Recipient check: is it safe to pay this address?
 
 `GET /v1/check/{address}` (version `2026-10.3`, `apps/api/src/risk/check.ts`) answers a different
