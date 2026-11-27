@@ -54,7 +54,7 @@ import {
 } from "./payments/pro-payments.js";
 import { createPaymentLayer } from "./payments/x402.js";
 import { tokenExit } from "./ratings/exit-prices.js";
-import { NEAR_TOKEN_METHODOLOGY, NEAR_TOKEN_METHODOLOGY_V2 } from "./ratings/near-tokens.js";
+import { NEAR_TOKEN_METHODOLOGY, NEAR_TOKEN_METHODOLOGY_V2, NEAR_TOKEN_TRIAL_STARTS } from "./ratings/near-tokens.js";
 import { assessRecipient } from "./risk/check.js";
 import { buildRiskReport } from "./risk/engine.js";
 import { ChainRouterSource } from "./sources/chain-router-source.js";
@@ -432,7 +432,10 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
     if (methodology !== undefined && methodology !== NEAR_TOKEN_METHODOLOGY && methodology !== NEAR_TOKEN_METHODOLOGY_V2) {
       throw new ApiError(400, "invalid_methodology", `Unknown methodology. Use ${NEAR_TOKEN_METHODOLOGY} or ${NEAR_TOKEN_METHODOLOGY_V2}.`);
     }
-    const body = await (methodology === NEAR_TOKEN_METHODOLOGY_V2 ? trialFeed : indexFeed).latest();
+    const trial = methodology === NEAR_TOKEN_METHODOLOGY_V2;
+    const body = await (trial ? trialFeed : indexFeed).latest().catch((error: unknown) => {
+      throw trial ? trialNotStarted(error, Date.now()) : error;
+    });
     c.header("Cache-Control", "public, max-age=300");
     return c.body(body, 200, { "Content-Type": "application/json; charset=utf-8" });
   });
@@ -982,4 +985,21 @@ function exitSaleQuery(c: Context, paid: boolean): number | undefined {
     throw new ApiError(400, "invalid_amount", "amountUsd must be a number of US dollars, more than 0.");
   }
   return amountUsd;
+}
+
+/**
+ * The trial edition not being there yet, said plainly: until its first day is over (the robot's
+ * first run that day can come hours after midnight UTC), the trial has not started, rather than
+ * being briefly unavailable. Any other failure passes through unchanged.
+ */
+export function trialNotStarted(error: unknown, now: number): unknown {
+  if (!(error instanceof ApiError) || error.code !== "index_unavailable") return error;
+  const firstDayEnds = Date.parse(`${NEAR_TOKEN_TRIAL_STARTS.day}T00:00:00Z`) + 24 * 60 * 60 * 1000;
+  if (now >= firstDayEnds) return error;
+  return new ApiError(
+    503,
+    "trial_not_started",
+    `The ${NEAR_TOKEN_METHODOLOGY_V2} trial starts on ${NEAR_TOKEN_TRIAL_STARTS.label} (UTC), with the Index's first run that day.`,
+    `Leave out ?methodology for the current grades (${NEAR_TOKEN_METHODOLOGY}), or ask again after the trial's first run.`,
+  );
 }

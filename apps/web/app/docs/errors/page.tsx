@@ -16,7 +16,7 @@ const ERROR_EXAMPLE = `{
 }`;
 
 const STATUSES: { status: string; codes: string[]; meaning: ReactNode }[] = [
-  { status: "400", codes: ["invalid_address", "invalid_payer", "chain_mismatch", "invalid_amount", "invalid_contract", "amount_needs_paid_route"], meaning: "The request is wrong. Fix it and send it again." },
+  { status: "400", codes: ["invalid_address", "invalid_payer", "chain_mismatch", "invalid_amount", "invalid_contract", "amount_needs_paid_route", "invalid_methodology"], meaning: "The request is wrong. Fix it and send it again." },
   { status: "401", codes: ["missing_key", "invalid_key", "unknown_key", "key_ended"], meaning: "The key is missing, not known or has ended. Send a valid key, or leave the header out and pay per call." },
   {
     status: "402",
@@ -34,7 +34,15 @@ const STATUSES: { status: string; codes: string[]; meaning: ReactNode }[] = [
   { status: "500", codes: ["internal_error"], meaning: "Something failed on Svalin’s side." },
   { status: "501", codes: ["chain_not_supported"], meaning: "This instance does not cover that chain." },
   { status: "502", codes: ["upstream_unavailable", "upstream_error"], meaning: "A data provider did not answer. Try again in a minute." },
-  { status: "503", codes: ["upstream_rate_limited", "payments_not_configured", "facilitator_unavailable", "keys_unavailable", "checkout_busy"], meaning: "A service is busy or not available. Try again shortly." },
+  {
+    status: "503",
+    codes: ["upstream_rate_limited", "payments_not_configured", "facilitator_unavailable", "keys_unavailable", "checkout_busy", "index_unavailable", "trial_not_started"],
+    meaning: (
+      <>
+        A service is busy or not available. Try again shortly. <code>trial_not_started</code> means the Index’s v2 trial has not begun yet. It starts on 1 December 2026 (UTC).
+      </>
+    ),
+  },
 ];
 
 export default function ErrorsPage() {

@@ -461,7 +461,7 @@ export function openApiDocument(config: AppConfig) {
           responses: {
             "200": { description: "NearTokenIndex: rows of [contract, symbol, priceUsd, backingUsd, grade, marketCapUsd, top10Pct, holders]. The v2 trial adds `changes`: each grade changed since the previous sealed edition, with its reason." },
             "400": { description: "Unknown methodology." },
-            "503": { description: "Index temporarily unavailable." },
+            "503": { description: "Index temporarily unavailable, or (trial_not_started) the near-token-backing-v2 trial has not started yet: it starts on 1 December 2026 (UTC)." },
           },
         },
       },

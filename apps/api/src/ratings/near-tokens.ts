@@ -19,6 +19,9 @@ export const NEAR_TOKEN_METHODOLOGY_V2 = "near-token-backing-v2";
 
 export const NEAR_TOKEN_METHODOLOGIES: readonly string[] = [NEAR_TOKEN_METHODOLOGY, NEAR_TOKEN_METHODOLOGY_V2];
 
+/** The UTC day the v2 trial starts: its first edition comes with the Index robot's first run that day. */
+export const NEAR_TOKEN_TRIAL_STARTS = { day: "2026-12-01", label: "1 December 2026" } as const;
+
 /**
  * Per token with backing: since when it has had backing without a break, and the backing seen in
  * each edition within the hold window, as [time in ms, USD].

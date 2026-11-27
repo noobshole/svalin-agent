@@ -1,12 +1,12 @@
 import { addressScanSchema, type ChainFamily } from "@svalin-agent/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { createApp } from "../src/app.js";
+import { createApp, trialNotStarted } from "../src/app.js";
 import { MAX_ROUTE_DESCRIPTION_LENGTH, paidRoutes, paymentNetworks, type PaidRouteKey } from "../src/catalog.js";
 import { loadConfig } from "../src/env.js";
 import { createClientIpResolver, visitorKey } from "../src/lib/client-ip.js";
-import { tokenAddressError } from "../src/lib/errors.js";
+import { ApiError, tokenAddressError } from "../src/lib/errors.js";
 import { facilitatorClients } from "../src/payments/x402.js";
 import { RemoteIndexFeed } from "../src/sources/index-feed.js";
 import { MockPortfolioSource } from "../src/sources/mock-source.js";
@@ -507,6 +507,36 @@ describe("Svalin Index", () => {
     const unknown = await app.request("/v1/index/near-tokens?methodology=near-token-backing-v9");
     expect(unknown.status).toBe(400);
     expect(((await unknown.json()) as { code: string }).code).toBe("invalid_methodology");
+  });
+
+  it("says the trial starts on 1 December 2026 until its first day is over, and is briefly unavailable after", async () => {
+    const unavailable = () => {
+      throw new ApiError(503, "index_unavailable", "The token index is not available right now.", "Retry in a few minutes.");
+    };
+    const app = createApp(testConfig({ PAY_TO_SOLANA }), {
+      facilitator: fakeFacilitator(),
+      indexFeed: { latest: async () => unavailable() },
+      trialFeed: { latest: async () => unavailable() },
+    });
+    const answer = async (path: string) => {
+      const response = await app.request(path);
+      return { status: response.status, ...((await response.json()) as { code: string; error: string }) };
+    };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-12-01T23:59:00Z"));
+      const early = await answer("/v1/index/near-tokens?methodology=near-token-backing-v2");
+      expect(early).toMatchObject({ status: 503, code: "trial_not_started" });
+      expect(early.error).toContain("starts on 1 December 2026 (UTC)");
+      // The current edition's own outage is not about the trial.
+      expect(await answer("/v1/index/near-tokens")).toMatchObject({ status: 503, code: "index_unavailable" });
+
+      vi.setSystemTime(new Date("2026-12-02T00:00:00Z"));
+      expect(await answer("/v1/index/near-tokens?methodology=near-token-backing-v2")).toMatchObject({ status: 503, code: "index_unavailable" });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(trialNotStarted(new Error("other"), Date.parse("2026-11-28T00:00:00Z"))).toEqual(new Error("other"));
   });
 });
 
