@@ -31,7 +31,7 @@ money, inside a contract.
 
 | Part | What it does | Where |
 | --- | --- | --- |
-| **Svalin Index** | Grades every NEAR token Rhea Finance prices, NEAR and USDC included, A to F by the real money in its pools, with 30 days of price and backing per token. Rebuilt every few hours; one edition a day is sealed on NEAR. | [`apps/api`](apps/api), [svalin-index](https://github.com/noobshole/svalin-index) |
+| **Svalin Index** | Grades every NEAR token Rhea Finance prices, NEAR and USDC included, A to F by the real money in its pools, with 30 days of price and backing per token. Rebuilt every few hours; one edition a day is sealed on NEAR. From 1 December 2026 a v2 that reads every pool from NEAR at one block, and says why each grade changed, runs on trial beside it. | [`apps/api`](apps/api), [svalin-index](https://github.com/noobshole/svalin-index) |
 | **Checks** | Before paying an address: allow, caution or block. Wallet risk reports, exit prices and grade proofs. From $0.002 a call in USDC over x402 on NEAR or Solana, with 10 free calls a day. | [`apps/api`](apps/api), [`packages/mcp`](packages/mcp) |
 | **Svalin Guard** | A vault contract. The agent's key can only ask; the vault pays, holds or refuses by the owner's rules, on NEAR and on Solana, and buys a token only if its grade is proven against the sealed edition. | [`guard`](guard) |
 | **Website** | A free scan of any address (whether it is safe to pay, and a grade for the money it holds), the Index, docs and pricing. | [`apps/web`](apps/web) |
@@ -114,7 +114,7 @@ Each step needs no account and no key.
 6. **The tests pass.**
 
    ```bash
-   pnpm install && pnpm build && pnpm test    # 237 API tests and 36 MCP tests
+   pnpm install && pnpm build && pnpm test    # 255 API tests and 36 MCP tests
    cd guard && cargo test                     # 201 tests: the vault, the registry, the check program
    ```
 

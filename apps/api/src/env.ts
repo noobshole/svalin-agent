@@ -30,6 +30,8 @@ const envSchema = z.object({
   // daily prices and backing behind the ratings page's small charts.
   NEAR_INDEX_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-token-index.json"),
   NEAR_INDEX_DAILY_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/latest/near-token-daily.json"),
+  // The trial edition of the next methodology (near-token-backing-v2), served on request beside the current one.
+  NEAR_INDEX_TRIAL_URL: z.url().default("https://raw.githubusercontent.com/noobshole/svalin-index/latest-v2/near-token-index.json"),
   // The Svalin Ratings registry on NEAR that grade proofs are made against, and where its RPC and
   // the sealed editions are.
   NEAR_RATINGS_REGISTRY: z.string().default("svalin-ratings-v1.testnet"),
@@ -154,6 +156,7 @@ export function loadConfig(source: Record<string, string | undefined> = process.
       nearPoolsApiUrl: env.NEAR_POOLS_API_URL,
       nearIndexUrl: env.NEAR_INDEX_URL,
       nearIndexDailyUrl: env.NEAR_INDEX_DAILY_URL,
+      nearIndexTrialUrl: env.NEAR_INDEX_TRIAL_URL,
       nearDclDepthUrl: env.NEAR_DCL_DEPTH_URL,
       ratings: { registry: env.NEAR_RATINGS_REGISTRY, rpcUrl: env.NEAR_RATINGS_RPC_URL, sealedUrl: env.NEAR_INDEX_SEALED_URL.replace(/\/+$/, "") },
       fastnearTxApiUrl,

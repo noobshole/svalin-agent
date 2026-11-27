@@ -619,6 +619,57 @@ export function poolDepth(pools: RefPool[], prices: NearPriceList, dclPools: rea
   return depth;
 }
 
+/** The USD price of every registry token with a usable price: the tokens `poolBackingAmounts` counts. */
+export function registryPrices(prices: NearPriceList): Record<string, number> {
+  const kept: Record<string, number> = {};
+  for (const contract of [...REGISTRY_CONTRACTS].sort()) {
+    const entry = prices[contract];
+    const price = priceOf(prices, contract);
+    if (entry && price !== null && Number.isInteger(entry.decimal)) kept[contract] = price;
+  }
+  return kept;
+}
+
+/**
+ * What `poolDepth` counts, before it is priced: for each token, how much of each registry token
+ * (in whole tokens) sits on the other side of its pools. The same pools, the same rules and the same
+ * registry tokens with a price, so valuing these amounts at `prices` gives `poolDepth` (up to
+ * rounding). The Index's v2 keeps them per run, so a grade change can be split into price and money
+ * exactly.
+ */
+export function poolBackingAmounts(pools: RefPool[], prices: NearPriceList, dclPools: readonly RefDclPool[] = []): Map<string, Record<string, number>> {
+  const decimals = new Map(Object.keys(registryPrices(prices)).map((contract) => [contract, prices[contract].decimal]));
+  const units = (contract: string, raw: string) => {
+    const places = decimals.get(contract);
+    const amount = Number(raw);
+    return places !== undefined && Number.isFinite(amount) && amount > 0 ? amount / 10 ** places : 0;
+  };
+  const backing = new Map<string, Record<string, number>>();
+  const add = (token: string, registry: string, amount: number) => {
+    const entry = backing.get(token) ?? {};
+    entry[registry] = (entry[registry] ?? 0) + amount;
+    backing.set(token, entry);
+  };
+
+  for (const { token_account_ids: ids, amounts } of pools) {
+    if (!Array.isArray(ids) || !Array.isArray(amounts) || ids.length !== amounts.length) continue;
+    const held = ids.map((id, index) => units(id, amounts[index]));
+    for (let index = 0; index < ids.length; index += 1) {
+      for (let other = 0; other < ids.length; other += 1) {
+        if (other !== index && held[other] > 0) add(ids[index], ids[other], held[other]);
+      }
+    }
+  }
+  for (const { token_x: x, token_y: y, total_x: totalX, total_y: totalY, state } of dclPools) {
+    if (state !== undefined && state !== "Running") continue;
+    const xUnits = units(x, totalX);
+    const yUnits = units(y, totalY);
+    if (yUnits > 0) add(x, y, yUnits);
+    if (xUnits > 0) add(y, x, xUnits);
+  }
+  return backing;
+}
+
 /**
  * Reads Rhea's pool list, keeping only pools that hold a registry token. It pulls the two needed
  * fields out of the text instead of parsing the whole document, which roughly halves the CPU time

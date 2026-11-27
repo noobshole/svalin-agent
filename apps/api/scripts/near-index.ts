@@ -11,6 +11,11 @@
  * better first, so their figures are at most about a day old (holder counts, which NearBlocks
  * limits to a few calls a minute, about two days), then the ~3,000 others in rotation.
  * The backing history behind the 24-hour hold is read back from the previous edition's archive.
+ *
+ * NEAR_INDEX_METHODOLOGY=near-token-backing-v2 builds the v2 trial instead: every Rhea pool read from
+ * NEAR at one final block (recorded in the edition), each grade change since the previous sealed
+ * edition given a reason, and NEAR Intents' quotes written beside the grades. During the trial the
+ * robot builds both, and v2 reuses v1's market data (its lookup budgets are set to 0).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -19,19 +24,29 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { lookupToken } from "@svalin-agent/chain-config";
 import {
   TOKEN_DAILY_DAYS,
+  indexEditionSchema,
   nearTokenIndexSchema,
   tokenDailySchema,
   tokenGradeFor,
   trackRecordSchema,
+  type GradeChanges,
+  type NearBlock,
   type RatedTokenRow,
   type TokenDaily,
 } from "@svalin-agent/shared";
 
+import { recordDetail, type BackingDetail } from "../src/ratings/backing-detail.js";
+import { NEAR_RPC_FALLBACKS, NearRpc, readChainDclPools, readChainPools } from "../src/ratings/chain-pools.js";
 import { addToDaily } from "../src/ratings/daily.js";
 import { editionAnomaly } from "../src/ratings/edition-guard.js";
 import { sealEdition, sha256Hex } from "../src/ratings/edition.js";
+import { gradeChanges, type ComparedEdition } from "../src/ratings/grade-changes.js";
+import { intentsQuotes } from "../src/ratings/intents-quotes.js";
 import { editionTree, treeBytes, treeRoot } from "../src/ratings/merkle.js";
 import {
+  NEAR_TOKEN_METHODOLOGIES,
+  NEAR_TOKEN_METHODOLOGY,
+  NEAR_TOKEN_METHODOLOGY_V2,
   heldDepth,
   holdersFromTop,
   marketCapUsd,
@@ -44,7 +59,7 @@ import {
   type TokenStats,
 } from "../src/ratings/near-tokens.js";
 import { gradeMigration } from "../src/ratings/track-record.js";
-import { parseRefPools, poolDepth, type NearPriceList, type RefDclPool } from "../src/sources/near-source.js";
+import { parseRefPools, poolBackingAmounts, poolDepth, type NearPriceList, type RefDclPool } from "../src/sources/near-source.js";
 
 // Rhea Finance, formerly Ref Finance. Its old indexer.ref.finance host still answers, but its pool
 // list stopped taking in new pools (2,465 against Rhea's 3,175 on 26 November 2026).
@@ -57,11 +72,23 @@ const DCL_CONTRACT = process.env.NEAR_DCL_CONTRACT ?? "dclv2.ref-labs.near";
 const DATA_DIR = resolve(process.argv[2] ?? "index-out");
 const STATS_FILE = resolve(DATA_DIR, "near-token-stats.json");
 const HISTORY_FILE = resolve(DATA_DIR, "inputs/history.json.gz");
+/** v2: the trusted tokens behind every history point and each run's prices, for exact grade-change reasons. */
+const DETAIL_FILE = resolve(DATA_DIR, "inputs/backing-detail.json.gz");
 /** One point a day per token for the ratings page's charts; not part of the sealed edition. */
 const DAILY_FILE = resolve(DATA_DIR, "near-token-daily.json");
 /** Sealed daily editions: compared with this one for the track record, and the daily file's first fill. */
 const SEALED_URL = process.env.NEAR_INDEX_SEALED_URL ?? "https://raw.githubusercontent.com/noobshole/svalin-index/main/editions";
 const TRACK_WINDOWS = [1, 7, 30];
+
+const METHODOLOGY = process.env.NEAR_INDEX_METHODOLOGY ?? NEAR_TOKEN_METHODOLOGY;
+if (!NEAR_TOKEN_METHODOLOGIES.includes(METHODOLOGY)) throw new Error(`unknown methodology ${METHODOLOGY}`);
+const V2 = METHODOLOGY === NEAR_TOKEN_METHODOLOGY_V2;
+/** v2: sealed editions of the methodology before it, compared with when its own record has none yet. */
+const PREVIOUS_METHOD_URL = process.env.NEAR_INDEX_PREVIOUS_METHOD_URL;
+/** v2: the data directory of the methodology before it, whose backing history v2 starts from on its first run. */
+const SEED_FROM = process.env.NEAR_INDEX_SEED_FROM;
+/** How far back to look for the sealed edition a v2 edition's grade changes are measured from. */
+const CHANGES_LOOKBACK_DAYS = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Zero-backing tokens with the highest quoted prices also get a market cap: the loudest claims. */
@@ -193,28 +220,63 @@ function noteFailure(stage: string, error: unknown) {
 }
 
 const now = Date.now();
-const [pricesText, poolsText] = await Promise.all([get(PRICES_URL).then((r) => r.text()), get(POOLS_URL).then((r) => r.text())]);
-const dcl = await dclPools();
+// v1 reads Rhea's list of top pools and the DCL pools as they are now. v2 reads every pool on both
+// contracts at one final block, so the edition says exactly which chain state it graded.
+let block: NearBlock | undefined;
+let pricesText: string;
+let poolsText: string;
+let dcl: RefDclPool[];
+let poolsRead = 0;
+if (V2) {
+  // If the main endpoint keeps refusing, the same block is read from the next one.
+  const rpc = new NearRpc([RPC_URL, ...NEAR_RPC_FALLBACKS]);
+  const pinned = await rpc.finalBlock();
+  block = pinned;
+  [pricesText, poolsText, dcl] = await Promise.all([
+    get(PRICES_URL).then((r) => r.text()),
+    readChainPools(rpc, pinned.height).then((pools) => {
+      poolsRead = pools.length;
+      return JSON.stringify(pools);
+    }),
+    readChainDclPools(rpc, pinned.height),
+  ]);
+} else {
+  [pricesText, poolsText] = await Promise.all([get(PRICES_URL).then((r) => r.text()), get(POOLS_URL).then((r) => r.text())]);
+  dcl = await dclPools();
+}
 const dclText = JSON.stringify(dcl);
 const prices = JSON.parse(pricesText) as NearPriceList;
-const current = poolDepth(parseRefPools(poolsText), prices, dcl);
+const parsedPools = parseRefPools(poolsText);
+const current = poolDepth(parsedPools, prices, dcl);
 
-// Grade only backing that has held for 24 hours (see heldDepth). The first v1 edition has no
-// history yet: tokens that had backing in the previous edition count as established, and backing
-// that is new in this one (for example from DCL pools only) waits its 24 hours like any other.
+// Grade only backing that has held for 24 hours (see heldDepth). The first edition of a methodology
+// has no history of its own yet. v2's first run starts from v1's (NEAR_INDEX_SEED_FROM): its tokens
+// keep their 24 hours of v1 backing, so a day-one grade comes from the lowest of v1's backing and
+// v2's own, and backing new in v2 (from pools only v2 reads) waits its 24 hours like any other.
+// Without such a history, tokens that had backing in the previous index count as established.
+const readGz = (file: string) => JSON.parse(gunzipSync(readFileSync(file)).toString("utf8")) as unknown;
 function seedHistory(): BackingHistory | null {
-  const previousIndex = resolve(DATA_DIR, "near-token-index.json");
-  if (!existsSync(previousIndex)) return null;
-  const rows = (JSON.parse(readFileSync(previousIndex, "utf8")) as { rows?: RatedTokenRow[] }).rows ?? [];
+  if (SEED_FROM) {
+    const seed = resolve(SEED_FROM, "inputs/history.json.gz");
+    if (!existsSync(seed)) throw new Error(`NEAR_INDEX_SEED_FROM has no backing history at ${seed}`);
+    return readGz(seed) as BackingHistory;
+  }
+  const ownPrevious = resolve(DATA_DIR, "near-token-index.json");
+  if (!existsSync(ownPrevious)) return null;
+  const rows = (JSON.parse(readFileSync(ownPrevious, "utf8")) as { rows?: RatedTokenRow[] }).rows ?? [];
   return Object.fromEntries(rows.filter((row) => row[3] > 0).map((row) => [row[0], { since: 0, points: [] }]));
 }
-const previousHistory = existsSync(HISTORY_FILE)
-  ? (JSON.parse(gunzipSync(readFileSync(HISTORY_FILE)).toString("utf8")) as BackingHistory)
-  : seedHistory();
+const previousHistory = existsSync(HISTORY_FILE) ? (readGz(HISTORY_FILE) as BackingHistory) : seedHistory();
 const history = recordBacking(previousHistory, current, now);
 const historyText = JSON.stringify(history);
 const depth = heldDepth(history, now);
-const graded = rateNearTokens(prices, depth, new Map(), new Date(now));
+// v2: what backs each token, in trusted tokens, at every point of the history, and each run's
+// prices, so a grade change can be split into price and money exactly.
+const detail = V2
+  ? recordDetail(existsSync(DETAIL_FILE) ? (readGz(DETAIL_FILE) as BackingDetail) : null, history, poolBackingAmounts(parsedPools, prices, dcl), prices, now)
+  : undefined;
+const detailText = detail ? JSON.stringify(detail) : undefined;
+const graded = rateNearTokens(prices, depth, new Map(), new Date(now), METHODOLOGY);
 
 const backed = graded.rows.filter((row) => row[3] > 0).map((row) => row[0]);
 const loudest = graded.rows
@@ -282,9 +344,68 @@ for (const [contract, cached] of cache) {
 // Seal the edition: archive the exact Rhea Finance responses and record their hashes and the code
 // commit, so anyone can recompute every grade (scripts/verify-index.ts).
 const code = { repository: "https://github.com/noobshole/svalin-agent", commit: process.env.SVALIN_COMMIT ?? "local" };
+const rated = rateNearTokens(prices, depth, stats, new Date(now), METHODOLOGY);
+
+/**
+ * A sealed edition from `base` (<base>/<day>/...): its record, index and prices, and its history and
+ * backing detail when it has them, each checked against its hash. Null when the day has no sealed
+ * edition; one with a file missing or altered throws, and the search goes on to the day before.
+ */
+async function comparedEdition(base: string, sealedDay: string): Promise<ComparedEdition | null> {
+  const fetchOk = (path: string) => fetch(`${base}/${sealedDay}/${path}`, { signal: AbortSignal.timeout(30_000) }).then((r) => (r.ok ? r : null));
+  const record = await fetchOk("edition.json");
+  if (!record) return null;
+  const edition = indexEditionSchema.parse(await record.json());
+  if (edition.generatedAt.slice(0, 10) !== sealedDay) throw new Error(`sealed edition ${sealedDay} is dated ${edition.generatedAt}`);
+  /** A file the record lists, as text: plain or gzipped, as archived. */
+  const read = async (file: { path: string; sha256: string }) => {
+    const response = await fetchOk(file.path);
+    if (!response) throw new Error(`sealed edition ${sealedDay} has no ${file.path}`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const text = file.path.endsWith(".gz") ? gunzipSync(bytes).toString("utf8") : bytes.toString("utf8");
+    if (sha256Hex(text) !== file.sha256) throw new Error(`sealed edition ${sealedDay}: ${file.path} does not match its record`);
+    return text;
+  };
+  const { files } = edition;
+  const [indexBody, pricesBody, historyBody, detailBody] = await Promise.all([
+    read(files.index),
+    read(files.prices),
+    files.history && files.backingDetail ? read(files.history) : undefined,
+    files.history && files.backingDetail ? read(files.backingDetail) : undefined,
+  ]);
+  return {
+    day: sealedDay,
+    generatedAt: edition.generatedAt,
+    fingerprint: edition.fingerprint,
+    methodology: edition.methodology,
+    index: nearTokenIndexSchema.parse(JSON.parse(indexBody)),
+    prices: JSON.parse(pricesBody) as NearPriceList,
+    ...(historyBody && detailBody ? { history: JSON.parse(historyBody) as BackingHistory, detail: JSON.parse(detailBody) as BackingDetail } : {}),
+  };
+}
+
+// v2: every grade change since the latest sealed edition before today, with its reason. Until v2
+// has a sealed edition of its own, it is compared with v1's, and every change reads "method".
+async function changesSinceSealed(): Promise<GradeChanges | undefined> {
+  for (const base of [SEALED_URL, PREVIOUS_METHOD_URL]) {
+    if (!base) continue;
+    for (let back = 1; back <= CHANGES_LOOKBACK_DAYS; back += 1) {
+      try {
+        const compared = await comparedEdition(base, new Date(now - back * DAY_MS).toISOString().slice(0, 10));
+        if (compared) return gradeChanges(compared, { index: rated, prices, pools: parsedPools, dclPools: dcl, history, detail });
+      } catch (error) {
+        noteFailure("grade changes", error);
+      }
+    }
+  }
+  return undefined;
+}
+const changes = V2 ? await changesSinceSealed() : undefined;
+
 const index = nearTokenIndexSchema.parse({
-  ...rateNearTokens(prices, depth, stats, new Date(now)),
-  provenance: { code, inputs: { pricesSha256: sha256Hex(pricesText), poolsSha256: sha256Hex(poolsText) } },
+  ...rated,
+  provenance: { code, inputs: { pricesSha256: sha256Hex(pricesText), poolsSha256: sha256Hex(poolsText) }, ...(block ? { block } : {}) },
+  ...(changes ? { changes } : {}),
 });
 // The circuit breaker (src/ratings/edition-guard.ts): an edition that looks broken is refused before
 // anything is written, so the previous one stays published and the failed run alerts the owner.
@@ -304,6 +425,7 @@ writeFileSync(resolve(DATA_DIR, "inputs/prices.json.gz"), gzipSync(pricesText));
 writeFileSync(resolve(DATA_DIR, "inputs/pools.json.gz"), gzipSync(poolsText));
 writeFileSync(resolve(DATA_DIR, "inputs/dcl-pools.json.gz"), gzipSync(dclText));
 writeFileSync(HISTORY_FILE, gzipSync(historyText));
+if (detailText) writeFileSync(DETAIL_FILE, gzipSync(detailText));
 writeFileSync(resolve(DATA_DIR, "near-token-index.json"), indexText);
 
 // The edition's Merkle tree, as the Svalin Ratings registry on NEAR reads it: the API serves proofs
@@ -329,7 +451,9 @@ const edition = sealEdition({
     index: { path: "near-token-index.json", sha256: sha256Hex(indexText) },
     dclPools: { path: "inputs/dcl-pools.json.gz", sha256: sha256Hex(dclText) },
     history: { path: "inputs/history.json.gz", sha256: sha256Hex(historyText) },
+    ...(detailText ? { backingDetail: { path: "inputs/backing-detail.json.gz", sha256: sha256Hex(detailText) } } : {}),
   },
+  ...(block ? { block } : {}),
 });
 writeFileSync(resolve(DATA_DIR, "edition.json"), `${JSON.stringify(edition, null, 2)}\n`);
 // The registry's `publish` arguments for this edition.
@@ -406,9 +530,32 @@ for (const days of TRACK_WINDOWS) {
 }
 const trackRecord = trackRecordSchema.parse({ generatedAt: index.generatedAt, methodology: index.methodology, windows });
 writeFileSync(resolve(DATA_DIR, "near-track-record.json"), JSON.stringify(trackRecord));
+
+// v2: NEAR Intents' quotes beside the grades, outside the sealed edition (quotes cannot be re-checked
+// later). If 1Click cannot be read, the previous run's file stays, its times saying how old it is,
+// and the edition goes ahead without new quotes.
+let quotes: Awaited<ReturnType<typeof intentsQuotes>> | undefined;
+if (V2 && process.env.NEAR_INDEX_INTENTS !== "0") {
+  try {
+    quotes = await intentsQuotes(index);
+    writeFileSync(resolve(DATA_DIR, "near-intents-quotes.json"), JSON.stringify(quotes));
+  } catch (error) {
+    noteFailure("intents quotes", error);
+  }
+}
 console.log(
   JSON.stringify({
     msg: "near_index_built",
+    methodology: index.methodology,
+    ...(block ? { block: block.height } : {}),
+    ...(V2 ? { poolsRead } : {}),
+    ...(changes ? { changesSince: changes.since, changes: Object.keys(changes.tokens).length } : {}),
+    ...(quotes
+      ? {
+          intentsQuotes: Object.values(quotes.quotes).filter((quote) => quote.lossPct !== null).length,
+          intentsDisagree: Object.values(quotes.quotes).filter((quote) => quote.disagrees).length,
+        }
+      : {}),
     tokens: index.rows.length,
     counts: index.counts,
     dclPools: dcl.length,

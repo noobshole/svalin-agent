@@ -492,6 +492,22 @@ describe("Svalin Index", () => {
     expect(response.headers.get("content-type")).toContain("application/json");
     expect(await response.text()).toBe(daily);
   });
+
+  it("serves the trial methodology's edition on request, and refuses a methodology it does not know", async () => {
+    const app = createApp(testConfig({ PAY_TO_SOLANA }), {
+      facilitator: fakeFacilitator(),
+      indexFeed: { latest: async () => '{"methodology":"near-token-backing-v1","rows":[]}' },
+      trialFeed: { latest: async () => '{"methodology":"near-token-backing-v2","rows":[]}' },
+    });
+    const methodologyOf = async (path: string) => ((await (await app.request(path)).json()) as { methodology: string }).methodology;
+    expect(await methodologyOf("/v1/index/near-tokens")).toBe("near-token-backing-v1");
+    expect(await methodologyOf("/v1/index/near-tokens?methodology=near-token-backing-v1")).toBe("near-token-backing-v1");
+    expect(await methodologyOf("/v1/index/near-tokens?methodology=near-token-backing-v2")).toBe("near-token-backing-v2");
+
+    const unknown = await app.request("/v1/index/near-tokens?methodology=near-token-backing-v9");
+    expect(unknown.status).toBe(400);
+    expect(((await unknown.json()) as { code: string }).code).toBe("invalid_methodology");
+  });
 });
 
 describe("exit prices for one token", () => {

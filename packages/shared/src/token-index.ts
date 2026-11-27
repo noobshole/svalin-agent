@@ -69,6 +69,13 @@ export const ratedTokenSchema = z.tuple([
 ]);
 
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
+const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+/**
+ * The NEAR block an edition read its pools at, from near-token-backing-v2: anyone can read exactly
+ * the same pools again from an archive node.
+ */
+export const nearBlockSchema = z.object({ height: z.number().int().positive(), hash: z.string().min(1) });
 
 /**
  * What an edition was computed from, so anyone can recompute its grades: the exact Rhea Finance
@@ -77,6 +84,39 @@ const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 export const indexProvenanceSchema = z.object({
   code: z.object({ repository: z.url(), commit: z.string() }),
   inputs: z.object({ pricesSha256: sha256Schema, poolsSha256: sha256Schema }),
+  /** From near-token-backing-v2: the block the pools were read at. */
+  block: nearBlockSchema.optional(),
+});
+
+/**
+ * Why a grade changed since the previous sealed edition, from near-token-backing-v2:
+ * - `price`: the prices of the tokens backing it moved (mostly NEAR's), with the same money in its pools;
+ * - `money-out` and `money-in`: money left or came into its pools, at the same prices;
+ * - `price-and-money`: both moved, and either one alone would explain it, or neither would alone;
+ * - `method`: the previous edition was graded by another methodology.
+ */
+export const gradeChangeReasonSchema = z.enum(["price", "money-out", "money-in", "price-and-money", "method"]);
+
+/**
+ * Every grade that changed since the previous sealed edition, each with one reason. Worked out from
+ * the two editions' archived files alone, so anyone can recompute it.
+ */
+export const gradeChangesSchema = z.object({
+  /** The sealed edition compared with (editions-v2/<day>, or editions/<day> on the trial's first day), its time and fingerprint. */
+  since: daySchema,
+  sinceGeneratedAt: z.iso.datetime(),
+  sinceFingerprint: sha256Schema,
+  sinceMethodology: z.string(),
+  /**
+   * By contract: the grade then, the grade now, and why. Tokens new to the Index or gone from it are
+   * not listed. `estimated` marks a reason worked out from today's pools at both editions' prices,
+   * because the backing detail does not reach back to the backing the earlier grade used (the trial's
+   * first days); every other reason is exact.
+   */
+  tokens: z.record(
+    z.string(),
+    z.object({ from: tokenGradeSchema, to: tokenGradeSchema, reason: gradeChangeReasonSchema, estimated: z.literal(true).optional() }),
+  ),
 });
 
 /**
@@ -107,6 +147,8 @@ export const nearTokenIndexSchema = z.object({
   rows: z.array(ratedTokenSchema),
   /** Per-token notes by contract, from 4 November 2026. */
   notes: z.record(z.string(), tokenNoteSchema).optional(),
+  /** From near-token-backing-v2: the grades that changed since the previous sealed edition, and why. */
+  changes: gradeChangesSchema.optional(),
 });
 
 /**
@@ -127,8 +169,55 @@ export const indexEditionSchema = z.object({
     dclPools: editionFileSchema.optional(),
     /** The backing history the 24-hour hold was applied from, from near-token-backing-v1. */
     history: editionFileSchema.optional(),
+    /** From near-token-backing-v2: the trusted tokens behind every history point, and each run's prices for them. */
+    backingDetail: editionFileSchema.optional(),
   }),
+  /** From near-token-backing-v2: the NEAR block the classic and DCL pools were read at. */
+  block: nearBlockSchema.optional(),
   fingerprint: sha256Schema,
+});
+
+/**
+ * What NEAR Intents (1Click) would pay for a $1,000 sale of each token it lists, from
+ * near-token-backing-v2. Shown beside the grade, never inside it: quotes cannot be re-checked later,
+ * and Intents lists only a few dozen NEAR tokens. `grade` is the Svalin grade at the time;
+ * `impliedGrade` is the band the quoted loss falls in. A real swap also pays pool and route fees
+ * that grades leave out, so one band apart is expected: `disagrees` marks two bands or more, or no
+ * route for a token graded C or better.
+ */
+export const intentsQuoteSchema = z.object({
+  grade: tokenGradeSchema,
+  fetchesUsd: z.number().nonnegative().nullable(),
+  lossPct: z.number().min(0).max(100).nullable(),
+  impliedGrade: tokenGradeSchema.nullable(),
+  disagrees: z.boolean(),
+  /** Why there is no quote: Intents found no route, or the request failed. */
+  error: z.string().optional(),
+});
+
+export const intentsQuotesSchema = z.object({
+  generatedAt: z.iso.datetime(),
+  /** The Index edition the grades are from. */
+  indexGeneratedAt: z.iso.datetime(),
+  source: z.string(),
+  saleUsd: z.number().positive(),
+  destination: z.string(),
+  quotes: z.record(z.string(), intentsQuoteSchema),
+});
+
+/**
+ * One run's two methodologies side by side, during a trial: how many tokens each grades, the grade
+ * counts, and every token whose grade differs.
+ */
+export const methodologyTrialSchema = z.object({
+  generatedAt: z.iso.datetime(),
+  current: z.object({ methodology: z.string(), generatedAt: z.iso.datetime(), tokens: z.number().int(), counts: nearTokenIndexSchema.shape.counts }),
+  trial: z.object({ methodology: z.string(), generatedAt: z.iso.datetime(), tokens: z.number().int(), counts: nearTokenIndexSchema.shape.counts }),
+  /** Tokens graded by both whose grades differ, by contract: [symbol, current grade, current backing, trial grade, trial backing]. */
+  differ: z.record(z.string(), z.tuple([z.string(), tokenGradeSchema, z.number().nonnegative(), tokenGradeSchema, z.number().nonnegative()])),
+  /** Tokens only one of them grades. */
+  onlyCurrent: z.number().int().nonnegative(),
+  onlyTrial: z.number().int().nonnegative(),
 });
 
 /** Where a token stands at the end of a window: a grade, or gone from the Index altogether. */
@@ -256,3 +345,9 @@ export type TokenDailySeries = z.infer<typeof tokenDailySeriesSchema>;
 export type NearTokenIndex = z.infer<typeof nearTokenIndexSchema>;
 export type IndexProvenance = z.infer<typeof indexProvenanceSchema>;
 export type IndexEdition = z.infer<typeof indexEditionSchema>;
+export type NearBlock = z.infer<typeof nearBlockSchema>;
+export type GradeChangeReason = z.infer<typeof gradeChangeReasonSchema>;
+export type GradeChanges = z.infer<typeof gradeChangesSchema>;
+export type IntentsQuote = z.infer<typeof intentsQuoteSchema>;
+export type IntentsQuotes = z.infer<typeof intentsQuotesSchema>;
+export type MethodologyTrial = z.infer<typeof methodologyTrialSchema>;

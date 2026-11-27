@@ -54,6 +54,7 @@ import {
 } from "./payments/pro-payments.js";
 import { createPaymentLayer } from "./payments/x402.js";
 import { tokenExit } from "./ratings/exit-prices.js";
+import { NEAR_TOKEN_METHODOLOGY, NEAR_TOKEN_METHODOLOGY_V2 } from "./ratings/near-tokens.js";
 import { assessRecipient } from "./risk/check.js";
 import { buildRiskReport } from "./risk/engine.js";
 import { ChainRouterSource } from "./sources/chain-router-source.js";
@@ -80,6 +81,8 @@ export type AppDependencies = {
   indexFeed?: IndexFeed;
   /** The Index's daily prices and backing, for the ratings page's charts; from NEAR_INDEX_DAILY_URL by default. */
   dailyFeed?: IndexFeed;
+  /** The trial edition of the next methodology; from NEAR_INDEX_TRIAL_URL by default. */
+  trialFeed?: IndexFeed;
   /** Grade proofs against the Svalin Ratings registry on NEAR. */
   ratingsRegistry?: RatingsRegistry;
   /** Svalin keys and Pro codes (Cloudflare Workers use a Durable Object); in memory by default. */
@@ -143,6 +146,7 @@ const nameRoute = routeNamer(
 export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   const indexFeed = deps.indexFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexUrl);
   const dailyFeed = deps.dailyFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexDailyUrl);
+  const trialFeed = deps.trialFeed ?? new RemoteIndexFeed(config.portfolio.nearIndexTrialUrl);
   const ratingsRegistry = deps.ratingsRegistry ?? new RatingsRegistry(config.portfolio.ratings);
   const source =
     deps.portfolioSource ??
@@ -422,8 +426,13 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}) {
   });
 
   // The Svalin Index: every NEAR token Rhea Finance prices, graded by the real money behind it.
+  // ?methodology= picks the trial edition of the next methodology while it runs beside the current one.
   app.get("/v1/index/near-tokens", async (c) => {
-    const body = await indexFeed.latest();
+    const methodology = c.req.query("methodology");
+    if (methodology !== undefined && methodology !== NEAR_TOKEN_METHODOLOGY && methodology !== NEAR_TOKEN_METHODOLOGY_V2) {
+      throw new ApiError(400, "invalid_methodology", `Unknown methodology. Use ${NEAR_TOKEN_METHODOLOGY} or ${NEAR_TOKEN_METHODOLOGY_V2}.`);
+    }
+    const body = await (methodology === NEAR_TOKEN_METHODOLOGY_V2 ? trialFeed : indexFeed).latest();
     c.header("Cache-Control", "public, max-age=300");
     return c.body(body, 200, { "Content-Type": "application/json; charset=utf-8" });
   });
